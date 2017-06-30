@@ -11,20 +11,41 @@ protocol implementations in the form of a rudimentary operating system for i386-
 
 CustomOS is intended as a learning resource, although all code is intended to be fully-functional.
 
+## Progressive Sub-Projects
+
+CustomOS is provided as a progressive series of sub-projects that incrementally introduce and demonstrate concepts.
+
+	os.001		A simple boot sector that displays a message.
+	os.002		A boot sector that loads and runs a kernel that displays a message.
+
 ## Compilation
 
 Local compilation of the source code requires NASM (the Netwide Assembler) or compatible assembler.
+
+Compilation on Windows:
+
+	Use the make.bat file to remove and recreate all project components.
+
+Compilation on Linux:
+
+	Use the make utility to process the project's Makefile to refresh all project components.
+
+Assembly Directives:
+
+	BUILDBOOT	Create os.dat, the operating system boot sector.
+	BUILDDISK	Create os.dsk, a 1.44MB 3.5" floppy disk image.
+	BUILDCOM	Create os.com, the operating system kernel program.
 
 ## Installation
 
 The project's make file produces the following output:
 
-	os.dsk		emulated old-style 3.5" 1.44MB floppy-disk image for use as a boot disk for either physical
+	os.dsk		Emulated old-style 3.5" 1.44MB floppy-disk image for use as a boot disk for either physical
 			or virtual implementations. This disk image contains a boot sector that searches for and
 			loads the os.com kernel image file into memory. Code in os.com places the CPU into protected
 			mode and starts the initial 32-bit console task.
 
-	os.dat		a 512-byte boot sector image that may be written to a physical floppy disk for physical
+	os.dat		A 512-byte boot sector image that may be written to a physical floppy disk for physical
 			implementations.
 
 	os.com		The operating system kernel image.

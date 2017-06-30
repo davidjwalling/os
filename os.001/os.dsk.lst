@@ -1,0 +1,223 @@
+     1                                  ;-----------------------------------------------------------------------------------------------------------------------
+     2                                  ;
+     3                                  ;	File:		os.asm
+     4                                  ;
+     5                                  ;	Project:	os.001
+     6                                  ;
+     7                                  ;	Description:	This sample program defines a valid boot sector that displays a message and waits for a key
+     8                                  ;			to be pressed to restart the system. Using assembly directives, either a simple boot sector
+     9                                  ;			or an entire floppy disk image is generated.
+    10                                  ;
+    11                                  ;	Revised:	January 1, 2017
+    12                                  ;
+    13                                  ;	Assembly:	nasm os.asm -f bin -o os.dat -l os.dat.lst -DBUILDBOOT
+    14                                  ;			nasm os.asm -f bin -o os.dsk -l os.dsk.lst -DBUILDDISK
+    15                                  ;
+    16                                  ;			Copyright © 2010-2017 by David J. Walling. All Rights Reserved.
+    17                                  ;
+    18                                  ;-----------------------------------------------------------------------------------------------------------------------
+    19                                  ;-----------------------------------------------------------------------------------------------------------------------
+    20                                  ;
+    21                                  ;	Assembly Directives
+    22                                  ;
+    23                                  ;	Use one of the following as an assembly directive (-D) with NASM.
+    24                                  ;
+    25                                  ;	BUILDBOOT	Creates os.dat, a 512-byte boot sector, as a standalone file.
+    26                                  ;	BUILDDISK	Creates os.dsk, a 1.44MB (3.5") floppy disk image file.
+    27                                  ;
+    28                                  ;-----------------------------------------------------------------------------------------------------------------------
+    29                                  %ifdef BUILDDISK
+    30                                  %define BUILDBOOT
+    31                                  %endif
+    32                                  ;-----------------------------------------------------------------------------------------------------------------------
+    33                                  ;
+    34                                  ;	Equates
+    35                                  ;
+    36                                  ;	The equate (equ) statements define symbolic names for fixed values so that these values can be defined and
+    37                                  ;	verified once and then used throughout the code. Using symbolic names simplifies searching for where logical
+    38                                  ;	values are used. Equate names are in all-caps and are the only symbolic names that begin with the letter 'E'.
+    39                                  ;
+    40                                  ;	Equates are grouped into related sets below. Hardware-based equates are listed first, followed by BIOS and
+    41                                  ;	protocol equates and, lastly, application equates.
+    42                                  ;
+    43                                  ;-----------------------------------------------------------------------------------------------------------------------
+    44                                  ;-----------------------------------------------------------------------------------------------------------------------
+    45                                  ;
+    46                                  ;	8042 Keyboard Controller						EKEY...
+    47                                  ;
+    48                                  ;	The 8042 Keyboard Controller (8042) is a programmable controller that accepts input signals from the keyboard
+    49                                  ;	device. It also signals a hardware interrupt to the CPU when the low-order bit of I/O port 0x64 is set to zero.
+    50                                  ;
+    51                                  ;-----------------------------------------------------------------------------------------------------------------------
+    52                                  EKEYPORTSTAT		equ	064h						;8042 status port
+    53                                  EKEYCMDRESET		equ	0FEh						;8042 drive B0 low to restart
+    54                                  ;-----------------------------------------------------------------------------------------------------------------------
+    55                                  ;
+    56                                  ;	BIOS Interrupts and Functions						EBIOS...
+    57                                  ;
+    58                                  ;	Basic Input/Output System (BIOS) functions are grouped and accessed by issuing an interrupt call. Each
+    59                                  ;	BIOS interrupt supports several funtions. The function code is typically passed in the AH register.
+    60                                  ;
+    61                                  ;-----------------------------------------------------------------------------------------------------------------------
+    62                                  EBIOSINTVIDEO		equ	010h						;BIOS video services interrupt
+    63                                  EBIOSFNTTYOUTPUT	equ	00Eh						;BIOS video TTY output function
+    64                                  EBIOSINTKEYBOARD	equ	016h						;BIOS keyboard services interrupt
+    65                                  EBIOSFNKEYSTATUS	equ	001h						;BIOS keyboard status function
+    66                                  ;-----------------------------------------------------------------------------------------------------------------------
+    67                                  ;
+    68                                  ;	Loader Constants
+    69                                  ;
+    70                                  ;-----------------------------------------------------------------------------------------------------------------------
+    71                                  EFATBUFFER		equ	400h						;FAT I/O address relative to DS:
+    72                                  %ifdef BUILDBOOT
+    73                                  ;-----------------------------------------------------------------------------------------------------------------------
+    74                                  ;
+    75                                  ;	Boot Sector Code							@disk: 000000	@mem: 007c00
+    76                                  ;
+    77                                  ;	The first sector of the disk is the boot sector. The BIOS will load the boot sector into memory and pass
+    78                                  ;	control to the code at the start of the sector. The boot sector code is responsible for loading the operating
+    79                                  ;	system into memory. The boot sector contains a disk parameter table describing the geometry and allocation
+    80                                  ;	of the disk. Following the disk parameter table is code to load the operating system kernel into memory.
+    81                                  ;
+    82                                  ;-----------------------------------------------------------------------------------------------------------------------
+    83                                  			cpu	8086						;assume minimal CPU
+    84                                  section			boot	vstart=0100h					;emulate .COM (CS,DS,ES=PSP) addressing
+    85                                  			bits	16						;16-bit code at power-up
+    86 00000000 E91B00                  Boot			jmp	word Boot.10					;jump over parameter table
+    87                                  ;-----------------------------------------------------------------------------------------------------------------------
+    88                                  ;
+    89                                  ;	Disk Parameter Table
+    90                                  ;
+    91                                  ;	The disk parameter table informs the BIOS of the floppy disk architecture. Here, we use parameters for the
+    92                                  ;	3.5" 1.44MB floppy disk since this format is widely supported by virtual machine hypervisors.
+    93                                  ;
+    94                                  ;-----------------------------------------------------------------------------------------------------------------------
+    95 00000003 437573746F6D4F53        			db	"CustomOS"					;eight-byte label
+    96 0000000B 0002                    			dw	512						;bytes per sector
+    97 0000000D 01                      			db	1						;sectors per cluster
+    98 0000000E 0100                    			dw	1						;reserved sectors
+    99 00000010 02                      			db	2						;file allocation table copies
+   100 00000011 E000                    			dw	224						;max directory entries
+   101 00000013 400B                    			dw	2880						;sectors per disk
+   102 00000015 F0                      			db	0F0h						;1.44MB
+   103 00000016 0900                    			dw	9						;sectors per FAT copy
+   104 00000018 1200                    			dw	18						;sectors per track
+   105 0000001A 0200                    			dw	2						;sides per disk
+   106 0000001C 0000                    			dw	0						;special sectors
+   107                                  ;
+   108                                  ;	BIOS typically loads the boot sector at absolute address 7c00 and sets the stack pointer at 512 bytes past the
+   109                                  ;	end of the boot sector. But, since BIOS code varies, we don't make any assumptions as to where our boot sector
+   110                                  ;	is loaded. For example, the initial CS:IP could be 0:7c00, 700:c00, 7c0:0, etc. So, to avoid assumptions, we
+   111                                  ;	first normalize CS:IP to get the absolute segment address in BX. The comments below show the effect of this code
+   112                                  ;	given several possible starting values for CS:IP.
+   113                                  ;
+   114                                  										;CS:IP	 0:7c00 700:c00 7c0:0
+   115 0000001E E80000                  Boot.10			call	word .20					;[ESP] =   7c21     c21    21
+   116                                  .@20			equ	$-$$						;.@20 = 021h
+   117 00000021 58                      .20			pop	ax						;AX =	   7c21     c21    21
+   118 00000022 83E821                  			sub	ax,word .@20					;BX =	   7c00     c00     0
+   119 00000025 B104                    			mov	cl,4						;shift count
+   120 00000027 D3E8                    			shr	ax,cl						;AX =	    7c0      c0     0
+   121 00000029 8CCB                    			mov	bx,cs						;BX =	      0     700   7c0
+   122 0000002B 01C3                    			add	bx,ax						;BX =	    7c0     7c0   7c0
+   123                                  ;
+   124                                  ;	Now, since we are assembling our boot code to emulate the addressing of a .COM file, we need DS and ES
+   125                                  ;	registers to be set to where a Program Segment Prefix (PSP) would be, exactly 100h (256) bytes prior to
+   126                                  ;	the start of our code. This will correspond to our assembled data address offsets. Note that we instructed
+   127                                  ;	the assembler to produce addresses for our symbols that are offset from our code by 100h. See the "vstart"
+   128                                  ;	parameter for the "section" directive above. We also set SS to the PSP and SP to the address of our i/o
+   129                                  ;	buffer. This leaves 256 bytes of usable stack from 7b0:300 to 7b0:400.
+   130                                  ;
+   131 0000002D 83EB10                  			sub	bx,16						;BX = 07b0
+   132 00000030 8EDB                    			mov	ds,bx						;DS = 07b0 = psp
+   133 00000032 8EC3                    			mov	es,bx						;ES = 07b0 = psp
+   134 00000034 8ED3                    			mov	ss,bx						;SS = 07b0 = psp
+   135 00000036 BC0004                  			mov	sp,EFATBUFFER					;SP = 0400
+   136                                  ;
+   137                                  ;	Our boot addressability is now set up according to the following diagram.
+   138                                  ;
+   139                                  ;	DS,ES,SS ----->	007b00	+-----------------------------------------------+
+   140                                  ;				|  Program Segment Prefix (PSP)			|
+   141                                  ;			007c00	+-----------------------------------------------+
+   142                                  ;				|  Boot Sector Code				|
+   143                                  ;				|						|
+   144                                  ;			007e00	+-----------------------------------------------+
+   145                                  ;				|  Boot Stack					|
+   146                                  ;	SS:SP -------->	007f00	+-----------------------------------------------+
+   147                                  ;				|  FAT I/O Buffer (used in later programs)	|
+   148                                  ;				+-----------------------------------------------+
+   149                                  ;
+   150                                  ;	Write a message to the console so we know we have our addressability established.
+   151                                  ;
+   152 00000039 BE[5E00]                			mov	si,czStartingMsg				;starting message
+   153 0000003C E81200                  			call	PutTTYString					;display loader message
+   154                                  ;
+   155                                  ;	Now we want to wait for a keypress. We can use a keyboard interrupt function for this (INT 16h, AH=0).
+   156                                  ;	However, some BIOS implementations, such as VirtualBox, seem to implement the "wait" as simply a fast
+   157                                  ;	iteration of the keyboard status function call (INT 16h, AH=1), causing a CPU race condition. So, instead
+   158                                  ;	we will use the keyboard status call and iterate over a halt (HLT) instruction until a key is pressed.
+   159                                  ;	By convention, we enable maskable interrupts with STI before issuing HLT, so as not to catch fire. j/k.
+   160                                  ;
+   161 0000003F B401                    .30			mov	ah,EBIOSFNKEYSTATUS				;keyboard status function
+   162 00000041 CD16                    			int	EBIOSINTKEYBOARD				;call BIOS keyboard interrupt
+   163 00000043 7504                    			jnz	.40						;exit if key pressed
+   164 00000045 FB                      			sti							;enable interrupts
+   165 00000046 F4                      			hlt							;wait for interrupt
+   166 00000047 EBF6                    			jmp	.30						;repeat until keypress
+   167                                  ;
+   168                                  ;	Now that a key has been pressed, we signal the system to restart by driving the B0 line on the 8042
+   169                                  ;	keyboard controller low (OUT 64h,0feh). The restart may take some microseconds to kick in, so we issue
+   170                                  ;	HLT until the system resets.
+   171                                  ;
+   172 00000049 B0FE                    .40			mov	al,EKEYCMDRESET					;8042 pulse output port pin
+   173 0000004B E664                    			out	EKEYPORTSTAT,al					;drive B0 low to restart
+   174 0000004D FB                      .50			sti							;enable interrupts
+   175 0000004E F4                      			hlt							;stop until reset, int, nmi
+   176 0000004F EBFC                    			jmp	.50						;loop until restart kicks in
+   177                                  ;-----------------------------------------------------------------------------------------------------------------------
+   178                                  ;
+   179                                  ;	Routine:	PutTTYString
+   180                                  ;
+   181                                  ;	Description:	This routine sends a NUL-terminated string of characters to the TTY output device. We use the
+   182                                  ;			TTY output function of the BIOS video interrupt, passing the address of the string in DS:SI
+   183                                  ;			and the BIOS teletype function code in AH. After a return from the BIOS interrupt, we repeat
+   184                                  ;			for the next string character until a NUL is found. Note that we clear the direction flag (DF)
+   185                                  ;			with CLD before each LODSB. This is just in case the direction flag is ever returned as set
+   186                                  ;			by the video interrupt. This is a precaution since a well-written BIOS should preserve all
+   187                                  ;			registers and flags unless used to indicate return status.
+   188                                  ;
+   189                                  ;	In:		DS:SI	address of string
+   190                                  ;
+   191                                  ;-----------------------------------------------------------------------------------------------------------------------
+   192 00000051 FC                      PutTTYString		cld							;forward strings
+   193 00000052 AC                      			lodsb							;load next byte at DS:SI in AL
+   194 00000053 84C0                    			test	al,al						;end of string?
+   195 00000055 7406                    			jz	.10						;... yes, exit our loop
+   196 00000057 B40E                    			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
+   197 00000059 CD10                    			int	EBIOSINTVIDEO					;call BIOS display interrupt
+   198 0000005B EBF4                    			jmp	PutTTYString					;repeat until done
+   199 0000005D C3                      .10			ret							;return to caller
+   200                                  ;-----------------------------------------------------------------------------------------------------------------------
+   201                                  ;
+   202                                  ;	Loader Data
+   203                                  ;
+   204                                  ;	Our only "data" is the string displayed when system starts. It ends with ASCII carriage-return (13) and line-
+   205                                  ;	feed (10) values. The remainder of the sector is filled with the typical bit pattern of unused disk space. The
+   206                                  ;	sector finally ends with a conventional two-byte signature. The use of filler helps indicate, when looking at
+   207                                  ;	program listings or the assembled sector itself, how much space remains unused in the sector.
+   208                                  ;
+   209                                  ;-----------------------------------------------------------------------------------------------------------------------
+   210 0000005E 5374617274696E6720-     czStartingMsg		db	"Starting ...",13,10,0				;loader message
+   210 00000067 2E2E2E0D0A00       
+   211 0000006D 00<rept>                			times	510-($-$$) db 0h				;zero fill to end of sector
+   212 000001FE 55AA                    			db	055h,0AAh					;end of sector signature
+   213                                  %endif
+   214                                  %ifdef BUILDDISK
+   215                                  ;-----------------------------------------------------------------------------------------------------------------------
+   216                                  ;
+   217                                  ;	Free Disk Space								@disk: 000200	@mem:  n/a
+   218                                  ;
+   219                                  ;-----------------------------------------------------------------------------------------------------------------------
+   220                                  section			unused							;unused disk space
+   221 00000000 F6<rept>                			times 	1474560-512 db 0F6h				;fill to end of disk image
+   222                                  %endif
