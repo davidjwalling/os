@@ -4,7 +4,7 @@
 
 ## Synopsis
 
-CustomOS is a project intended to demonstrate assembly-language programming, hardware I/O techniques and standard
+CustomOS demonstrates assembly-language programming, hardware I/O techniques and standard
 protocol implementations in the form of a rudimentary operating system for i386-based (32-bit) platforms.
 
 ## Motivation
