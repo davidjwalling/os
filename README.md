@@ -1,6 +1,6 @@
 ## CustomOS
 
-	Copyright © 2010-2017 David J. Walling. All Rights Reserved.
+	Copyright (C) 2010-2017 David J. Walling. All Rights Reserved.
 
 ## Synopsis
 
@@ -20,7 +20,9 @@ CustomOS is provided as a progressive series of sub-projects that incrementally 
 
 ## Compilation
 
-Local compilation of the source code requires NASM (the Netwide Assembler) or compatible assembler.
+Local compilation of the source code requires NASM (the Netwide Assembler) or a compatible assembler.
+
+	2017-06-30	Recommended version of NASM is 2.13.01.
 
 Compilation on Windows:
 
@@ -81,4 +83,4 @@ Network Support:
 
 ## License
 
-	CustomOS is licensed under the terms of the MIT License
+	CustomOS is licensed under the terms of the MIT License.
