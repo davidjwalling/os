@@ -39,6 +39,7 @@ Assembly Directives:
 	BUILDBOOT	Create os.dat, the operating system boot sector.
 	BUILDDISK	Create os.dsk, a 1.44MB 3.5" floppy disk image.
 	BUILDCOM	Create os.com, the operating system kernel program.
+	BUILDPREP	Create osprep.com, a utility to write the boot sector to a diskette.
 
 ## Installation
 
