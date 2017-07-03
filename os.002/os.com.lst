@@ -536,104 +536,119 @@
    536                                  ;	OS.COM file is loaded into memory. The kernel is 32-bit code that receives control after the Loader has
    537                                  ;	initialized protected-mode tables and 32-bit interrupt handlers and switched the CPU into protected mode.
    538                                  ;
-   539                                  ;-----------------------------------------------------------------------------------------------------------------------
-   540                                  ;-----------------------------------------------------------------------------------------------------------------------
-   541                                  ;
-   542                                  ;	OS Loader								@disk: 004200	@mem: 009100
-   543                                  ;
-   544                                  ;	This code is the operating system loader. It resides on the boot disk at the start of the data area, following
-   545                                  ;	the directory. The loader occupies several clusters that are mapped in the file allocation tables above. The
-   546                                  ;	size of the loader is limited to 65,280 bytes since the bootstrap will copy the loader into memory at 0:9100.
-   547                                  ;	The loader executes 16-bit instructions in real mode. It performs several initialization functions such as
-   548                                  ;	determining whether the CPU and other resources are sufficient to run the operating system. If all minimum
-   549                                  ;	resources are present, the loader initializes protected mode tables, places the CPU into protected mode and
-   550                                  ;	starts the kernel task. Since the loader was called either from the bootstrap or as a .com file on the boot
-   551                                  ;	disk, we can assume that the initial ip is 0x100 and not perform any absolute address fix-ups on our segment
-   552                                  ;	registers.
+   539                                  ;	Our loader addressability is set up according to the following diagram.
+   540                                  ;
+   541                                  ;	SS -----------> 007b00	+-----------------------------------------------+ SS:0000
+   542                                  ;				|  Boot Sector & Loader Stack Area		|
+   543                                  ;				|						|
+   544                                  ;	SS:SP -------->	007f00	+-----------------------------------------------+ SS:0400
+   545                                  ;
+   546                                  ;
+   547                                  ;	CS,DS,ES ----->	009000	+-----------------------------------------------+ CS:0000
+   548                                  ;				|  Unused (DOS Program Segment Prefix)		|
+   549                                  ;	CS:IP -------->	009100	+-----------------------------------------------+ CS:0100
+   550                                  ;				|  Loader Code					|
+   551                                  ;				|						|
+   552                                  ;			009300	+-----------------------------------------------+ CS:0200
    553                                  ;
    554                                  ;-----------------------------------------------------------------------------------------------------------------------
-   555                                  			cpu	8086						;assume minimal CPU
-   556                                  section			loader	vstart=100h					;use .COM compatible addressing
-   557                                  			bits	16						;this is 16-bit code
-   558 00000000 0E                      Loader			push	cs						;use the code segment
-   559 00000001 1F                      			pop	ds						;...as our data segment
-   560 00000002 0E                      			push	cs						;use the code segment
-   561 00000003 07                      			pop	es						;...as our extra segment
-   562                                  ;
-   563                                  ;	Write a message to the console so we know we have our addressability established.
-   564                                  ;
-   565 00000004 BE[2900]                			mov	si,czStartingMsg				;starting message
-   566 00000007 E81200                  			call	PutTTYString					;display loader message
-   567                                  ;
-   568                                  ;	Now we want to wait for a keypress. We can use a keyboard interrupt function for this (INT 16h, AH=0).
-   569                                  ;	However, some hypervisor BIOS implementations have been seen to implement the "wait" as simply a fast
-   570                                  ;	iteration of the keyboard status function call (INT 16h, AH=1), causing a CPU race condition. So, instead
-   571                                  ;	we will use the keyboard status call and iterate over a halt (HLT) instruction until a key is pressed.
-   572                                  ;	By convention, we enable maskable interrupts with STI before issuing HLT, so as not to catch fire.
-   573                                  ;
-   574 0000000A B401                    .30			mov	ah,EBIOSFNKEYSTATUS				;keyboard status function
-   575 0000000C CD16                    			int	EBIOSINTKEYBOARD				;call BIOS keyboard interrupt
-   576 0000000E 7504                    			jnz	.40						;exit if key pressed
-   577 00000010 FB                      			sti							;enable maskable interrupts
-   578 00000011 F4                      			hlt							;wait for interrupt
-   579 00000012 EBF6                    			jmp	short .30					;repeat until keypress
-   580                                  ;
-   581                                  ;	Now that a key has been pressed, we signal the system to restart by driving the B0 line on the 8042
-   582                                  ;	keyboard controller low (OUT 64h,0feh). The restart may take some microseconds to kick in, so we issue
-   583                                  ;	HLT until the system resets.
-   584                                  ;
-   585 00000014 B0FE                    .40			mov	al,EKEYCMDRESET					;8042 pulse output port pin
-   586 00000016 E664                    			out	EKEYPORTSTAT,al					;drive B0 low to restart
-   587 00000018 FB                      .50			sti							;enable maskable interrupts
-   588 00000019 F4                      			hlt							;stop until reset, int, nmi
-   589 0000001A EBFC                    			jmp	short .50					;loop until restart kicks in
-   590                                  ;-----------------------------------------------------------------------------------------------------------------------
-   591                                  ;
-   592                                  ;	Routine:	PutTTYString
-   593                                  ;
-   594                                  ;	Description:	This routine sends a NUL-terminated string of characters to the TTY output device. We use the
-   595                                  ;			TTY output function of the BIOS video interrupt, passing the address of the string in DS:SI
-   596                                  ;			and the BIOS teletype function code in AH. After a return from the BIOS interrupt, we repeat
-   597                                  ;			for the next string character until a NUL is found. Note that we clear the direction flag (DF)
-   598                                  ;			with CLD before each LODSB. This is just in case the direction flag is ever returned as set
-   599                                  ;			by the video interrupt. This is a precaution since a well-written BIOS should preserve all
-   600                                  ;			registers and flags unless used to indicate return status.
-   601                                  ;
-   602                                  ;	In:		DS:SI	address of string
-   603                                  ;
-   604                                  ;-----------------------------------------------------------------------------------------------------------------------
-   605 0000001C FC                      PutTTYString		cld							;forward strings
-   606 0000001D AC                      			lodsb							;load next byte at DS:SI in AL
-   607 0000001E 84C0                    			test	al,al						;end of string?
-   608 00000020 7406                    			jz	.10						;... yes, exit our loop
-   609 00000022 B40E                    			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
-   610 00000024 CD10                    			int	EBIOSINTVIDEO					;call BIOS display interrupt
-   611 00000026 EBF4                    			jmp	short PutTTYString				;repeat until done
-   612 00000028 C3                      .10			ret							;return to caller
-   613                                  ;-----------------------------------------------------------------------------------------------------------------------
-   614                                  ;
-   615                                  ;	Loader Data
+   555                                  ;-----------------------------------------------------------------------------------------------------------------------
+   556                                  ;
+   557                                  ;	OS Loader								@disk: 004200	@mem: 009100
+   558                                  ;
+   559                                  ;	This code is the operating system loader. It resides on the boot disk at the start of the data area, following
+   560                                  ;	the directory. The loader occupies several clusters that are mapped in the file allocation tables above. The
+   561                                  ;	size of the loader is limited to 65,280 bytes since the bootstrap will copy the loader into memory at 0:9100.
+   562                                  ;	The loader executes 16-bit instructions in real mode. It performs several initialization functions such as
+   563                                  ;	determining whether the CPU and other resources are sufficient to run the operating system. If all minimum
+   564                                  ;	resources are present, the loader initializes protected mode tables, places the CPU into protected mode and
+   565                                  ;	starts the kernel task. Since the loader was called either from the bootstrap or as a .com file on the boot
+   566                                  ;	disk, we can assume that the initial ip is 0x100 and not perform any absolute address fix-ups on our segment
+   567                                  ;	registers.
+   568                                  ;
+   569                                  ;-----------------------------------------------------------------------------------------------------------------------
+   570                                  			cpu	8086						;assume minimal CPU
+   571                                  section			loader	vstart=100h					;use .COM compatible addressing
+   572                                  			bits	16						;this is 16-bit code
+   573 00000000 0E                      Loader			push	cs						;use the code segment
+   574 00000001 1F                      			pop	ds						;...as our data segment
+   575 00000002 0E                      			push	cs						;use the code segment
+   576 00000003 07                      			pop	es						;...as our extra segment
+   577                                  ;
+   578                                  ;	Write a message to the console so we know we have our addressability established.
+   579                                  ;
+   580 00000004 BE[2900]                			mov	si,czStartingMsg				;starting message
+   581 00000007 E81200                  			call	PutTTYString					;display loader message
+   582                                  ;
+   583                                  ;	Now we want to wait for a keypress. We can use a keyboard interrupt function for this (INT 16h, AH=0).
+   584                                  ;	However, some hypervisor BIOS implementations have been seen to implement the "wait" as simply a fast
+   585                                  ;	iteration of the keyboard status function call (INT 16h, AH=1), causing a CPU race condition. So, instead
+   586                                  ;	we will use the keyboard status call and iterate over a halt (HLT) instruction until a key is pressed.
+   587                                  ;	By convention, we enable maskable interrupts with STI before issuing HLT, so as not to catch fire.
+   588                                  ;
+   589 0000000A B401                    .30			mov	ah,EBIOSFNKEYSTATUS				;keyboard status function
+   590 0000000C CD16                    			int	EBIOSINTKEYBOARD				;call BIOS keyboard interrupt
+   591 0000000E 7504                    			jnz	.40						;exit if key pressed
+   592 00000010 FB                      			sti							;enable maskable interrupts
+   593 00000011 F4                      			hlt							;wait for interrupt
+   594 00000012 EBF6                    			jmp	short .30					;repeat until keypress
+   595                                  ;
+   596                                  ;	Now that a key has been pressed, we signal the system to restart by driving the B0 line on the 8042
+   597                                  ;	keyboard controller low (OUT 64h,0feh). The restart may take some microseconds to kick in, so we issue
+   598                                  ;	HLT until the system resets.
+   599                                  ;
+   600 00000014 B0FE                    .40			mov	al,EKEYCMDRESET					;8042 pulse output port pin
+   601 00000016 E664                    			out	EKEYPORTSTAT,al					;drive B0 low to restart
+   602 00000018 FB                      .50			sti							;enable maskable interrupts
+   603 00000019 F4                      			hlt							;stop until reset, int, nmi
+   604 0000001A EBFC                    			jmp	short .50					;loop until restart kicks in
+   605                                  ;-----------------------------------------------------------------------------------------------------------------------
+   606                                  ;
+   607                                  ;	Routine:	PutTTYString
+   608                                  ;
+   609                                  ;	Description:	This routine sends a NUL-terminated string of characters to the TTY output device. We use the
+   610                                  ;			TTY output function of the BIOS video interrupt, passing the address of the string in DS:SI
+   611                                  ;			and the BIOS teletype function code in AH. After a return from the BIOS interrupt, we repeat
+   612                                  ;			for the next string character until a NUL is found. Note that we clear the direction flag (DF)
+   613                                  ;			with CLD before each LODSB. This is just in case the direction flag is ever returned as set
+   614                                  ;			by the video interrupt. This is a precaution since a well-written BIOS should preserve all
+   615                                  ;			registers and flags unless used to indicate return status.
    616                                  ;
-   617                                  ;	Our only "data" is the string displayed when system starts. It ends with ASCII carriage-return (13) and line-
-   618                                  ;	feed (10) values. The remainder of the boot sector is filled with NUL. The boot sector finally ends with the
-   619                                  ;	required two-byte signature checked by the BIOS. Note that recent versions of NASM will issue a warning if
-   620                                  ;	the calculated address for the end-of-sector signature produces a negative value for "510-($-$$)". This will
-   621                                  ;	indicate if we have added too much data and exceeded the length of the sector.
-   622                                  ;
-   623                                  ;-----------------------------------------------------------------------------------------------------------------------
-   624 00000029 5374617274696E6720-     czStartingMsg		db	"Starting ...",13,10,0				;loader message
-   624 00000032 2E2E2E0D0A00       
-   625 00000038 00<rept>                			times	510-($-$$) db 0h				;zero fill to end of sector
-   626 000001FE 55AA                    			db	055h,0AAh					;end of sector signature
-   627                                  %endif
-   628                                  %ifdef BUILDDISK
-   629                                  ;-----------------------------------------------------------------------------------------------------------------------
-   630                                  ;
-   631                                  ;	Free Disk Space								@disk: 004400	@mem:  n/a
-   632                                  ;
-   633                                  ;	Following the convention introduced by DOS, we use the value 'F6' to indicate unused floppy disk storage.
-   634                                  ;
-   635                                  ;-----------------------------------------------------------------------------------------------------------------------
-   636                                  section			unused							;unused disk space
-   637                                  			times 	EBOOTDISKBYTES-04400h db 0F6h			;fill to end of disk image
-   638                                  %endif
+   617                                  ;	In:		DS:SI	address of string
+   618                                  ;
+   619                                  ;-----------------------------------------------------------------------------------------------------------------------
+   620 0000001C FC                      PutTTYString		cld							;forward strings
+   621 0000001D AC                      			lodsb							;load next byte at DS:SI in AL
+   622 0000001E 84C0                    			test	al,al						;end of string?
+   623 00000020 7406                    			jz	.10						;... yes, exit our loop
+   624 00000022 B40E                    			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
+   625 00000024 CD10                    			int	EBIOSINTVIDEO					;call BIOS display interrupt
+   626 00000026 EBF4                    			jmp	short PutTTYString				;repeat until done
+   627 00000028 C3                      .10			ret							;return to caller
+   628                                  ;-----------------------------------------------------------------------------------------------------------------------
+   629                                  ;
+   630                                  ;	Loader Data
+   631                                  ;
+   632                                  ;	Our only "data" is the string displayed when system starts. It ends with ASCII carriage-return (13) and line-
+   633                                  ;	feed (10) values. The remainder of the boot sector is filled with NUL. The boot sector finally ends with the
+   634                                  ;	required two-byte signature checked by the BIOS. Note that recent versions of NASM will issue a warning if
+   635                                  ;	the calculated address for the end-of-sector signature produces a negative value for "510-($-$$)". This will
+   636                                  ;	indicate if we have added too much data and exceeded the length of the sector.
+   637                                  ;
+   638                                  ;-----------------------------------------------------------------------------------------------------------------------
+   639 00000029 5374617274696E6720-     czStartingMsg		db	"Starting ...",13,10,0				;loader message
+   639 00000032 2E2E2E0D0A00       
+   640 00000038 00<rept>                			times	510-($-$$) db 0h				;zero fill to end of sector
+   641 000001FE 55AA                    			db	055h,0AAh					;end of sector signature
+   642                                  %endif
+   643                                  %ifdef BUILDDISK
+   644                                  ;-----------------------------------------------------------------------------------------------------------------------
+   645                                  ;
+   646                                  ;	Free Disk Space								@disk: 004400	@mem:  n/a
+   647                                  ;
+   648                                  ;	Following the convention introduced by DOS, we use the value 'F6' to indicate unused floppy disk storage.
+   649                                  ;
+   650                                  ;-----------------------------------------------------------------------------------------------------------------------
+   651                                  section			unused							;unused disk space
+   652                                  			times 	EBOOTDISKBYTES-04400h db 0F6h			;fill to end of disk image
+   653                                  %endif

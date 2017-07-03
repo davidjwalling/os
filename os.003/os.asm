@@ -723,6 +723,21 @@ section			dir							;diskette directory
 ;	OS.COM file is loaded into memory. The kernel is 32-bit code that receives control after the Loader has
 ;	initialized protected-mode tables and 32-bit interrupt handlers and switched the CPU into protected mode.
 ;
+;	Our loader addressability is set up according to the following diagram.
+;
+;	SS -----------> 007b00	+-----------------------------------------------+ SS:0000
+;				|  Boot Sector & Loader Stack Area		|
+;				|						|
+;	SS:SP -------->	007f00	+-----------------------------------------------+ SS:0400
+;
+;
+;	CS,DS,ES ----->	009000	+-----------------------------------------------+ CS:0000
+;				|  Unused (DOS Program Segment Prefix)		|
+;	CS:IP -------->	009100	+-----------------------------------------------+ CS:0100
+;				|  Loader Code					|
+;				|						|
+;			009300	+-----------------------------------------------+ CS:0200
+;
 ;-----------------------------------------------------------------------------------------------------------------------
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
