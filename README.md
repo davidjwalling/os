@@ -14,6 +14,7 @@ CustomOS is intended as a learning resource, although all code is intended to be
 ## Progressive Sub-Projects
 
 CustomOS is provided as a progressive series of sub-projects that incrementally introduce and demonstrate concepts.
+Additional sub-projects may be added from time to time as the project progresses.
 
 	os.001		A simple boot sector that displays a message.
 	os.002		A boot sector that loads and runs a kernel that displays a message.
