@@ -45,13 +45,13 @@ Assembly Directives:
 
 The project's make file produces the following output:
 
+	os.dat		A 512-byte boot sector image that may be written to a physical floppy disk for physical
+			implementations.
+
 	os.dsk		Emulated old-style 3.5" 1.44MB floppy-disk image for use as a boot disk for either physical
 			or virtual implementations. This disk image contains a boot sector that searches for and
 			loads the os.com kernel image file into memory. Code in os.com places the CPU into protected
 			mode and starts the initial 32-bit console task.
-
-	os.dat		A 512-byte boot sector image that may be written to a physical floppy disk for physical
-			implementations.
 
 	os.com		The operating system kernel image.
 
