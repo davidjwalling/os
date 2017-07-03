@@ -129,7 +129,7 @@
    129 0000001E E80000                  Boot.10			call	word .20					;[ESP] =   7c21     c21    21
    130                                  .@20			equ	$-$$						;.@20 = 021h
    131 00000021 58                      .20			pop	ax						;AX =	   7c21     c21    21
-   132 00000022 83E821                  			sub	ax,byte .@20					;BX =	   7c00     c00     0
+   132 00000022 83E821                  			sub	ax,.@20						;BX =	   7c00     c00     0
    133 00000025 B104                    			mov	cl,4						;shift count
    134 00000027 D3E8                    			shr	ax,cl						;AX =	    7c0      c0     0
    135 00000029 8CCB                    			mov	bx,cs						;BX =	      0     700   7c0
@@ -142,7 +142,7 @@
    142                                  ;	parameter for the "section" directive above. We also set SS to the PSP and SP to the address of our i/o
    143                                  ;	buffer. This leaves 256 bytes of usable stack from 7b0:300 to 7b0:400.
    144                                  ;
-   145 0000002D 83EB10                  			sub	bx,byte 16					;BX = 07b0
+   145 0000002D 83EB10                  			sub	bx,16						;BX = 07b0
    146 00000030 8EDB                    			mov	ds,bx						;DS = 07b0 = psp
    147 00000032 8EC3                    			mov	es,bx						;ES = 07b0 = psp
    148 00000034 8ED3                    			mov	ss,bx						;SS = 07b0 = psp
@@ -234,5 +234,5 @@
    233                                  ;
    234                                  ;-----------------------------------------------------------------------------------------------------------------------
    235                                  section			unused							;unused disk space
-   236                                  			times 	EBOOTDISKBYTES-($-$$)-512 db 0F6h		;fill to end of disk image
+   236                                  			times 	EBOOTDISKBYTES-0200h db 0F6h			;fill to end of disk image
    237                                  %endif

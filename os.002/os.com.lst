@@ -181,7 +181,7 @@
    181                                  Boot.10			call	word .20					;[ESP] =   7c21     c21    21
    182                                  .@20			equ	$-$$						;.@20 = 021h
    183                                  .20			pop	ax						;AX =	   7c21     c21    21
-   184                                  			sub	ax,byte .@20					;BX =	   7c00     c00     0
+   184                                  			sub	ax,.@20						;BX =	   7c00     c00     0
    185                                  			mov	cl,4						;shift count
    186                                  			shr	ax,cl						;AX =	    7c0      c0     0
    187                                  			mov	bx,cs						;BX =	      0     700   7c0
@@ -194,7 +194,7 @@
    194                                  ;	parameter for the "section" directive above. We also set SS to the PSP and SP to the address of our i/o
    195                                  ;	buffer. This leaves 256 bytes of usable stack from 7b0:300 to 7b0:400.
    196                                  ;
-   197                                  			sub	bx,byte 16					;BX = 07b0
+   197                                  			sub	bx,16						;BX = 07b0
    198                                  			mov	ds,bx						;DS = 07b0 = psp
    199                                  			mov	es,bx						;ES = 07b0 = psp
    200                                  			mov	ss,bx						;SS = 07b0 = psp
@@ -233,7 +233,7 @@
    233                                  ;
    234                                  			shr	ax,cl						;AX = 0160
    235                                  			add	ax,bx						;AX = 0160 + 07b0 = 0910
-   236                                  			sub	ax,byte 16					;AX = 0900
+   236                                  			sub	ax,16						;AX = 0900
    237                                  			mov	[wwLoadSegment],ax				;[loadsegment] = 0900
    238                                  ;
    239                                  ;	Write a message to the console so we know we have our addressability established.
@@ -271,7 +271,7 @@
    271                                  ;	Read directory sector.
    272                                  ;
    273                                  .30			mov	al,1						;sector count
-   274                                  			mov	byte [wbReadCount],al				;[readcount] = 01
+   274                                  			mov	[wbReadCount],al				;[readcount] = 01
    275                                  			mov	bx,[wwDirBuffer]				;BX = 1600
    276                                  			call	ReadSector					;read sector into es:bx
    277                                  ;
@@ -302,7 +302,7 @@
    302                                  ;	Repeat search if we are not at the end of the directory.
    303                                  ;
    304                                  			inc	word [wwLogicalSector]				;increment logical sector
-   305                                  			cmp	word [wwEntriesLeft],byte 0			;done with directory?
+   305                                  			cmp	word [wwEntriesLeft],0				;done with directory?
    306                                  			jne	.30						;no, get next sector
    307                                  			mov	si,czNoKernel					;missing kernel message
    308                                  			jmp	BootExit					;display message and exit
@@ -318,7 +318,7 @@
    318                                  ;
    319                                  ;	Get the starting cluster of the kernel program and target address.
    320                                  ;
-   321                                  			mov	ax,word [di+26]					;AX = starting cluster of file
+   321                                  			mov	ax,[di+26]					;AX = starting cluster of file
    322                                  			les	bx,[wwLoadOffset]				;ES:BX = kernel load address
    323                                  ;
    324                                  ;	Read each program cluster into RAM.
@@ -349,7 +349,7 @@
    349                                  			mov	dx,ax						;DX = cluster/2
    350                                  			add	ax,dx						;AX = 2*(cluster/2)
    351                                  			add	ax,dx						;AX = 3*(cluster/2)
-   352                                  			and	di,byte 1					;get low bit
+   352                                  			and	di,1						;get low bit
    353                                  			add	di,ax						;add one if cluster is odd
    354                                  			add	di,EBOOTSTACKTOP				;add FAT buffer address
    355                                  			mov	ax,[di]						;get cluster bytes
@@ -635,5 +635,5 @@
    634                                  ;
    635                                  ;-----------------------------------------------------------------------------------------------------------------------
    636                                  section			unused							;unused disk space
-   637                                  			times 	EBOOTDISKBYTES-($-$$)-512 db 0F6h		;fill to end of disk image
+   637                                  			times 	EBOOTDISKBYTES-04400h db 0F6h			;fill to end of disk image
    638                                  %endif

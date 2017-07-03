@@ -2,17 +2,17 @@
 ;
 ;	File:		os.asm
 ;
-;	Project:	os.002
+;	Project:	os.003
 ;
-;	Description:	This sample program adds code to load the operating system kernel program from the disk image.
-;			The boot sector now searches the disk for the loader program, loads it into memory and runs it.
-;			The loader program in this sample simply displays a greeting.
+;	Description:	This sample program adds code to create osprep.com, a program to update the boot sector on a
+;			floppy disk.
 ;
 ;	Revised:	January 1, 2017
 ;
-;	Assembly:	nasm os.asm -f bin -o os.dat -l os.dat.lst -DBUILDBOOT
-;			nasm os.asm -f bin -o os.dsk -l os.dsk.lst -DBUILDDISK
-;			nasm os.asm -f bin -o os.com -l os.com.lst -DBUILDCOM
+;	Assembly:	nasm os.asm -f bin -o os.dat     -l os.dat.lst     -DBUILDBOOT
+;			nasm os.asm -f bin -o os.dsk     -l os.dsk.lst     -DBUILDDISK
+;			nasm os.asm -f bin -o os.com     -l os.com.lst     -DBUILDCOM
+;			nasm os.asm -f bin -o osprep.com -l osprep.com.lst -DBUILDPREP
 ;
 ;	Assembler:	Netwide Assembler (NASM) 2.13.01
 ;
@@ -28,11 +28,15 @@
 ;	BUILDBOOT	Creates os.dat, a 512-byte boot sector as a standalone file.
 ;	BUILDDISK	Creates os.dsk, a 1.44MB (3.5") floppy disk image file.
 ;	BUILDCOM	Creates os.com, the OS loader and kernel as a standalone DOS program.
+;	BUILDPREP	Creates osprep.com, a DOS program that prepares a floppy disk to boot the OS
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 %ifdef BUILDDISK
 %define BUILDBOOT
 %define BUILDCOM
+%endif
+%ifdef BUILDPREP
+%define BUILDBOOT
 %endif
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -117,6 +121,13 @@ EBIOSINTKEYBOARD	equ	016h						;BIOS keyboard services interrupt
 EBIOSFNKEYSTATUS	equ	001h						;BIOS keyboard status function
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;	ASCII									EASC...
+;
+;-----------------------------------------------------------------------------------------------------------------------
+EASCIIRETURN		equ	13						;ASCII carriage return
+EASCIIESCAPE		equ	27						;ASCII escape
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;	Boot Sector and Loader Constants
 ;
 ;	Equates in this section support the boot sector and the 16-bit operating system loader, which will be
@@ -148,7 +159,11 @@ EMAXTRIES		equ	5						;max read retries
 			cpu	8086						;assume minimal CPU
 section			boot	vstart=0100h					;emulate .COM (CS,DS,ES=PSP) addressing
 			bits	16						;16-bit code at power-up
+%ifdef BUILDPREP
+Boot			jmp	word Prep					;jump to preparation code
+%else
 Boot			jmp	word Boot.10					;jump over parameter table
+%endif
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Disk Parameter Table
@@ -469,6 +484,178 @@ wwSectorTrack		equ	$						;sector, track (word)
 wbTrack			db	0						;track
 			times	510-($-$$) db 0h				;zero fill to end of sector
 			db	055h,0AAh					;end of sector signature
+%endif
+%ifdef BUILDPREP
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Diskette Preparation Code
+;
+;	This routine writes the OS boot sector code to a formatted floppy diskette. The diskette parameter table,
+;	which is located in the first 30 bytes of the boot sector is first read from the diskette and overlayed onto
+;	the OS bootstrap code so that the diskette format parameters are preserved.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Query the user to insert a flopppy diskette and press enter or cancel.
+;
+Prep			mov	si,czPrepMsg10					;starting message address
+			call	BootPrint					;display message
+;
+;	Exit if the Escape key is pressed or loop until Enter is pressed.
+;
+.10			mov	ah,EBIOSFNKEYSTATUS				;BIOS keyboard status function
+			int	EBIOSINTKEYBOARD				;get keyboard status
+			jnz	.12						;continue if key pressed
+			sti							;enable interrupts
+			hlt							;wait for interrupt
+			jmp	short .10					;repeat
+.12			cmp	al,EASCIIRETURN					;Enter key pressed?
+			je	.15						;yes, branch
+			cmp	al,EASCIIESCAPE					;Escape key pressed?
+			jne	.10						;no, repeat
+			jmp	.90						;yes, exit program
+;
+;	Display writing-sector message and patch the JMP instruction.
+;
+.15			mov	si,czPrepMsg12					;writing-sector message address
+			call	BootPrint					;display message
+			mov	bx,Boot+1					;address of JMP instruction operand
+			mov	ax,01Bh						;address past disk parameter table
+			mov	[bx],ax						;update the JMP instruction
+;
+;	Try to read the boot sector.
+;
+			mov	cx,EMAXTRIES					;try up to five times
+.20			push	cx						;save remaining tries
+			mov	bx,wcPrepInBuf					;input buffer address
+			mov	dx,0						;head zero, drive zero
+			mov	cx,1						;track zero, sector one
+			mov	ax,0201h					;read one sector
+			int	EBIOSINTDISKETTE				;attempt the read
+			pop	cx						;restore remaining retries
+			jnc	.30						;skip ahead if successful
+			loop	.20						;try again
+			mov	si,czPrepMsg20					;read-error message address
+			jmp	short .50					;branch to error routine
+;
+;	Copy diskette parms from input buffer to output buffer.
+;
+.30			mov	si,wcPrepInBuf					;input buffer address
+			add	si,11						;skip over JMP and system ID
+			mov	di,Boot						;output buffer address
+			add	di,11						;skip over JMP and system ID
+			mov	cx,19						;length of diskette parameters
+			cld							;forward string copies
+			rep	movsb						;copy diskette parameters
+;
+;	Try to write boot sector to diskette.
+;
+			mov	cx,EMAXTRIES					;try up to five times
+.40			push	cx						;save remaining tries
+			mov	bx,Boot						;output buffer address
+			mov	dx,0						;head zero, drive zero
+			mov	cx,1						;track zero, sector one
+			mov	ax,0301h					;write one sector
+			int	EBIOSINTDISKETTE				;attempt the write
+			pop	cx						;restore remaining retries
+			jnc	.80						;skip ahead if successful
+			loop	.40						;try again
+			mov	si,czPrepMsg30					;write-error message address
+;
+;	Convert the error code to ASCII and display the error message.
+;
+.50			push	ax						;save error code
+			mov	al,ah						;copy error code
+			mov	ah,0						;AX = error code
+			mov	dl,10h						;hexadecimal divisor
+			idiv	dl						;AL = hi-order, AH = lo-order
+			or	ax,3030h					;add ASCII zone digits
+			cmp	ah,3Ah						;AH ASCII numeral?
+			jb	.60						;yes, continue
+			add	ah,7						;no, make ASCII 'A'-'F'
+.60			cmp	al,3Ah						;al ASCII numeral?
+			jb	.70						;yes, continue
+			add	al,7						;no, make ASCII
+.70			mov	[si+17],ax					;put ASCII error code in message
+			call	BootPrint					;write error message
+			pop	ax						;restore error code
+;
+;	Display the completion message.
+;
+.80			mov	si,czPrepMsgOK					;assume successful completion
+			mov	al,ah						;BIOS return code
+			cmp	al,0						;success?
+			je	.85						;yes, continue
+			mov	si,czPrepMsgErr1				;disk parameter error message
+			cmp	al,1						;disk parameter error?
+			je	.85						;yes, continue
+			mov	si,czPrepMsgErr2				;address mark not found message
+			cmp	al,2						;address mark not found?
+			je	.85						;yes, continue
+			mov	si,czPrepMsgErr3				;protected disk message
+			cmp	al,3						;protected disk?
+			je	.85						;yes, continue
+			mov	si,czPrepMsgErr6				;diskette removed message
+			cmp	al,6						;diskette removed?
+			je	.85						;yes, continue
+			mov	si,czPrepMsgErr80				;drive timed out message
+			cmp	al,80H						;drive timed out?
+			je	.85						;yes, continue
+			mov	si,czPrepMsgErrXX				;unknown error message
+.85			call	BootPrint					;display result message
+.90			mov	ax,4C00H					;terminate with zero result code
+			int	21h						;terminate DOS program
+			ret							;return (should not execute)
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Diskette Preparation Messages
+;
+;-----------------------------------------------------------------------------------------------------------------------
+czPrepMsg10		db	13,10,"CustomOS Boot-Diskette Preparation Program"
+			db	13,10,"Copyright (C) 2010-2017 David J. Walling. All rights reserved."
+			db	13,10
+			db	13,10,"This program overwrites the boot sector of a diskette with startup code that"
+			db	13,10,"will load the operating system into memory when the computer is restarted."
+			db	13,10,"To proceed, place a formatted diskette into drive A: and press the Enter key."
+			db	13,10,"To exit this program without preparing a diskette, press the Escape key."
+			db	13,10,0
+czPrepMsg12		db	13,10,"Writing the boot sector to the diskette ..."
+			db	13,10,0
+czPrepMsg20		db	13,10,"The error-code .. was returned from the BIOS while reading from the disk."
+			db	13,10,0
+czPrepMsg30		db	13,10,"The error-code .. was returned from the BIOS while writing to the disk."
+			db	13,10,0
+czPrepMsgOK		db	13,10,"The boot-sector was written to the diskette. Before booting your computer with"
+			db	13,10,"this diskette, make sure that the file OS.COM is copied onto the diskette."
+			db	13,10,0
+czPrepMsgErr1		db	13,10,"(01) Invalid Disk Parameter"
+			db	13,10,"This is an internal error caused by an invalid value being passed to a system"
+			db	13,10,"function. The OSBOOT.COM file may be corrupt. Copy or download the file again"
+			db	13,10,"and retry."
+			db	13,10,0
+czPrepMsgErr2		db	13,10,"(02) Address Mark Not Found"
+			db	13,10,"This error indicates a physical problem with the floppy diskette. Please retry"
+			db	13,10,"using another diskette."
+			db	13,10,0
+czPrepMsgErr3		db	13,10,"(03) Protected Disk"
+			db	13,10,"This error is usually caused by attempting to write to a write-protected disk."
+			db	13,10,"Check the 'write-protect' setting on the disk or retry using using another disk."
+			db	13,10,0
+czPrepMsgErr6		db	13,10,"(06) Diskette Removed"
+			db	13,10,"This error may indicate that the floppy diskette has been removed from the"
+			db	13,10,"diskette drive. On some systems, this code may also occur if the diskette is"
+			db	13,10,"'write protected.' Please verify that the diskette is not write-protected and"
+			db	13,10,"is properly inserted in the diskette drive."
+			db	13,10,0
+czPrepMsgErr80		db	13,10,"(80) Drive Timed Out"
+			db	13,10,"This error usually indicates that no diskette is in the diskette drive. Please"
+			db	13,10,"make sure that the diskette is properly seated in the drive and retry."
+			db	13,10,0
+czPrepMsgErrXX		db	13,10,"(??) Unknown Error"
+			db	13,10,"The error-code returned by the BIOS is not a recognized error. Please consult"
+			db	13,10,"your computer's technical reference for a description of this error code."
+			db	13,10,0
+wcPrepInBuf		equ	$
 %endif
 %ifdef BUILDDISK
 ;-----------------------------------------------------------------------------------------------------------------------

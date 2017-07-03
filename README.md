@@ -18,6 +18,7 @@ Additional sub-projects may be added from time to time as the project progresses
 
 	os.001		A simple boot sector that displays a message.
 	os.002		A boot sector that loads and runs a kernel that displays a message.
+	os.003		Creates osprep.com, a utility to write the boot sector to a diskette.
 
 ## Compilation
 

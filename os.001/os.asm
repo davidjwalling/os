@@ -129,7 +129,7 @@ Boot			jmp	word Boot.10					;jump over parameter table
 Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 .@20			equ	$-$$						;.@20 = 021h
 .20			pop	ax						;AX =	   7c21     c21    21
-			sub	ax,byte .@20					;BX =	   7c00     c00     0
+			sub	ax,.@20						;BX =	   7c00     c00     0
 			mov	cl,4						;shift count
 			shr	ax,cl						;AX =	    7c0      c0     0
 			mov	bx,cs						;BX =	      0     700   7c0
@@ -142,7 +142,7 @@ Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 ;	parameter for the "section" directive above. We also set SS to the PSP and SP to the address of our i/o
 ;	buffer. This leaves 256 bytes of usable stack from 7b0:300 to 7b0:400.
 ;
-			sub	bx,byte 16					;BX = 07b0
+			sub	bx,16						;BX = 07b0
 			mov	ds,bx						;DS = 07b0 = psp
 			mov	es,bx						;ES = 07b0 = psp
 			mov	ss,bx						;SS = 07b0 = psp
@@ -233,5 +233,5 @@ czStartingMsg		db	"Starting ...",13,10,0				;loader message
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section			unused							;unused disk space
-			times 	EBOOTDISKBYTES-($-$$)-512 db 0F6h		;fill to end of disk image
+			times 	EBOOTDISKBYTES-0200h db 0F6h			;fill to end of disk image
 %endif
