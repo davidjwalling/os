@@ -134,9 +134,9 @@ EASCIIESCAPE		equ	27						;ASCII escape
 ;	responsible for placing the CPU into protected mode and calling the initial operating system task.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-EBOOTSECTORBYTES	equ	512						;bytes per floppy disk sector
-EBOOTDISKSECTORS	equ	2880						;sectors on a 1.44MB 3.5" floppy disk
-EBOOTDISKBYTES		equ	(EBOOTSECTORBYTES*EBOOTDISKSECTORS)		;calculated total bytes on disk
+EBOOTSECTORBYTES	equ	512						;bytes per sector
+EBOOTDISKSECTORS	equ	2880						;sectors per disk
+EBOOTDISKBYTES		equ	(EBOOTSECTORBYTES*EBOOTDISKSECTORS)		;bytes per disk
 EBOOTSTACKTOP		equ	400h						;boot sector stack top relative to DS
 EMAXTRIES		equ	5						;max read retries
 %ifdef BUILDBOOT
@@ -433,12 +433,12 @@ BootExit		call	BootPrint					;display messge to console
 			jnz	.20						;continue if key pressed
 			sti							;enable interrupts
 			hlt							;wait for interrupt
-			jmp	short .10					;repeat
+			jmp	.10						;repeat
 .20			mov	al,EKEYCMDRESET					;8042 pulse output port pin
 			out	EKEYPORTSTAT,al					;drive B0 low to restart
 .30			sti							;enable interrupts
 			hlt							;stop until reset, int, nmi
-			jmp	short .30					;loop until restart kicks in
+			jmp	.30						;loop until restart kicks in
 ;
 ;	Display text message.
 ;
@@ -448,7 +448,7 @@ BootPrint		cld							;forward strings
 			jz	BootReturn					;... yes, exit our loop
 			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
 			int	EBIOSINTVIDEO					;call BIOS display interrupt
-			jmp	short BootPrint					;repeat until done
+			jmp	BootPrint					;repeat until done
 BootReturn		ret							;return to caller
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -536,7 +536,7 @@ Prep			mov	si,czPrepMsg10					;starting message address
 			jnc	.30						;skip ahead if successful
 			loop	.20						;try again
 			mov	si,czPrepMsg20					;read-error message address
-			jmp	short .50					;branch to error routine
+			jmp	.50						;branch to error routine
 ;
 ;	Copy diskette parms from input buffer to output buffer.
 ;
@@ -778,7 +778,7 @@ Loader			push	cs						;use the code segment
 			jnz	.40						;exit if key pressed
 			sti							;enable maskable interrupts
 			hlt							;wait for interrupt
-			jmp	short .30					;repeat until keypress
+			jmp	.30						;repeat until keypress
 ;
 ;	Now that a key has been pressed, we signal the system to restart by driving the B0 line on the 8042
 ;	keyboard controller low (OUT 64h,0feh). The restart may take some microseconds to kick in, so we issue
@@ -788,7 +788,7 @@ Loader			push	cs						;use the code segment
 			out	EKEYPORTSTAT,al					;drive B0 low to restart
 .50			sti							;enable maskable interrupts
 			hlt							;stop until reset, int, nmi
-			jmp	short .50					;loop until restart kicks in
+			jmp	.50						;loop until restart kicks in
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Routine:	PutTTYString
@@ -810,7 +810,7 @@ PutTTYString		cld							;forward strings
 			jz	.10						;... yes, exit our loop
 			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
 			int	EBIOSINTVIDEO					;call BIOS display interrupt
-			jmp	short PutTTYString				;repeat until done
+			jmp	PutTTYString					;repeat until done
 .10			ret							;return to caller
 ;-----------------------------------------------------------------------------------------------------------------------
 ;

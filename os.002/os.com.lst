@@ -123,9 +123,9 @@
    123                                  ;	responsible for placing the CPU into protected mode and calling the initial operating system task.
    124                                  ;
    125                                  ;-----------------------------------------------------------------------------------------------------------------------
-   126                                  EBOOTSECTORBYTES	equ	512						;bytes per floppy disk sector
-   127                                  EBOOTDISKSECTORS	equ	2880						;sectors on a 1.44MB 3.5" floppy disk
-   128                                  EBOOTDISKBYTES		equ	(EBOOTSECTORBYTES*EBOOTDISKSECTORS)		;calculated total bytes on disk
+   126                                  EBOOTSECTORBYTES	equ	512						;bytes per sector
+   127                                  EBOOTDISKSECTORS	equ	2880						;sectors per disk
+   128                                  EBOOTDISKBYTES		equ	(EBOOTSECTORBYTES*EBOOTDISKSECTORS)		;bytes per disk
    129                                  EBOOTSTACKTOP		equ	400h						;boot sector stack top relative to DS
    130                                  EMAXTRIES		equ	5						;max read retries
    131                                  %ifdef BUILDBOOT
@@ -418,12 +418,12 @@
    418                                  			jnz	.20						;continue if key pressed
    419                                  			sti							;enable interrupts
    420                                  			hlt							;wait for interrupt
-   421                                  			jmp	short .10					;repeat
+   421                                  			jmp	.10						;repeat
    422                                  .20			mov	al,EKEYCMDRESET					;8042 pulse output port pin
    423                                  			out	EKEYPORTSTAT,al					;drive B0 low to restart
    424                                  .30			sti							;enable interrupts
    425                                  			hlt							;stop until reset, int, nmi
-   426                                  			jmp	short .30					;loop until restart kicks in
+   426                                  			jmp	.30						;loop until restart kicks in
    427                                  ;
    428                                  ;	Display text message.
    429                                  ;
@@ -433,7 +433,7 @@
    433                                  			jz	BootReturn					;... yes, exit our loop
    434                                  			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
    435                                  			int	EBIOSINTVIDEO					;call BIOS display interrupt
-   436                                  			jmp	short BootPrint					;repeat until done
+   436                                  			jmp	BootPrint					;repeat until done
    437                                  BootReturn		ret							;return to caller
    438                                  ;-----------------------------------------------------------------------------------------------------------------------
    439                                  ;
@@ -591,7 +591,7 @@
    591 0000000E 7504                    			jnz	.40						;exit if key pressed
    592 00000010 FB                      			sti							;enable maskable interrupts
    593 00000011 F4                      			hlt							;wait for interrupt
-   594 00000012 EBF6                    			jmp	short .30					;repeat until keypress
+   594 00000012 EBF6                    			jmp	.30						;repeat until keypress
    595                                  ;
    596                                  ;	Now that a key has been pressed, we signal the system to restart by driving the B0 line on the 8042
    597                                  ;	keyboard controller low (OUT 64h,0feh). The restart may take some microseconds to kick in, so we issue
@@ -601,7 +601,7 @@
    601 00000016 E664                    			out	EKEYPORTSTAT,al					;drive B0 low to restart
    602 00000018 FB                      .50			sti							;enable maskable interrupts
    603 00000019 F4                      			hlt							;stop until reset, int, nmi
-   604 0000001A EBFC                    			jmp	short .50					;loop until restart kicks in
+   604 0000001A EBFC                    			jmp	.50						;loop until restart kicks in
    605                                  ;-----------------------------------------------------------------------------------------------------------------------
    606                                  ;
    607                                  ;	Routine:	PutTTYString
@@ -623,7 +623,7 @@
    623 00000020 7406                    			jz	.10						;... yes, exit our loop
    624 00000022 B40E                    			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
    625 00000024 CD10                    			int	EBIOSINTVIDEO					;call BIOS display interrupt
-   626 00000026 EBF4                    			jmp	short PutTTYString				;repeat until done
+   626 00000026 EBF4                    			jmp	PutTTYString					;repeat until done
    627 00000028 C3                      .10			ret							;return to caller
    628                                  ;-----------------------------------------------------------------------------------------------------------------------
    629                                  ;

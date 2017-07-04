@@ -207,9 +207,9 @@
    207                                  ;	responsible for placing the CPU into protected mode and calling the initial operating system task.
    208                                  ;
    209                                  ;-----------------------------------------------------------------------------------------------------------------------
-   210                                  EBOOTSECTORBYTES	equ	512						;bytes per floppy disk sector
-   211                                  EBOOTDISKSECTORS	equ	2880						;sectors on a 1.44MB 3.5" floppy disk
-   212                                  EBOOTDISKBYTES		equ	(EBOOTSECTORBYTES*EBOOTDISKSECTORS)		;calculated total bytes on disk
+   210                                  EBOOTSECTORBYTES	equ	512						;bytes per sector
+   211                                  EBOOTDISKSECTORS	equ	2880						;sectors per disk
+   212                                  EBOOTDISKBYTES		equ	(EBOOTSECTORBYTES*EBOOTDISKSECTORS)		;bytes per disk
    213                                  EBOOTSTACKTOP		equ	400h						;boot sector stack top relative to DS
    214                                  EMAXTRIES		equ	5						;max read retries
    215                                  ;-----------------------------------------------------------------------------------------------------------------------
@@ -678,12 +678,12 @@
    678                                  			jnz	.20						;continue if key pressed
    679                                  			sti							;enable interrupts
    680                                  			hlt							;wait for interrupt
-   681                                  			jmp	short .10					;repeat
+   681                                  			jmp	.10						;repeat
    682                                  .20			mov	al,EKEYCMDRESET					;8042 pulse output port pin
    683                                  			out	EKEYPORTSTAT,al					;drive B0 low to restart
    684                                  .30			sti							;enable interrupts
    685                                  			hlt							;stop until reset, int, nmi
-   686                                  			jmp	short .30					;loop until restart kicks in
+   686                                  			jmp	.30						;loop until restart kicks in
    687                                  ;
    688                                  ;	Display text message.
    689                                  ;
@@ -693,7 +693,7 @@
    693                                  			jz	BootReturn					;... yes, exit our loop
    694                                  			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
    695                                  			int	EBIOSINTVIDEO					;call BIOS display interrupt
-   696                                  			jmp	short BootPrint					;repeat until done
+   696                                  			jmp	BootPrint					;repeat until done
    697                                  BootReturn		ret							;return to caller
    698                                  ;-----------------------------------------------------------------------------------------------------------------------
    699                                  ;
@@ -781,7 +781,7 @@
    781                                  			jnc	.30						;skip ahead if successful
    782                                  			loop	.20						;try again
    783                                  			mov	si,czPrepMsg20					;read-error message address
-   784                                  			jmp	short .50					;branch to error routine
+   784                                  			jmp	.50						;branch to error routine
    785                                  ;
    786                                  ;	Copy diskette parms from input buffer to output buffer.
    787                                  ;
@@ -1115,7 +1115,7 @@
   1115 00000082 7504                    			jnz	.40						;exit if key pressed
   1116 00000084 FB                      			sti							;enable maskable interrupts
   1117 00000085 F4                      			hlt							;wait for interrupt
-  1118 00000086 EBF6                    			jmp	short .30					;repeat until keypress
+  1118 00000086 EBF6                    			jmp	.30						;repeat until keypress
   1119                                  ;
   1120                                  ;	Now that a key has been pressed, we signal the system to restart by driving the B0 line on the 8042
   1121                                  ;	keyboard controller low (OUT 64h,0feh). The restart may take some microseconds to kick in, so we issue
@@ -1125,7 +1125,7 @@
   1125 0000008A E664                    			out	EKEYPORTSTAT,al					;drive B0 low to restart
   1126 0000008C FB                      .50			sti							;enable maskable interrupts
   1127 0000008D F4                      			hlt							;stop until reset, int, nmi
-  1128 0000008E EBFC                    			jmp	short .50					;loop until restart kicks in
+  1128 0000008E EBFC                    			jmp	.50						;loop until restart kicks in
   1129                                  ;-----------------------------------------------------------------------------------------------------------------------
   1130                                  ;
   1131                                  ;	Routine:	GetCPUType
@@ -1179,7 +1179,7 @@
   1179 000000B4 7406                    			jz	.10						;... yes, exit our loop
   1180 000000B6 B40E                    			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
   1181 000000B8 CD10                    			int	EBIOSINTVIDEO					;call BIOS display interrupt
-  1182 000000BA EBF4                    			jmp	short PutTTYString				;repeat until done
+  1182 000000BA EBF4                    			jmp	PutTTYString					;repeat until done
   1183 000000BC C3                      .10			ret							;return to caller
   1184                                  ;-----------------------------------------------------------------------------------------------------------------------
   1185                                  ;
@@ -2246,5 +2246,5 @@
   2065                                  ;
   2066                                  ;-----------------------------------------------------------------------------------------------------------------------
   2067                                  section			unused							;unused disk space
-  2068                                  			times	1474560-09400h db 0F6h				;fill to end of disk image
+  2068                                  			times	EBOOTDISKBYTES-09400h db 0F6h			;fill to end of disk image
   2069                                  %endif

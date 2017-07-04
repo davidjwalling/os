@@ -73,9 +73,9 @@ EBIOSFNKEYSTATUS	equ	001h						;BIOS keyboard status function
 ;	responsible for placing the CPU into protected mode and calling the initial operating system task.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-EBOOTSECTORBYTES	equ	512						;bytes per floppy disk sector
-EBOOTDISKSECTORS	equ	2880						;sectors on a 1.44MB 3.5" floppy disk
-EBOOTDISKBYTES		equ	(EBOOTSECTORBYTES*EBOOTDISKSECTORS)		;calculated total bytes on disk
+EBOOTSECTORBYTES	equ	512						;bytes per sector
+EBOOTDISKSECTORS	equ	2880						;sectors per disk
+EBOOTDISKBYTES		equ	(EBOOTSECTORBYTES*EBOOTDISKSECTORS)		;bytes per disk
 EBOOTSTACKTOP		equ	400h						;boot sector stack top relative to DS
 %ifdef BUILDBOOT
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -175,7 +175,7 @@ Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 			jnz	.40						;exit if key pressed
 			sti							;enable maskable interrupts
 			hlt							;wait for interrupt
-			jmp	short .30					;repeat until keypress
+			jmp	.30						;repeat until keypress
 ;
 ;	Now that a key has been pressed, we signal the system to restart by driving the B0 line on the 8042
 ;	keyboard controller low (OUT 64h,0feh). The restart may take some microseconds to kick in, so we issue
@@ -185,7 +185,7 @@ Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 			out	EKEYPORTSTAT,al					;drive B0 low to restart
 .50			sti							;enable maskable interrupts
 			hlt							;stop until reset, int, nmi
-			jmp	short .50					;loop until restart kicks in
+			jmp	.50						;loop until restart kicks in
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Routine:	PutTTYString
@@ -207,7 +207,7 @@ PutTTYString		cld							;forward strings
 			jz	.10						;... yes, exit our loop
 			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
 			int	EBIOSINTVIDEO					;call BIOS display interrupt
-			jmp	short PutTTYString				;repeat until done
+			jmp	PutTTYString					;repeat until done
 .10			ret							;return to caller
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
