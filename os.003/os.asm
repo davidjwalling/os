@@ -508,7 +508,7 @@ Prep			mov	si,czPrepMsg10					;starting message address
 			jnz	.12						;continue if key pressed
 			sti							;enable interrupts
 			hlt							;wait for interrupt
-			jmp	short .10					;repeat
+			jmp	.10						;repeat
 .12			cmp	al,EASCIIRETURN					;Enter key pressed?
 			je	.15						;yes, branch
 			cmp	al,EASCIIESCAPE					;Escape key pressed?

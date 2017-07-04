@@ -825,7 +825,7 @@
    821                                  			jnz	.12						;continue if key pressed
    822                                  			sti							;enable interrupts
    823                                  			hlt							;wait for interrupt
-   824                                  			jmp	short .10					;repeat
+   824                                  			jmp	.10						;repeat
    825                                  .12			cmp	al,EASCIIRETURN					;Enter key pressed?
    826                                  			je	.15						;yes, branch
    827                                  			cmp	al,EASCIIESCAPE					;Escape key pressed?

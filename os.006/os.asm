@@ -2,10 +2,11 @@
 ;
 ;	File:		os.asm
 ;
-;	Project:	os.005
+;	Project:	os.006
 ;
-;	Description:	In this sample, the kernel is expanded to include a keyboard interupt handler. This handler
-;			updates data visible on the console in an operator information area.
+;	Description:	In this sample, the kernel is expanded to support a simple message queue. Keyboard events
+;			are added to the queue by the keyboard interrupt handler and are read and processed by the
+;			console task.
 ;
 ;	Revised:	January 1, 2017
 ;
@@ -234,12 +235,14 @@ EBIOSFNKEYSTATUS	equ	001h						;BIOS keyboard status function
 ;	ASCII									EASC...
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+EASCIIBACKSPACE		equ	8						;ASCII backspace
 EASCIILINEFEED		equ	10						;ASCII line feed
 EASCIIRETURN		equ	13						;ASCII carriage return
 EASCIIESCAPE		equ	27						;ASCII escape
 EASCIISPACE		equ	32						;ASCII space
 EASCIIUPPERA		equ	65						;ASCII 'A'
 EASCIIUPPERZ		equ	90						;ASCII 'Z'
+EASCIITILDE		equ	126						;ASCII '~'
 EASCIICASE		equ	00100000b					;ASCII case bit
 EASCIICASEMASK		equ	11011111b					;ASCII case mask
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -261,6 +264,10 @@ EMAXTRIES		equ	5						;max read retries
 ESELDAT			equ	18h						;kernel data selector
 ESELCGA			equ	20h						;cga video selector
 ESELOSCODE		equ	48h						;os kernel selector
+;-----------------------------------------------------------------------------------------------------------------------
+;	LDT Selectors								ESEL...
+;-----------------------------------------------------------------------------------------------------------------------
+ESELMQ			equ	2Ch						;console task message queue
 ;-----------------------------------------------------------------------------------------------------------------------
 ;	Kernel Constants							EKRN...
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -292,6 +299,12 @@ ECONROWBYTES		equ	(ECONCOLS*ECONCOLBYTES)				;bytes per row
 ECONROWDWORDS		equ	(ECONROWBYTES/4)				;double-words per row
 ECONCLEARDWORD		equ	07200720h					;attribute and ASCII space
 ECONOIADWORD		equ	70207020h					;attribute and ASCII space
+;-----------------------------------------------------------------------------------------------------------------------
+;	Kernel Message Identifiers						EMSG...
+;-----------------------------------------------------------------------------------------------------------------------
+EMSGKEYDOWN		equ	41000000h					;message: key-down
+EMSGKEYUP		equ	41010000h					;message: key-up
+EMSGKEYCHAR		equ	41020000h					;message: character
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Structures
@@ -428,7 +441,20 @@ wbConsoleScan3		resb	1						;scan code
 wbConsoleScan4		resb	1						;scan code
 wbConsoleScan5		resb	1						;scan code
 wbConsoleChar		resb	1						;ASCII code
+wzConsoleInBuffer	resb	80						;command input buffer
 ECONDATALEN		equ	($-ECONDATA)					;size of console data area
+endstruc
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	MQUEUE
+;
+;	The MQUEUE structure maps memory used for a message queue.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+struc			MQUEUE
+MQHead			resd	1						;000 head ptr
+MQTail			resd	1						;004 tail ptr
+MQData			resd	254						;message queue
 endstruc
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1427,96 +1453,127 @@ section			kernel	vstart=0h					;data offsets relative to 0
 			menter	dividebyzero					;divide by zero
 			push	0						;
 			jmp	intcpu						;
+
 			menter	singlestep					;single step
 			push	1						;
 			jmp	intcpu						;
+
 			menter	nmi						;non-maskable
 			push	2						;
 			jmp	intcpu						;
+
 			menter	break						;break
 			push	3						;
 			jmp	intcpu						;
+
 			menter	into						;into
 			push	4						;
 			jmp	intcpu						;
+
 			menter	bounds						;bounds
 			push	5						;
 			jmp	intcpu						;
+
 			menter	badopcode					;bad opcode interrupt
 			push	6						;
 			jmp	intcpu						;
+
 			menter	nocoproc					;no coprocessor interrupt
 			push	7						;
 			jmp	intcpu						;
+
 			menter	doublefault					;doublefault interrupt
 			push	8						;
 			jmp	intcpu						;
+
 			menter	operand						;operand interrupt
 			push	9						;
 			jmp	intcpu						;
+
 			menter	badtss						;bad tss interrupt
 			push	10						;
 			jmp	intcpu						;
+
 			menter	notpresent					;not present interrupt
 			push	11						;
 			jmp	intcpu						;
+
 			menter	stacklimit					;stack limit interrupt
 			push	12						;
 			jmp	intcpu						;
+
 			menter	protection					;protection fault interrupt
 			push	13						;
 			jmp	intcpu						;
+
 			menter	int14						;(reserved)
 			push	14						;
 			jmp	intcpu						;
+
 			menter	int15						;(reserved)
 			push	15						;
 			jmp	intcpu						;
+
 			menter	coproccalc					;coprocessor calculation
 			push	16						;
 			jmp	intcpu						;
+
 			menter	int17						;(reserved)
 			push	17						;
 			jmp	intcpu						;
+
 			menter	int18						;(reserved)
 			push	18						;
 			jmp	intcpu						;
+
 			menter	int19						;(reserved)
 			push	19						;
 			jmp	intcpu						;
+
 			menter	int20						;(reserved)
 			push	20						;
 			jmp	intcpu						;
+
 			menter	int21						;(reserved)
 			push	21						;
 			jmp	intcpu						;
+
 			menter	int22						;(reserved)
 			push	22						;
 			jmp	intcpu						;
+
 			menter	int23						;(reserved)
 			push	23						;
 			jmp	intcpu						;
+
 			menter	int24						;(reserved)
 			push	24						;
 			jmp	intcpu						;
+
 			menter	int25						;(reserved)
 			push	25						;
 			jmp	intcpu						;
+
 			menter	int26						;(reserved)
 			push	26						;
 			jmp	intcpu						;
+
 			menter	int27						;(reserved)
 			push	27						;
 			jmp	intcpu						;
+
 			menter	int28						;(reserved)
 			push	28						;
 			jmp	intcpu						;
+
 			menter	int29						;(reserved)
 			push	29						;
 			jmp	intcpu						;
+
 			menter	int30						;(reserved)
 			push	30						;
 			jmp	intcpu						;
+
 			menter	int31						;(reserved)
 			push	31						;
 intcpu			pop	eax						;
@@ -1551,6 +1608,7 @@ intcpu			pop	eax						;
 			push	ds						;
 			push	ESELDAT						;load OS data selector ...
 			pop	ds						;... into data segment register
+
 			mov	eax,[wfClockTicks]				;eax = clock ticks
 			inc	eax						;increment clock ticks
 			cmp	eax,EPITDAYTICKS				;clock ticks per day?
@@ -1558,21 +1616,25 @@ intcpu			pop	eax						;
 			inc	byte [wbClockDays]				;increment clock days
 			xor	eax,eax						;reset clock ticks
 irq0.10			mov	dword [wfClockTicks],eax			;save clock ticks
+
 			cmp	byte [wbFDCMotor],0				;floppy motor timeout?
 			je	irq0.20						;yes, skip ahead
 			dec	byte [wbFDCMotor]				;decrement motor timeout
 			jnz	irq0.20						;skip ahead if non-zero
+
 			sti							;enable maskable interrupts
 irq0.15 		mov	dh,EFDCPORTHI					;FDC controller port hi
 			mov	dl,EFDCPORTLOSTAT				;FDC main status register
 			in	al,dx						;FDC main status byte
 			test	al,EFDCSTATBUSY					;test FDC main status for busy
 			jnz	irq0.15						;wait while busy
+
 			mov	al,EFDCMOTOROFF					;motor-off / enable/ DMA setting
 			mov	byte [wbFDCControl],al				;save motor-off setting
 			mov	dh,EFDCPORTHI					;fdc port hi
 			mov	dl,EFDCPORTLOOUT				;fdc digital output register
 			out	dx,al						;turn motor off
+
 irq0.20			call	PutPrimaryEndOfInt				;send end-of-interrupt to PIC
 			pop	ds						;restore volatile regs
 			pop	edx						;
@@ -1717,7 +1779,7 @@ irq1.70			cmp	ah,EKEYCODEEXT1					;extended scan code 1?
 			jmp	irq1.150					;continue
 irq1.80			xor	al,al						;assume no ASCII translation
 			test	ah,EKEYUP					;release code?
-			jnz	irq1.130					;yes, skip ahead
+			jnz	irq1.110					;yes, skip ahead
 			mov	esi,tscan2ascii					;scan-to-ascii table address
 			test	bl,EKEYSHIFT					;either shift key down?
 			jz	irq1.90						;no, skip ahead
@@ -1734,6 +1796,23 @@ irq1.90			movzx	ecx,ah						;scan code offset
 			ja	irq1.100					;yes, skip ahead
 			xor	al,EASCIICASE					;switch case
 irq1.100		mov	[wbConsoleChar],al				;save ASCII code
+irq1.110		mov	edx,EMSGKEYDOWN					;assume key-down event
+			test	ah,EKEYUP					;release scan-code?
+			jz	irq1.120					;no, skip ahead
+			mov	edx,EMSGKEYUP					;key-up event
+irq1.120		and	eax,0FFFFh					;clear high-order word
+			or	edx,eax						;msg id and codes
+			xor	ecx,ecx						;null param
+			push	eax						;save codes
+			call	PutMessage					;put message to console
+			pop	eax						;restore codes
+			or	al,al						;ASCII translation?
+			jz	irq1.130					;no, skip ahead
+			mov	edx,EMSGKEYCHAR					;key-character event
+			and	eax,0FFFFh					;clear high-order word
+			or	edx,eax						;msg id and codes
+			xor	ecx,ecx						;null param
+			call	PutMessage					;put message to console
 irq1.130		jmp	irq1.150					;finish keyboard handling
 irq1.140		mov	al,EKEYTIMEOUT					;controller timeout flag
 			or	[wbConsoleStatus],al				;set controller timeout flag
@@ -1780,18 +1859,23 @@ tscan2shift		db	000h,01Bh,021h,040h,023h,024h,025h,05Eh		;80-87
 			db	000h,000h,000h,000h,000h,000h,000h,000h		;E8-EF
 			db	000h,000h,000h,000h,000h,000h,000h,000h		;F0-F7
 			db	000h,000h,000h,000h,000h,000h,000h,000h		;F8-FF
+
 			menter	iochannel					;secondary 8259A cascade
 			push	eax						;
 			jmp	hwint						;
+
 			menter	com2						;serial port 2 interrupt
 			push	eax						;
 			jmp	hwint						;
+
 			menter	com1						;serial port 1 interrupt
 			push	eax						;
 			jmp	hwint						;
+
 			menter	lpt2						;parallel port 2 interrupt
 			push	eax						;
 			jmp	hwint						;
+
 			menter	diskette					;floppy disk interrupt
 			push	eax						;save non-volatile regs
 			push	ds						;
@@ -1806,30 +1890,39 @@ tscan2shift		db	000h,01Bh,021h,040h,023h,024h,025h,05Eh		;80-87
 			pop	ds						;restore non-volatile regs
 			pop	eax						;
 			iretd							;return from interrupt
+
 			menter	lpt1						;parallel port 1 interrupt
 			push	eax						;
 			jmp	hwint						;
+
 			menter	rtclock						;real-time clock interrupt
 			push	eax						;
 			jmp	hwwint						;
+
 			menter	retrace						;CGA vertical retrace interrupt
 			push	eax						;
 			jmp	hwwint						;
+
 			menter	irq10						;reserved
 			push	eax						;
 			jmp	hwwint						;
+
 			menter	irq11						;reserved
 			push	eax						;
 			jmp	hwwint						;
+
 			menter	ps2mouse					;PS/2 mouse interrupt
 			push	eax						;
 			jmp	hwwint						;
+
 			menter	coprocessor					;coprocessor interrupt
 			push	eax						;
 			jmp	hwwint						;
+
 			menter	fixeddisk					;fixed disk interrupt
 			push	eax						;
 			jmp	hwwint						;
+
 			menter	irq15						;reserved
 			push	eax						;save volatile reg
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -1868,6 +1961,7 @@ svc90			iretd							;return from interrupt
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 tsvc			tsvce	PutConsoleString				;tty output asciiz string
+			tsvce	GetConsoleString				;get string input
 			tsvce	ClearConsoleScreen				;clear console screen
 			tsvce	PlaceCursor					;place the cursor at the current loc
 maxtsvc			equ	($-tsvc)/4					;function out of range
@@ -1881,6 +1975,14 @@ maxtsvc			equ	($-tsvc)/4					;function out of range
 %macro			putConsoleString 1
 			mov	edx,%1						;EDX = string address
 			mov	al,ePutConsoleString				;AL = put string fn.
+			int	_svc						;invoke OS service
+%endmacro
+%macro			getConsoleString 4
+			mov	edx,%1						;EDX = buffer address
+			mov	ecx,%2						;ECX = max characters
+			mov	bh,%3						;BH = echo indicator
+			mov	bl,%4						;BL = terminator
+			mov	al,eGetConsoleString				;AL = get string fn.
 			int	_svc						;invoke OS service
 %endmacro
 %macro			clearConsoleScreen 0
@@ -1901,6 +2003,10 @@ maxtsvc			equ	($-tsvc)/4					;function out of range
 ;	Console Helper Routines
 ;
 ;	PutConsoleString
+;	GetConsoleString
+;	GetConsoleChar
+;	Yield
+;	PreviousConsoleColumn
 ;	NextConsoleColumn
 ;	FirstConsoleColumn
 ;	NextConsoleRow
@@ -1940,6 +2046,115 @@ PutConsoleString	push	esi						;save volatile regs
 			jmp	.10						;next character
 .40			pop	esi						;restore volatile regs
 			ret							;return to caller
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Routine:	GetConsoleString
+;
+;	Description:	Accept keyboard input into a buffer.
+;
+;	Input:		ds:edx	target buffer address
+;			ecx	size of input buffer
+;			bh	echo to terminal
+;			bl	terminating character
+;
+;-----------------------------------------------------------------------------------------------------------------------
+GetConsoleString	push	ecx						;save volatile regs
+			push	esi						;
+			push	edi						;
+			push	es						;
+			push	ds						;load data segment selector ...
+			pop	es						;... into extra segment register
+			mov	edi,edx						;edi = target buffer
+			mov	esi,edx						;esi = target buffer
+.10			jecxz	.50						;exit if max-length is zero
+.20			call	GetConsoleChar					;al = next input char
+			cmp	al,bl						;is this the terminator?
+			je	.50						;yes, exit
+			cmp	al,EASCIIBACKSPACE				;is this a backspace?
+			jne	.30						;no, skip ahead
+			cmp	esi,edi						;at start of buffer?
+			je	.20						;yes, get next character
+			dec	edi						;backup target pointer
+			mov	byte [edi],0					;zero previous character
+			inc	ecx						;increment remaining chars
+			test	bh,1						;echo to console?
+			jz	.20						;no, get next character
+			call	PreviousConsoleColumn				;backup console position
+			mov	al,EASCIISPACE					;ASCII space
+			call	PutConsoleChar					;write space to console
+			call	PlaceCursor					;position the cursor
+			jmp	.20						;get next character
+.30			cmp	al,EASCIISPACE					;printable? (lower bounds)
+			jb	.20						;no, get another character
+			cmp	al,EASCIITILDE					;printable? (upper bounds)
+			ja	.20						;no, get another character
+			stosb							;store character in buffer
+			test	bh,1						;echo to console?
+			jz	.40						;no, skip ahead
+			call	PutConsoleChar					;write character to console
+			call	NextConsoleColumn				;advance console position
+			call	PlaceCursor					;position the cursor
+.40			dec	ecx						;decrement remaining chars
+			jmp	.10						;next
+.50			xor	al,al						;null
+			stosb							;terminate buffer
+			pop	es						;restore volatile regs
+			pop	edi						;
+			pop	esi						;
+			pop	ecx						;
+			ret							;return to caller
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Routine:	GetConsoleChar
+;
+;	Description:	Wait for EMSGKEYCHAR message and return character code.
+;
+;	Output:		al	ASCII character code
+;			ah	keyboard scan code
+;
+;-----------------------------------------------------------------------------------------------------------------------
+GetConsoleChar.10	call	Yield						;pass control or halt
+GetConsoleChar		call	GetMessage					;get the next message
+			or	eax,eax						;do we have a message?
+			jz	GetConsoleChar.10				;no, skip ahead
+			push	eax						;save key codes
+			and	eax,0FFFF0000h					;mask for message type
+			cmp	eax,EMSGKEYCHAR					;key-char message?
+			pop	eax						;restore key codes
+			jne	GetConsoleChar					;no, try again
+			and	eax,0000ffffh					;mask for key codes
+			ret							;return to caller
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Routine:	Yield
+;
+;	Description:	Pass control to the next ready task or enter halt.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+Yield			sti							;enable maskagle interrupts
+			hlt							;halt until external interrupt
+			ret							;return to caller
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Routine:	PreviousConsoleColumn
+;
+;	Description:	Retreat the cursor one logical column. Wrap the logical position to the previous row if needed.
+;
+;	Input:		ds	OS data selector
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PreviousConsoleColumn	mov	al,[wbConsoleColumn]				;current column
+			or	al,al						;start of row?
+			jnz	.10						;no, skip ahead
+			mov	ah,[wbConsoleRow]				;current row
+			or	ah,ah						;top of screen?
+			jz	.20						;yes, exit with no change
+			dec	ah						;decrement row
+			mov	[wbConsoleRow],ah				;save row
+			mov	al,ECONCOLS					;set maximum column
+.10			dec	al						;decrement column
+			mov	[wbConsoleColumn],al				;save column
+.20			ret							;return to caller
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Routine:	NextConsoleColumn
@@ -2162,6 +2377,81 @@ PutConsoleHexByte	push	ebx						;save volatile regs
 			add	al,7						;add ASCII offset for alpha
 .20			call	SetConsoleChar					;display ASCII character
 			pop	ebx						;restore volatile regs
+			ret							;return to caller
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Message Queue Helper Routines
+;
+;	PutMessage
+;	GetMessage
+;
+;-----------------------------------------------------------------------------------------------------------------------
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Routine:	PutMessage
+;
+;	Description:	Add a message to the message queue.
+;
+;	Input:		ecx	hi-order data word
+;			edx	lo-order data word
+;
+;	Output:		CY	0 = success
+;				1 = fail: queue is full
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutMessage		push	ds						;save volatile regs
+			push	ESELMQ						;load task message queue selector ...
+			pop	ds						;... into data segment register
+			mov	eax,[MQTail]					;tail ptr
+			cmp	dword [eax],0					;is queue full?
+			stc							;assume failure
+			jne	.20						;yes, cannot store
+			mov	[eax],edx					;store lo-order data
+			mov	[eax+4],ecx					;store hi-order data
+			add	eax,8						;next queue element adr
+			and	eax,03fch					;at end of queue?
+			jnz	.10						;no, skip ahead
+			mov	al,8						;reset to top of queue
+.10			mov	[MQTail],eax					;save new tail ptr
+			clc							;indicate success
+.20			pop	ds						;restore volatile regs
+			ret							;return to caller
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Routine:	GetMessage
+;
+;	Description:	Read and remove a message from the message queue.
+;
+;	Output:		eax	lo-order message data
+;			edx	hi-order message data
+;
+;			CY	0 = message read
+;				1 = no message to read
+;
+;-----------------------------------------------------------------------------------------------------------------------
+GetMessage		push	ebx						;save volatile regs
+			push	ecx						;
+			push	ds						;
+			push	ESELMQ						;load message queue selector ...
+			pop	ds						;... into data segment register
+			mov	ebx,[MQHead]					;head ptr
+			mov	eax,[ebx]					;lo-order 32 bits
+			mov	edx,[ebx+4]					;hi-order 32 bits
+			or	eax,edx						;is queue empty?
+			stc							;assume queue is emtpy
+			jz	.20						;yes, skip ahead
+			xor	ecx,ecx						;store zero
+			mov	[ebx],ecx					;... in lo-order dword
+			mov	[ebx+4],ecx					;... in hi-order dword
+			add	ebx,8						;next queue element
+			and	ebx,03fch					;at end of queue?
+			jnz	.10						;no, skip ahead
+			mov	bl,8						;reset to 1st entry
+.10			mov	[MQHead],ebx					;save new head ptr
+			clc							;indicate message read
+.20			pop	ds						;restore volatile regs
+			pop	ecx						;
+			pop	ebx						;
 			ret							;return to caller
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -2515,9 +2805,12 @@ ConCode			call	ConInitializeData				;initialize console variables
 			putConsoleString czTitle				;display startup message
 .10			putConsoleString czPrompt				;display input prompt
 			placeCursor						;set CRT cursor location
-.20			sti							;enable interrupts
-			hlt							;halt until interrupt
-			jmp	.20						;continue halt loop
+			getConsoleString wzConsoleInBuffer,79,1,13		;accept keyboard input
+			putConsoleString czNewLine				;newline
+			putConsoleString wzConsoleInBuffer			;print entered command
+			putConsoleString czNewLine				;new line
+			putConsoleString czUnknownCommand			;display error message
+			jmp	.10						;next command
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Routine:	ConInitializeData
@@ -2546,6 +2839,8 @@ ConInitializeData	push	ecx						;save volatile regs
 ;-----------------------------------------------------------------------------------------------------------------------
 czTitle			db	"Custom Operating System 1.0",13,10,0		;version string
 czPrompt		db	":",0						;prompt string
+czUnknownCommand	db	"Unknown command",13,10,0			;unknown command response string
+czNewLine		db	13,10,0						;new line string
 			times	4094-($-$$) db 0h				;zero fill to end of section
 			db	055h,0AAh					;end of section
 %endif

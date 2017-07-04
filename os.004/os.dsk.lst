@@ -757,7 +757,7 @@
    753                                  			jnz	.12						;continue if key pressed
    754                                  			sti							;enable interrupts
    755                                  			hlt							;wait for interrupt
-   756                                  			jmp	short .10					;repeat
+   756                                  			jmp	.10						;repeat
    757                                  .12			cmp	al,EASCIIRETURN					;Enter key pressed?
    758                                  			je	.15						;yes, branch
    759                                  			cmp	al,EASCIIESCAPE					;Escape key pressed?

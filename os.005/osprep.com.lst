@@ -825,7 +825,7 @@
    821 0000020A 7504                    			jnz	.12						;continue if key pressed
    822 0000020C FB                      			sti							;enable interrupts
    823 0000020D F4                      			hlt							;wait for interrupt
-   824 0000020E EBF6                    			jmp	short .10					;repeat
+   824 0000020E EBF6                    			jmp	.10						;repeat
    825 00000210 3C0D                    .12			cmp	al,EASCIIRETURN					;Enter key pressed?
    826 00000212 7407                    			je	.15						;yes, branch
    827 00000214 3C1B                    			cmp	al,EASCIIESCAPE					;Escape key pressed?
