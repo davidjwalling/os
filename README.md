@@ -22,6 +22,7 @@ Additional sub-projects may be added from time to time as the project progresses
 	os.004		Expands the loader to enter protected mode and start a task.
 	os.005		Add keyboard interrupt handler to display characters and shift status in information area.
 	os.006		Add a message queue handler to send keyboard messages to a task.
+	os.007		Add support for "clear", "ver" and "exit" commands.
 
 ## Compilation
 
