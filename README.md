@@ -88,7 +88,7 @@ Network Support:
 
 	David J. Walling		Email:		david@davidjwalling.com
 					Twitter:	@davidjwalling
-					The Interwebs:	<a href="http://www.davidjwalling.com">www.davidjwalling.com</a>
+					The Interwebs:	[www.davidjwalling.com](http://www.davidjwalling.com)
 
 ## License
 
