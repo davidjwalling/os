@@ -25,6 +25,7 @@ Additional sub-projects may be added from time to time as the project progresses
 	os.007		Add support for "clear", "ver" and "exit" commands.
 	os.008		Add support for Real-Time Clock (RTC) access and "date" and "time" commands.
 	os.009		Add support for "mem" command to display memory across the lower 4GB of address space.
+	os.010		Add logic to probe PCI devices and display using the "pciprobe" or "lspci" commands.
 
 ## Compilation
 
