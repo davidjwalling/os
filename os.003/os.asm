@@ -80,9 +80,9 @@
 ;			Macro names do begin with a verb.
 ;
 ;	Registers:	Registers EBX, ESI, EDI, EBP, SS, CS, DS and ES are preserved by all OS routines.
-;			Register EAX is preferred for returning a response/result value.
+;			Registers EAX and ECX are preferred for returning response/result values.
 ;			Register EBX is preferred for passing a context (structure) address parameter.
-;			Registers EAX, EDX and ECX are preferred for passing integral parameters.
+;			Registers EAX, EDX, ECX and EBX are preferred for passing integral parameters.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -121,7 +121,7 @@ EBIOSINTKEYBOARD	equ	016h						;BIOS keyboard services interrupt
 EBIOSFNKEYSTATUS	equ	001h						;BIOS keyboard status function
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;	ASCII									EASC...
+;	ASCII									EASCII...
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 EASCIIRETURN		equ	13						;ASCII carriage return
@@ -328,7 +328,7 @@ Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 			mov	[wwLogicalSector],ax				;start past boot sector
 			mov	ax,[cwFatSectors]				;AX = 0009
 			mov	[wbReadCount],al				;[readcount] = 09
-			mov	bx,EBOOTSTACKTOP				;BX = 0500
+			mov	bx,EBOOTSTACKTOP				;BX = 0400
 			call	ReadSector					;read FAT into buffer
 ;
 ;	Get the starting cluster of the kernel program and target address.
@@ -431,12 +431,12 @@ BootExit		call	BootPrint					;display messge to console
 .10			mov	ah,EBIOSFNKEYSTATUS				;bios keyboard status function
 			int	EBIOSINTKEYBOARD				;get keyboard status
 			jnz	.20						;continue if key pressed
-			sti							;enable interrupts
+			sti							;enable maskable interrupts
 			hlt							;wait for interrupt
 			jmp	.10						;repeat
 .20			mov	al,EKEYCMDRESET					;8042 pulse output port pin
 			out	EKEYPORTSTAT,al					;drive B0 low to restart
-.30			sti							;enable interrupts
+.30			sti							;enable maskable interrupts
 			hlt							;stop until reset, int, nmi
 			jmp	.30						;loop until restart kicks in
 ;
@@ -449,7 +449,7 @@ BootPrint		cld							;forward strings
 			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
 			int	EBIOSINTVIDEO					;call BIOS display interrupt
 			jmp	BootPrint					;repeat until done
-BootReturn		ret							;return to caller
+BootReturn		ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Constants
@@ -811,7 +811,7 @@ PutTTYString		cld							;forward strings
 			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
 			int	EBIOSINTVIDEO					;call BIOS display interrupt
 			jmp	PutTTYString					;repeat until done
-.10			ret							;return to caller
+.10			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Loader Data

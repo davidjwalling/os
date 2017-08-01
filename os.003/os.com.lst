@@ -80,9 +80,9 @@
     80                                  ;			Macro names do begin with a verb.
     81                                  ;
     82                                  ;	Registers:	Registers EBX, ESI, EDI, EBP, SS, CS, DS and ES are preserved by all OS routines.
-    83                                  ;			Register EAX is preferred for returning a response/result value.
+    83                                  ;			Registers EAX and ECX are preferred for returning response/result values.
     84                                  ;			Register EBX is preferred for passing a context (structure) address parameter.
-    85                                  ;			Registers EAX, EDX and ECX are preferred for passing integral parameters.
+    85                                  ;			Registers EAX, EDX, ECX and EBX are preferred for passing integral parameters.
     86                                  ;
     87                                  ;-----------------------------------------------------------------------------------------------------------------------
     88                                  ;-----------------------------------------------------------------------------------------------------------------------
@@ -121,7 +121,7 @@
    121                                  EBIOSFNKEYSTATUS	equ	001h						;BIOS keyboard status function
    122                                  ;-----------------------------------------------------------------------------------------------------------------------
    123                                  ;
-   124                                  ;	ASCII									EASC...
+   124                                  ;	ASCII									EASCII...
    125                                  ;
    126                                  ;-----------------------------------------------------------------------------------------------------------------------
    127                                  EASCIIRETURN		equ	13						;ASCII carriage return
@@ -328,7 +328,7 @@
    328                                  			mov	[wwLogicalSector],ax				;start past boot sector
    329                                  			mov	ax,[cwFatSectors]				;AX = 0009
    330                                  			mov	[wbReadCount],al				;[readcount] = 09
-   331                                  			mov	bx,EBOOTSTACKTOP				;BX = 0500
+   331                                  			mov	bx,EBOOTSTACKTOP				;BX = 0400
    332                                  			call	ReadSector					;read FAT into buffer
    333                                  ;
    334                                  ;	Get the starting cluster of the kernel program and target address.
@@ -431,12 +431,12 @@
    431                                  .10			mov	ah,EBIOSFNKEYSTATUS				;bios keyboard status function
    432                                  			int	EBIOSINTKEYBOARD				;get keyboard status
    433                                  			jnz	.20						;continue if key pressed
-   434                                  			sti							;enable interrupts
+   434                                  			sti							;enable maskable interrupts
    435                                  			hlt							;wait for interrupt
    436                                  			jmp	.10						;repeat
    437                                  .20			mov	al,EKEYCMDRESET					;8042 pulse output port pin
    438                                  			out	EKEYPORTSTAT,al					;drive B0 low to restart
-   439                                  .30			sti							;enable interrupts
+   439                                  .30			sti							;enable maskable interrupts
    440                                  			hlt							;stop until reset, int, nmi
    441                                  			jmp	.30						;loop until restart kicks in
    442                                  ;
@@ -449,7 +449,7 @@
    449                                  			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
    450                                  			int	EBIOSINTVIDEO					;call BIOS display interrupt
    451                                  			jmp	BootPrint					;repeat until done
-   452                                  BootReturn		ret							;return to caller
+   452                                  BootReturn		ret							;return
    453                                  ;-----------------------------------------------------------------------------------------------------------------------
    454                                  ;
    455                                  ;	Constants
@@ -811,7 +811,7 @@
    811 00000022 B40E                    			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
    812 00000024 CD10                    			int	EBIOSINTVIDEO					;call BIOS display interrupt
    813 00000026 EBF4                    			jmp	PutTTYString					;repeat until done
-   814 00000028 C3                      .10			ret							;return to caller
+   814 00000028 C3                      .10			ret							;return
    815                                  ;-----------------------------------------------------------------------------------------------------------------------
    816                                  ;
    817                                  ;	Loader Data

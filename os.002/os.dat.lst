@@ -76,9 +76,9 @@
     76                                  ;			Macro names do begin with a verb.
     77                                  ;
     78                                  ;	Registers:	Registers EBX, ESI, EDI, EBP, SS, CS, DS and ES are preserved by all OS routines.
-    79                                  ;			Register EAX is preferred for returning a response/result value.
+    79                                  ;			Registers EAX and ECX are preferred for returning response/result values.
     80                                  ;			Register EBX is preferred for passing a context (structure) address parameter.
-    81                                  ;			Registers EAX, EDX and ECX are preferred for passing integral parameters.
+    81                                  ;			Registers EAX, EDX, ECX and EBX are preferred for passing integral parameters.
     82                                  ;
     83                                  ;-----------------------------------------------------------------------------------------------------------------------
     84                                  ;-----------------------------------------------------------------------------------------------------------------------
@@ -313,7 +313,7 @@
    313 000000D3 A3[F201]                			mov	[wwLogicalSector],ax				;start past boot sector
    314 000000D6 A1[1600]                			mov	ax,[cwFatSectors]				;AX = 0009
    315 000000D9 A2[F401]                			mov	[wbReadCount],al				;[readcount] = 09
-   316 000000DC BB0004                  			mov	bx,EBOOTSTACKTOP				;BX = 0500
+   316 000000DC BB0004                  			mov	bx,EBOOTSTACKTOP				;BX = 0400
    317 000000DF E85A00                  			call	ReadSector					;read FAT into buffer
    318                                  ;
    319                                  ;	Get the starting cluster of the kernel program and target address.
@@ -416,12 +416,12 @@
    416 00000193 B401                    .10			mov	ah,EBIOSFNKEYSTATUS				;bios keyboard status function
    417 00000195 CD16                    			int	EBIOSINTKEYBOARD				;get keyboard status
    418 00000197 7504                    			jnz	.20						;continue if key pressed
-   419 00000199 FB                      			sti							;enable interrupts
+   419 00000199 FB                      			sti							;enable maskable interrupts
    420 0000019A F4                      			hlt							;wait for interrupt
    421 0000019B EBF6                    			jmp	.10						;repeat
    422 0000019D B0FE                    .20			mov	al,EKEYCMDRESET					;8042 pulse output port pin
    423 0000019F E664                    			out	EKEYPORTSTAT,al					;drive B0 low to restart
-   424 000001A1 FB                      .30			sti							;enable interrupts
+   424 000001A1 FB                      .30			sti							;enable maskable interrupts
    425 000001A2 F4                      			hlt							;stop until reset, int, nmi
    426 000001A3 EBFC                    			jmp	.30						;loop until restart kicks in
    427                                  ;
@@ -434,7 +434,7 @@
    434 000001AB B40E                    			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
    435 000001AD CD10                    			int	EBIOSINTVIDEO					;call BIOS display interrupt
    436 000001AF EBF4                    			jmp	BootPrint					;repeat until done
-   437 000001B1 C3                      BootReturn		ret							;return to caller
+   437 000001B1 C3                      BootReturn		ret							;return
    438                                  ;-----------------------------------------------------------------------------------------------------------------------
    439                                  ;
    440                                  ;	Constants
@@ -628,7 +628,7 @@
    624                                  			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
    625                                  			int	EBIOSINTVIDEO					;call BIOS display interrupt
    626                                  			jmp	PutTTYString					;repeat until done
-   627                                  .10			ret							;return to caller
+   627                                  .10			ret							;return
    628                                  ;-----------------------------------------------------------------------------------------------------------------------
    629                                  ;
    630                                  ;	Loader Data

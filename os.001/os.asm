@@ -208,7 +208,7 @@ PutTTYString		cld							;forward strings
 			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
 			int	EBIOSINTVIDEO					;call BIOS display interrupt
 			jmp	PutTTYString					;repeat until done
-.10			ret							;return to caller
+.10			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Loader Data

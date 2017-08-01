@@ -2,10 +2,10 @@
 ;
 ;	File:		os.asm
 ;
-;	Project:	os.007
+;	Project:	os.008
 ;
-;	Description:	In this sample, the console task is expanded to support the handling of a few simple commands,
-;			clear, cls, exit, quit, shutdown, ver and version.
+;	Description:	In this sample, the console task is expanded to support additional "date" and "time" commands
+;			that read from the real-time clock and for commands that take parameters.
 ;
 ;	Revised:	January 1, 2017
 ;
@@ -186,6 +186,25 @@ EFDCSTATBUSY		equ	010h						;FDC main status is busy
 EFDCMOTOROFF		equ	00Ch						;FDC motor off / enable / DMA
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;	Motorola MC 146818 Real-Time Clock					ERTC...
+;
+;	The Motorola MC 146818 was the original real-time clock in PCs.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ERTCREGPORT		equ	70h						;register select port
+ERTCDATAPORT		equ	71h						;data port
+ERTCSECONDREG		equ	00h						;second
+ERTCMINUTEREG		equ	02h						;minute
+ERTCHOURREG		equ	04h						;hour
+ERTCWEEKDAYREG		equ	06h						;weekday
+ERTCDAYREG		equ	07h						;day
+ERTCMONTHREG		equ	08h						;month
+ERTCYEARREG		equ	09h						;year of the century
+ERTCSTATUSREG		equ	0bh						;status
+ERTCCENTURYREG		equ	32h						;century
+ERTCBINARYVALS		equ	00000100b					;values are binary
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;	x86 Descriptor Access Codes						EACC...
 ;
 ;	The x86 architecture supports the classification of memory areas or segments. Segment attributes are defined by
@@ -311,6 +330,24 @@ EMSGKEYCHAR		equ	41020000h					;message: character
 ;	Structures
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	DATETIME
+;
+;	The DATETIME structure stores date and time values from the real-time clock.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+struc			DATETIME
+.second			resb	1						;seconds
+.minute			resb	1						;minutes
+.hour			resb	1						;hours
+.weekday		resb	1						;day of week
+.day			resb	1						;day of month
+.month			resb	1						;month of year
+.year			resb	1						;year of century
+.century		resb	1						;century
+EDATETIMEL		equ	($-.second)
+endstruc
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	MQUEUE
@@ -456,6 +493,8 @@ wbConsoleScan5		resb	1						;scan code
 wbConsoleChar		resb	1						;ASCII code
 wzConsoleInBuffer	resb	80						;command input buffer
 wzConsoleToken		resb	80						;token buffer
+wzConsoleOutBuffer	resb	80						;response output buffer
+wsConsoleDateTime	resb	EDATETIMEL					;date-time buffer
 ECONDATALEN		equ	($-ECONDATA)					;size of console data area
 endstruc
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -1985,6 +2024,9 @@ tsvc			tsvce	PutConsoleString				;tty output asciiz string
 			tsvce	UpperCaseString					;upper-case string
 			tsvce	CompareMemory					;compare memory
 			tsvce	ResetSystem					;reset system using 8042 chip
+			tsvce	PutDateString					;put MM/DD/YYYY string
+			tsvce	PutTimeString					;put HH:MM:SS string
+			tsvce	ReadRealTimeClock				;get real-time clock date and time
 maxtsvc			equ	($-tsvc)/4					;function out of range
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -2026,11 +2068,138 @@ maxtsvc			equ	($-tsvc)/4					;function out of range
 			mov	al,eResetSystem					;AL = system reset fn.
 			int	_svc						;invoke OS service
 %endmacro
+%macro			putDateString 0
+			mov	al,ePutDateString				;function code
+			int	_svc						;invoke OS service
+%endmacro
+%macro			putDateString 2
+			mov	ebx,%1						;DATETIME addr
+			mov	edx,%2						;output buffer addr
+			mov	al,ePutDateString				;function code
+			int	_svc						;invoke OS service
+%endmacro
+%macro			putTimeString 0
+			mov	al,ePutTimeString				;function code
+			int	_svc						;invoke OS service
+%endmacro
+%macro			putTimeString 2
+			mov	ebx,%1						;DATETIME addr
+			mov	edx,%2						;output buffer addr
+			mov	al,ePutTimeString				;function code
+			int	_svc						;invoke OS service
+%endmacro
+%macro			readRealTimeClock 0
+			mov	al,eReadRealTimeClock				;function code
+			int	_svc						;invoke OS service
+%endmacro
+%macro			readRealTimeClock 1
+			mov	ebx,%1						;DATETIME addr
+			mov	al,eReadRealTimeClock				;function code
+			int	_svc						;invoke OS service
+%endmacro
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Kernel Function Library
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Date and Time Helper Routines
+;
+;	PutDateString
+;	PutTimeString
+;
+;-----------------------------------------------------------------------------------------------------------------------
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Routine:	PutDateString
+;
+;	Description:	This routine returns an ASCIIZ mm/dd/yyyy string at ds:edx from the date in the DATETIME
+;			structure at ds:ebx.
+;
+;	In:		DS:EBX	DATETIME address
+;			DS:EDX	output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutDateString		push	ecx						;save non-volatile regs
+			push	edi						;
+			push	es						;
+			push	ds						;store data selector ...
+			pop	es						;... in extra segment reg
+			mov	edi,edx						;output buffer address
+			mov	cl,10						;divisor
+			mov	edx,002f3030h					;ASCIIZ "00/" (reversed)
+			movzx	eax,byte [ebx+DATETIME.month]			;month
+			div	cl						;ah = rem; al = quotient
+			or	eax,edx						;apply ASCII zones and delimiter
+			cld							;forward strings
+			stosd							;store "mm/"nul
+			dec	edi						;address of terminator
+			movzx	eax,byte [ebx+DATETIME.day]			;day
+			div	cl						;ah = rem; al = quotient
+			or	eax,edx						;apply ASCII zones and delimiter
+			stosd							;store "dd/"nul
+			dec	edi						;address of terminator
+			movzx	eax,byte [ebx+DATETIME.century]			;century
+			div	cl						;ah = rem; al = quotient
+			or	eax,edx						;apply ASCII zones and delimiter
+			stosd							;store "cc/"null
+			dec	edi						;address of terminator
+			dec	edi						;address of delimiter
+			movzx	eax,byte [ebx+DATETIME.year]			;year (yy)
+			div	cl						;ah = rem; al = quotient
+			or	eax,edx						;apply ASCII zones and delimiter
+			stosb							;store quotient
+			mov	al,ah						;remainder
+			stosb							;store remainder
+			xor	al,al						;null terminator
+			stosb							;store terminator
+			pop	es						;restore non-volatile regs
+			pop	edi						;
+			pop	ecx						;
+			ret							;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Routine:	PutTimeString
+;
+;	Description:	This routine returns an ASCIIZ hh:mm:ss string at ds:edx from the date in the DATETIME
+;			structure at ds:ebx.
+;
+;	In:		DS:EBX	DATETIME address
+;			DS:EDX	output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutTimeString		push	ecx						;save non-volatile regs
+			push	edi						;
+			push	es						;
+			push	ds						;store data selector ...
+			pop	es						;... in extra segment reg
+			mov	edi,edx						;output buffer address
+			mov	cl,10						;divisor
+			mov	edx,003a3030h					;ASCIIZ "00:" (reversed)
+			movzx	eax,byte [ebx+DATETIME.hour]			;hour
+			div	cl						;ah = rem; al = quotient
+			or	eax,edx						;apply ASCII zones and delimiter
+			cld							;forward strings
+			stosd							;store "mm/"nul
+			dec	edi						;address of terminator
+			movzx	eax,byte [ebx+DATETIME.minute]			;minute
+			div	cl						;ah = rem; al = quotient
+			or	eax,edx						;apply ASCII zones and delimiter
+			stosd							;store "dd/"nul
+			dec	edi						;address of terminator
+			movzx	eax,byte [ebx+DATETIME.second]			;second
+			div	cl						;ah = rem; al = quotient
+			or	eax,edx						;apply ASCII zones and delimiter
+			stosb							;store quotient
+			mov	al,ah						;remainder
+			stosb							;store remainder
+			xor	al,al						;null terminator
+			stosb							;store terminator
+			pop	es						;restore non-volatile regs
+			pop	edi						;
+			pop	ecx						;
+			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	String Helper Routines
@@ -2667,6 +2836,7 @@ SetConsoleChar		mov	dl,al						;ASCII character
 ;	PlaceCursor
 ;	PutPrimaryEndOfInt
 ;	PutSecondaryEndOfInt
+;	ReadRealTimeClock
 ;	ResetSystem
 ;	SetKeyboardLamps
 ;	WaitForKeyInBuffer
@@ -2725,6 +2895,76 @@ PutPrimaryEndOfInt	sti							;enable maskable interrupts
 PutSecondaryEndOfInt	sti							;enable maskable interrupts
 			mov	al,EPICEOI					;non-specific end-of-interrupt
 			out	EPICPORTSEC,al					;send EOI to secondary PIC
+			ret							;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Routine:	ReadRealTimeClock
+;
+;	Description:	This routine gets current date time from the real-time clock.
+;
+;	In:		DS:EBX	DATETIME structure
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ReadRealTimeClock	push	esi						;save non-volatile regs
+			push	edi						;
+			push	es						;
+			push	ds						;store data selector ...
+			pop	es						;... in es register
+			mov	edi,ebx						;date-time structure
+			mov	al,ERTCSECONDREG				;second register
+			out	ERTCREGPORT,al					;select second register
+			in	al,ERTCDATAPORT					;read second register
+			cld							;forward strings
+			stosb							;store second value
+			mov	al,ERTCMINUTEREG				;minute register
+			out	ERTCREGPORT,al					;select minute register
+			in	al,ERTCDATAPORT					;read minute register
+			stosb							;store minute value
+			mov	al,ERTCHOURREG					;hour register
+			out	ERTCREGPORT,al					;select hour register
+			in	al,ERTCDATAPORT					;read hour register
+			stosb							;store hour value
+			mov	al,ERTCWEEKDAYREG				;weekday register
+			out	ERTCREGPORT,al					;select weekday register
+			in	al,ERTCDATAPORT					;read weekday register
+			stosb							;store weekday value
+			mov	al,ERTCDAYREG					;day register
+			out	ERTCREGPORT,al					;select day register
+			in	al,ERTCDATAPORT					;read day register
+			stosb							;store day value
+			mov	al,ERTCMONTHREG					;month register
+			out	ERTCREGPORT,al					;select month register
+			in	al,ERTCDATAPORT					;read month register
+			stosb							;store month value
+			mov	al,ERTCYEARREG					;year register
+			out	ERTCREGPORT,al					;select year register
+			in	al,ERTCDATAPORT					;read year register
+			stosb							;store year value
+			mov	al,ERTCCENTURYREG				;century register
+			out	ERTCREGPORT,al					;select century register
+			in	al,ERTCDATAPORT					;read century register
+			stosb							;store century value
+			mov	al,ERTCSTATUSREG				;status register
+			out	ERTCREGPORT,al					;select status register
+			in	al,ERTCDATAPORT					;read status register
+			test	al,ERTCBINARYVALS				;test if values are binary
+			jnz	.20						;skip ahead if binary values
+			mov	esi,ebx						;date-time structure address
+			mov	edi,ebx						;date-time structure address
+			mov	ecx,8						;loop counter
+.10			lodsb							;BCD value
+			mov	ah,al						;BCD value
+			and	al,00001111b					;low-order decimal zone
+			and	ah,11110000b					;hi-order decimal zone
+			shr	ah,1						;hi-order decimal * 8
+			add	al,ah						;low-order + hi-order * 8
+			shr	ah,2						;hi-order decimal * 2
+			add	al,ah						;low-order + hi-order * 10
+			stosb							;replace BCD with binary
+			loop	.10						;next value
+.20			pop	es						;restore non-volatile regs
+			pop	edi						;
+			pop	esi						;
 			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -3065,12 +3305,36 @@ ConClear		clearConsoleScreen					;clear console screen
 			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;	Routine:	ConDate
+;
+;	Description:	This routine handles the DATE command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConDate			readRealTimeClock wsConsoleDateTime			;read RTC data into structure
+			putDateString	  wsConsoleDateTime, wzConsoleOutBuffer	;format date string
+			putConsoleString  wzConsoleOutBuffer			;write string to console
+			putConsoleString  czNewLine				;write newline to console
+			ret							;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;	Routine:	ConExit
 ;
 ;	Description:	This routine handles the EXIT command and its SHUTDOWN and QUIT aliases.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ConExit			resetSystem						;issue system reset
+			ret							;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Routine:	ConTime
+;
+;	Description:	This routine Handles the TIME command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConTime			readRealTimeClock wsConsoleDateTime			;read RTC data into structure
+			putTimeString	  wsConsoleDateTime,wzConsoleOutBuffer	;format time string
+			putConsoleString  wzConsoleOutBuffer			;write string to console
+			putConsoleString  czNewLine				;write newline to console
 			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -3093,8 +3357,10 @@ tConJmpTbl		equ	$						;command jump table
 			dd	ConExit		- ConCode			;shutdown command routine offset
 			dd	ConVersion	- ConCode			;version command routine offset
 			dd	ConClear	- ConCode			;clear command routine offset
+			dd	ConDate		- ConCode			;date command routine offset
 			dd	ConExit		- ConCode			;exit command routine offset
 			dd	ConExit		- ConCode			;quit command routine offset
+			dd	ConTime		- ConCode			;time command routine offset
 			dd	ConClear	- ConCode			;cls command routine offset
 			dd	ConVersion	- ConCode			;ver command routine offset
 ECONJMPTBLL		equ	($-tConJmpTbl)					;table length
@@ -3106,8 +3372,10 @@ tConCmdTbl		equ	$						;command name table
 			db	9,"SHUTDOWN",0					;shutdown command
 			db	8,"VERSION",0					;version command
 			db	6,"CLEAR",0					;clear command
+			db	5,"DATE",0					;date command
 			db	5,"EXIT",0					;exit command
 			db	5,"QUIT",0					;quit command
+			db	5,"TIME",0					;time command
 			db	4,"CLS",0					;cls command
 			db	4,"VER",0					;ver command
 			db	0						;end of table

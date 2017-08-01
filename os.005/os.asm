@@ -80,9 +80,9 @@
 ;			Macro names do begin with a verb.
 ;
 ;	Registers:	Registers EBX, ESI, EDI, EBP, SS, CS, DS and ES are preserved by all OS routines.
-;			Register EAX is preferred for returning a response/result value.
+;			Registers EAX and ECX are preferred for returning response/result values.
 ;			Register EBX is preferred for passing a context (structure) address parameter.
-;			Registers EAX, EDX and ECX are preferred for passing integral parameters.
+;			Registers EAX, EDX, ECX and EBX are preferred for passing integral parameters.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -231,7 +231,7 @@ EBIOSINTKEYBOARD	equ	016h						;BIOS keyboard services interrupt
 EBIOSFNKEYSTATUS	equ	001h						;BIOS keyboard status function
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;	ASCII									EASC...
+;	ASCII									EASCII...
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 EASCIILINEFEED		equ	10						;ASCII line feed
@@ -268,7 +268,7 @@ EKRNDESLEN		equ	8						;size of descriptor
 EKRNADR			equ	1000h						;kernel base address
 EKRNSEG			equ	(EKRNADR >> 4)					;kernel base segment
 ;-----------------------------------------------------------------------------------------------------------------------
-;	Keyboard Flags
+;	Keyboard Flags								EKEY...
 ;-----------------------------------------------------------------------------------------------------------------------
 EKEYCTRLLEFT		equ	00000001b					;left control
 EKEYSHIFTLEFT		equ	00000010b					;left shift
@@ -641,7 +641,7 @@ Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 			mov	[wwLogicalSector],ax				;start past boot sector
 			mov	ax,[cwFatSectors]				;AX = 0009
 			mov	[wbReadCount],al				;[readcount] = 09
-			mov	bx,EBOOTSTACKTOP				;BX = 0500
+			mov	bx,EBOOTSTACKTOP				;BX = 0400
 			call	ReadSector					;read FAT into buffer
 ;
 ;	Get the starting cluster of the kernel program and target address.
@@ -744,12 +744,12 @@ BootExit		call	BootPrint					;display messge to console
 .10			mov	ah,EBIOSFNKEYSTATUS				;bios keyboard status function
 			int	EBIOSINTKEYBOARD				;get keyboard status
 			jnz	.20						;continue if key pressed
-			sti							;enable interrupts
+			sti							;enable maskable interrupts
 			hlt							;wait for interrupt
 			jmp	.10						;repeat
 .20			mov	al,EKEYCMDRESET					;8042 pulse output port pin
 			out	EKEYPORTSTAT,al					;drive B0 low to restart
-.30			sti							;enable interrupts
+.30			sti							;enable maskable interrupts
 			hlt							;stop until reset, int, nmi
 			jmp	.30						;loop until restart kicks in
 ;
@@ -762,7 +762,7 @@ BootPrint		cld							;forward strings
 			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
 			int	EBIOSINTVIDEO					;call BIOS display interrupt
 			jmp	BootPrint					;repeat until done
-BootReturn		ret							;return to caller
+BootReturn		ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Constants
@@ -1225,7 +1225,7 @@ GetCPUType		mov	al,1						;AL = 1
 			inc	cl						;was hi-byte of GDTR 0xff?
 			jz	.10						;yes, cpu is 80286
 			inc	ax						;AX = 3
-.10			ret							;return to caller
+.10			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Routine:	PutTTYString
@@ -1248,7 +1248,7 @@ PutTTYString		cld							;forward strings
 			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
 			int	EBIOSINTVIDEO					;call BIOS display interrupt
 			jmp	PutTTYString					;repeat until done
-.10			ret							;return to caller
+.10			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Loader Data
@@ -1520,7 +1520,7 @@ section			kernel	vstart=0h					;data offsets relative to 0
 			menter	int31						;(reserved)
 			push	31						;
 intcpu			pop	eax						;
-			iretd
+			iretd							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Hardware Device Interupts
@@ -1546,7 +1546,7 @@ intcpu			pop	eax						;
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 			menter	clocktick					;clock tick interrupt
-			push	eax						;save volatile regs
+			push	eax						;save modified regs
 			push	edx						;
 			push	ds						;
 			push	ESELDAT						;load OS data selector ...
@@ -1574,10 +1574,10 @@ irq0.15 		mov	dh,EFDCPORTHI					;FDC controller port hi
 			mov	dl,EFDCPORTLOOUT				;fdc digital output register
 			out	dx,al						;turn motor off
 irq0.20			call	PutPrimaryEndOfInt				;send end-of-interrupt to PIC
-			pop	ds						;restore volatile regs
+			pop	ds						;restore modified regs
 			pop	edx						;
 			pop	eax						;
-			iretd							;return to caller
+			iretd							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	IRQ1	Keyboard Interrupt
@@ -1589,7 +1589,7 @@ irq0.20			call	PutPrimaryEndOfInt				;send end-of-interrupt to PIC
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 			menter	keyboard					;keyboard interrrupt
-			push	eax						;save volatile regs
+			push	eax						;save non-volatile regs
 			push	ebx						;
 			push	ecx						;
 			push	esi						;
@@ -1739,12 +1739,12 @@ irq1.140		mov	al,EKEYTIMEOUT					;controller timeout flag
 			or	[wbConsoleStatus],al				;set controller timeout flag
 irq1.150		call	PutConsoleOIAChar				;update operator info area
 			call	PutPrimaryEndOfInt				;send end-of-interrupt to PIC
-			pop	ds						;restore volatile regs
+			pop	ds						;restore non-volatile regs
 			pop	esi						;
 			pop	ecx						;
 			pop	ebx						;
 			pop	eax						;
-			iretd							;return to caller
+			iretd							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;	Scan-Code to ASCII Translation Tables
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -1780,18 +1780,43 @@ tscan2shift		db	000h,01Bh,021h,040h,023h,024h,025h,05Eh		;80-87
 			db	000h,000h,000h,000h,000h,000h,000h,000h		;E8-EF
 			db	000h,000h,000h,000h,000h,000h,000h,000h		;F0-F7
 			db	000h,000h,000h,000h,000h,000h,000h,000h		;F8-FF
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	IRQ2	Secondary 8259A Cascade Hardware Interrupt
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	iochannel					;secondary 8259A cascade
 			push	eax						;
 			jmp	hwint						;
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	IRQ3	Communication Port 2 Hardware Interrupt
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	com2						;serial port 2 interrupt
 			push	eax						;
 			jmp	hwint						;
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	IRQ4	Communication Port 1 Hardware Interrupt
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	com1						;serial port 1 interrupt
 			push	eax						;
 			jmp	hwint						;
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	IRQ5	Parallel Port 2 Hardware Interrupt
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	lpt2						;parallel port 2 interrupt
 			push	eax						;
 			jmp	hwint						;
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	IRQ6	Diskette Hardware Interrupt
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	diskette					;floppy disk interrupt
 			push	eax						;save non-volatile regs
 			push	ds						;
@@ -1800,38 +1825,79 @@ tscan2shift		db	000h,01Bh,021h,040h,023h,024h,025h,05Eh		;80-87
 			mov	al,[wbFDCStatus]				;al = FDC calibration status
 			or	al,10000000b					;set IRQ flag
 			mov	[wbFDCStatus],al				;update FDC calibration status
-			sti							;enable maskable interrupts
-			mov	al,20h						;non-specific end-of-interrupt
-			out	20h,al						;signal end of interrupt
 			pop	ds						;restore non-volatile regs
-			pop	eax						;
-			iretd							;return from interrupt
+			jmp	hwint						;end primary PIC interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	IRQ7	Parallel Port 1 Hardware Interrupt
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	lpt1						;parallel port 1 interrupt
 			push	eax						;
 			jmp	hwint						;
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	IRQ8	Real-time Clock Hardware Interrupt
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	rtclock						;real-time clock interrupt
 			push	eax						;
 			jmp	hwwint						;
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	IRQ9	CGA Vertical Retrace Hardware Interrupt
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	retrace						;CGA vertical retrace interrupt
 			push	eax						;
 			jmp	hwwint						;
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	IRQ10	Reserved Hardware Interrupt
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	irq10						;reserved
 			push	eax						;
 			jmp	hwwint						;
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	IRQ11	Reserved Hardware Interrupt
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	irq11						;reserved
 			push	eax						;
 			jmp	hwwint						;
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	IRQ12	PS/2 Mouse Hardware Interrupt
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	ps2mouse					;PS/2 mouse interrupt
 			push	eax						;
 			jmp	hwwint						;
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	IRQ13	Coprocessor Hardware Interrupt
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	coprocessor					;coprocessor interrupt
 			push	eax						;
 			jmp	hwwint						;
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	IRQ14	Fixed Disk Hardware Interrupt
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	fixeddisk					;fixed disk interrupt
 			push	eax						;
 			jmp	hwwint						;
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	IRQ15	Reserved Hardware Interrupt
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	irq15						;reserved
-			push	eax						;save volatile reg
+			push	eax						;save modified regs
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Exit from hardware interrupt
@@ -1840,7 +1906,7 @@ tscan2shift		db	000h,01Bh,021h,040h,023h,024h,025h,05Eh		;80-87
 hwwint			call	PutSecondaryEndOfInt				;send EOI to secondary PIC
 			jmp	hwint90						;skip ahead
 hwint			call	PutPrimaryEndOfInt				;send EOI to primary PIC
-hwint90			pop	eax						;restore volatile reg
+hwint90			pop	eax						;restore modified regs
 			iretd							;return from interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1914,14 +1980,14 @@ maxtsvc			equ	($-tsvc)/4					;function out of range
 ;
 ;	Routine:	PutConsoleString
 ;
-;	Description:	Write a sequence of ASCII characters to the console until null and update the console position
-;			as needed.
+;	Description:	This routine writes a sequence of ASCII characters to the console until null and updates the
+;			console position as needed.
 ;
 ;	In:		EDX	source address
 ;			DS	OS data selector
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-PutConsoleString	push	esi						;save volatile regs
+PutConsoleString	push	esi						;save non-volatile regs
 			mov	esi,edx						;source address
 			cld							;forward strings
 .10			lodsb							;ASCII character
@@ -1938,13 +2004,14 @@ PutConsoleString	push	esi						;save volatile regs
 .30			call	PutConsoleChar					;output character to console
 			call	NextConsoleColumn				;advance to next column
 			jmp	.10						;next character
-.40			pop	esi						;restore volatile regs
-			ret							;return to caller
+.40			pop	esi						;restore non-volatile regs
+			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Routine:	NextConsoleColumn
 ;
-;	Description:	Advance the console position one column. Wrap the column and advance one row if needed.
+;	Description:	This routine advances the console position one column. The columnn is reset to zero and the row
+;			incremented if the end of the current row is reached.
 ;
 ;	In:		DS	OS data selector
 ;
@@ -1956,24 +2023,24 @@ NextConsoleColumn	mov	al,[wbConsoleColumn]				;current column
 			jb	.10						;no, skip ahead
 			call	FirstConsoleColumn				;reset column to start of row
 			call	NextConsoleRow					;line feed to next row
-.10			ret							;return to caller
+.10			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Routine:	FirstConsoleColumn
 ;
-;	Description:	Reset the console column to start of the row.
+;	Description:	This routine resets the console column to start of the row.
 ;
 ;	In:		DS	OS data selector
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 FirstConsoleColumn	xor	al,al						;zero column
 			mov	[wbConsoleColumn],al				;save column
-			ret							;return to caller
+			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Routine:	NextConsoleRow
 ;
-;	Description:	Advance the console position one line. Scroll the screen one row if needed.
+;	Description:	This routine advances the console position one line. Scroll the screen one row if needed.
 ;
 ;	In:		DS	OS data selector
 ;
@@ -1987,39 +2054,39 @@ NextConsoleRow		mov	al,[wbConsoleRow]				;current row
 			mov	al,[wbConsoleRow]				;row
 			dec	al						;decrement row
 			mov	[wbConsoleRow],al				;save row
-.10			ret							;return to caller
+.10			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Routine:	PutConsoleChar
 ;
-;	Description:	Write one ASCII character to the console screen.
+;	Description:	This routine writes one ASCII character to the console screen.
 ;
 ;	In:		AL	ASCII character
 ;			DS	OS data selector
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-PutConsoleChar		push	ecx						;save volatile regs
+PutConsoleChar		push	ecx						;save non-volatile regs
 			push	es						;
 			push	ESELCGA						;load CGA selector ...
 			pop	es						;... into extra segment reg
 			mov	cl,[wbConsoleColumn]				;column
 			mov	ch,[wbConsoleRow]				;row
 			call	SetConsoleChar					;put character at row, column
-			pop	es						;restore volatile regs
+			pop	es						;restore non-volatile regs
 			pop	ecx						;
-			ret							;return to caller
+			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Routine:	PutConsoleOIAShift
 ;
-;	Description:	Update the shift/ctrl/alt/lock indicators in the operator information area (OIA).
+;	Description:	This routine updates the shift/ctrl/alt/lock indicators in the operator information area (OIA).
 ;
-;	Input:		bl	shift flags
-;			bh	lock flags
-;			ds	OS data selector
+;	In:		BL	shift flags
+;			BH	lock flags
+;			DS	OS data selector
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-PutConsoleOIAShift	push	ecx						;save volatile regs
+PutConsoleOIAShift	push	ecx						;save non-volatile regs
 			push	es						;
 			push	ESELCGA						;load CGA selector ...
 			pop	es						;... into ES register
@@ -2078,19 +2145,19 @@ PutConsoleOIAShift	push	ecx						;save volatile regs
 			mov	al,'S'						;yes, indicate with 'S'
 .90			mov	cl,76						;indicator column
 			call	SetConsoleChar					;display ASCII character
-			pop	es						;restore volatile regs
+			pop	es						;restore non-volatile regs
 			pop	ecx						;
-			ret							;return to caller
+			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Routine:	PutConsoleOIAChar
 ;
-;	Description:	Update the Operator Information Area (OIA).
+;	Description:	This routine updates the Operator Information Area (OIA).
 ;
-;	In:		ds	OS data selector
+;	In:		DS	OS data selector
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-PutConsoleOIAChar	push	ebx						;save volatile regs
+PutConsoleOIAChar	push	ebx						;save non-volatile regs
 			push	ecx						;
 			push	esi						;
 			push	ds						;
@@ -2126,26 +2193,26 @@ PutConsoleOIAChar	push	ebx						;save volatile regs
 			mov	ch,bh						;OIA row
 			mov	cl,40						;character display column
 			call	SetConsoleChar					;display ASCII character
-.40			pop	es						;restore volatile regs
+.40			pop	es						;restore non-volatile regs
 			pop	ds						;
 			pop	esi						;
 			pop	ecx						;
 			pop	ebx						;
-			ret							;return to caller
+			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Routine:	PutConsoleHexByte
 ;
-;	Description:	Write two ASCII characters to the console screen representing the value of a byte.
+;	Description:	This routine writes two ASCII characters to the console screen representing the value of a byte.
 ;
-;	In:		al	byte value
-;			ch	row
-;			cl	column
-;			ds	OS data selector
-;			es	CGA selector
+;	In:		AL	byte value
+;			CH	row
+;			CL	column
+;			DS	OS data selector
+;			ES	CGA selector
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-PutConsoleHexByte	push	ebx						;save volatile regs
+PutConsoleHexByte	push	ebx						;save non-volatile regs
 			mov	bl,al						;save byte value
 			shr	al,4						;hi-order nybble
 			or	al,030h						;apply ASCII zone
@@ -2161,8 +2228,8 @@ PutConsoleHexByte	push	ebx						;save volatile regs
 			jb	.20						;yes, skip ahead
 			add	al,7						;add ASCII offset for alpha
 .20			call	SetConsoleChar					;display ASCII character
-			pop	ebx						;restore volatile regs
-			ret							;return to caller
+			pop	ebx						;restore non-volatile regs
+			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Memory-Mapped Video Routines
@@ -2178,10 +2245,10 @@ PutConsoleHexByte	push	ebx						;save volatile regs
 ;
 ;	Routine:	ClearConsoleScreen
 ;
-;	Description:	Clear the console (CGA) screen.
+;	Description:	This routine clears the console (CGA) screen.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-ClearConsoleScreen	push	ecx						;save volatile regs
+ClearConsoleScreen	push	ecx						;save non-volatile regs
 			push	edi						;
 			push	ds						;
 			push	es						;
@@ -2201,19 +2268,19 @@ ClearConsoleScreen	push	ecx						;save volatile regs
 			mov	[wbConsoleRow],al				;reset console row
 			mov	[wbConsoleColumn],al				;reset console column
 			call	PlaceCursor					;place cursor at current position
-			pop	es						;restore volatile regs
+			pop	es						;restore non-volatile regs
 			pop	ds						;
 			pop	edi						;
 			pop	ecx						;
-			ret							;return to caller
+			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Routine:	ScrollConsoleRow
 ;
-;	Description:	Scroll console (text) screen up one row.
+;	Description:	This routine scrolls the console (text) screen up one row.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-ScrollConsoleRow	push	ecx						;save volatile regs
+ScrollConsoleRow	push	ecx						;save non-volatile regs
 			push	esi						;
 			push	edi						;
 			push	ds						;
@@ -2230,17 +2297,17 @@ ScrollConsoleRow	push	ecx						;save volatile regs
 			mov	eax,ECONCLEARDWORD				;attribute and ASCII space
 			mov	ecx,ECONROWDWORDS				;double-words per row
 			rep	stosd						;clear bottom row
-			pop	es						;restore volatile regs
+			pop	es						;restore non-volatile regs
 			pop	ds						;
 			pop	edi						;
 			pop	esi						;
 			pop	ecx						;
-			ret							;return to caller
+			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Routine:	SetConsoleChar
 ;
-;	Description:	Output an ASCII character at the given row and column.
+;	Description:	This routine outputs an ASCII character at the given row and column.
 ;
 ;	In:		AL	ASCII character
 ;			CL	column
@@ -2256,7 +2323,7 @@ SetConsoleChar		mov	dl,al						;ASCII character
 			adc	ah,0						;handle carry
 			shl	eax,1						;screen offset
 			mov	[es:eax],dl					;store character
-			ret							;return to caller
+			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Input/Output Routines
@@ -2275,12 +2342,12 @@ SetConsoleChar		mov	dl,al						;ASCII character
 ;
 ;	Routine:	PlaceCursor
 ;
-;	Description:	Position the cursor on the console.
+;	Description:	This routine positions the cursor on the console.
 ;
 ;	In:		DS	OS data selector
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-PlaceCursor		push	ecx						;save volatile regs
+PlaceCursor		push	ecx						;save non-volatile regs
 			mov	al,[wbConsoleRow]				;al = row
 			mov	ah,ECONCOLS					;ah = cols/row
 			mul	ah						;row offset
@@ -2300,37 +2367,37 @@ PlaceCursor		push	ecx						;save volatile regs
 			inc	edx						;data port
 			mov	al,cl						;lo-order cursor loc
 			out	dx,al						;store lo-order loc
-			pop	ecx						;restore volatile regs
-			ret							;return to caller
+			pop	ecx						;restore non-volatile regs
+			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Routine:	PutPrimaryEndOfInt
 ;
-;	Description:	Send non-specific end-of-interrupt signal to the primary PIC.
+;	Description:	This routine sends a non-specific end-of-interrupt signal to the primary PIC.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 PutPrimaryEndOfInt	sti							;enable maskable interrupts
 			mov	al,EPICEOI					;non-specific end-of-interrupt
 			out	EPICPORTPRI,al					;send EOI to primary PIC
-			ret							;return to caller
+			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Routine:	PutSecondaryEndOfInt
 ;
-;	Description:	Send non-specific end-of-interrupt signal to the secondary PIC.
+;	Description:	This routine sends a non-specific end-of-interrupt signal to the secondary PIC.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 PutSecondaryEndOfInt	sti							;enable maskable interrupts
 			mov	al,EPICEOI					;non-specific end-of-interrupt
 			out	EPICPORTSEC,al					;send EOI to secondary PIC
-			ret							;return to caller
+			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Routine:	SetKeyboardLamps
 ;
-;	Description:	Send the set/reset mode indicators command.
+;	Description:	This routine sends the set/reset mode indicators command to the keyboard device.
 ;
-;	In:		bh	00000CNS (C:Caps Lock,N:Num Lock,S:Scroll Lock)
+;	In:		BH	00000CNS (C:Caps Lock,N:Num Lock,S:Scroll Lock)
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 SetKeyboardLamps	call	WaitForKeyInBuffer				;wait for input buffer ready
@@ -2343,41 +2410,41 @@ SetKeyboardLamps	call	WaitForKeyInBuffer				;wait for input buffer ready
 			out	EKEYPORTDATA,al					;send lamps value
 			call	WaitForKeyOutBuffer				;wait for 8042 result
 			in	al,EKEYPORTDATA					;read 8042 'ACK' (0fah)
-			ret							;return to caller
+			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Routine:	WaitForKeyInBuffer
 ;
-;	Description:	Wait for keyboard input buffer to be ready for input.
+;	Description:	This routine waits for keyboard input buffer to be ready for input.
 ;
 ;	Out:		ZF	1 = Input buffer ready
 ;				0 = Input buffer not ready after timeout
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-WaitForKeyInBuffer	push	ecx						;save volatile regs
+WaitForKeyInBuffer	push	ecx						;save non-volatile regs
 			mov	ecx,EKEYWAITLOOP				;keyboard controller timeout
 .10			in	al,EKEYPORTSTAT					;keyboard status byte
 			test	al,EKEYBITIN					;is input buffer still full?
 			loopnz	.10						;yes, repeat till timeout
-			pop	ecx						;restore volatile regs
-			ret							;return to caller
+			pop	ecx						;restore non-volatile regs
+			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Routine:	WaitForKeyOutBuffer
 ;
-;	Description:	Wait for keyboard output buffer to have data to read.
+;	Description:	This routine waits for keyboard output buffer to have data to read.
 ;
 ;	Out:		ZF	0 = Output buffer has data from controller
 ;				1 = Output buffer empty after timeout
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-WaitForKeyOutBuffer	push	ecx						;save volatile regs
+WaitForKeyOutBuffer	push	ecx						;save non-volatile regs
 			mov	ecx,EKEYWAITLOOP				;keyboard controller timeout
 .10			in	al,EKEYPORTSTAT					;keyboard status byte
 			test	al,EKEYBITOUT					;output buffer status bit
 			loopz	.10						;loop until output buffer bit
-			pop	ecx						;restore volatile regs
-			ret							;return to caller
+			pop	ecx						;restore non-volatile regs
+			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	End of the Kernel Function Library
@@ -2416,7 +2483,7 @@ section			conldt							;console local descriptors
 			dq	004093004780007Fh				;04 TSS alias
 			dq	004093004700007Fh				;0C LDT alias
 			dq	00409300400006FFh				;14 stack
-			dq	00C093000000FFFFh				;1C data
+			dq	00CF93000000FFFFh				;1C data
 			dq	00409B0050000FFFh				;24 code
 			dq	00409300480007FFh				;2C message queue
 			times	128-($-$$) db 0h				;zero fill to end of section
@@ -2511,10 +2578,12 @@ section			conmque							;console message queue
 ;-----------------------------------------------------------------------------------------------------------------------
 section			concode	vstart=5000h					;labels relative to 5000h
 ConCode			call	ConInitializeData				;initialize console variables
+
 			clearConsoleScreen					;clear the console screen
 			putConsoleString czTitle				;display startup message
 .10			putConsoleString czPrompt				;display input prompt
 			placeCursor						;set CRT cursor location
+
 .20			sti							;enable interrupts
 			hlt							;halt until interrupt
 			jmp	.20						;continue halt loop
@@ -2522,10 +2591,10 @@ ConCode			call	ConInitializeData				;initialize console variables
 ;
 ;	Routine:	ConInitializeData
 ;
-;	Description:	Initialize console variables used by the console task.
+;	Description:	This routine initializes console task variables.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-ConInitializeData	push	ecx						;save volatile regs
+ConInitializeData	push	ecx						;save non-volatile regs
 			push	edi						;
 			push	es						;
 			push	ESELDAT						;load OS data selector ...
@@ -2535,10 +2604,10 @@ ConInitializeData	push	ecx						;save volatile regs
 			mov	ecx,ECONDATALEN					;size of OS console data
 			cld							;forward strings
 			rep	stosb						;initialize data
-			pop	es						;restore volatile regs
+			pop	es						;restore non-volatile regs
 			pop	edi						;
 			pop	ecx						;
-			ret							;return to caller
+			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Constants

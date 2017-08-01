@@ -2,10 +2,10 @@
 ;
 ;	File:		os.asm
 ;
-;	Project:	os.007
+;	Project:	os.009
 ;
-;	Description:	In this sample, the console task is expanded to support the handling of a few simple commands,
-;			clear, cls, exit, quit, shutdown, ver and version.
+;	Description:	In this sample, the console task is expanded to support commands that take parameters and new
+;			commands "mem" and "memory".
 ;
 ;	Revised:	January 1, 2017
 ;
@@ -186,6 +186,25 @@ EFDCSTATBUSY		equ	010h						;FDC main status is busy
 EFDCMOTOROFF		equ	00Ch						;FDC motor off / enable / DMA
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;	Motorola MC 146818 Real-Time Clock					ERTC...
+;
+;	The Motorola MC 146818 was the original real-time clock in PCs.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ERTCREGPORT		equ	70h						;register select port
+ERTCDATAPORT		equ	71h						;data port
+ERTCSECONDREG		equ	00h						;second
+ERTCMINUTEREG		equ	02h						;minute
+ERTCHOURREG		equ	04h						;hour
+ERTCWEEKDAYREG		equ	06h						;weekday
+ERTCDAYREG		equ	07h						;day
+ERTCMONTHREG		equ	08h						;month
+ERTCYEARREG		equ	09h						;year of the century
+ERTCSTATUSREG		equ	0bh						;status
+ERTCCENTURYREG		equ	32h						;century
+ERTCBINARYVALS		equ	00000100b					;values are binary
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;	x86 Descriptor Access Codes						EACC...
 ;
 ;	The x86 architecture supports the classification of memory areas or segments. Segment attributes are defined by
@@ -311,6 +330,24 @@ EMSGKEYCHAR		equ	41020000h					;message: character
 ;	Structures
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	DATETIME
+;
+;	The DATETIME structure stores date and time values from the real-time clock.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+struc			DATETIME
+.second			resb	1						;seconds
+.minute			resb	1						;minutes
+.hour			resb	1						;hours
+.weekday		resb	1						;day of week
+.day			resb	1						;day of month
+.month			resb	1						;month of year
+.year			resb	1						;year of century
+.century		resb	1						;century
+EDATETIMEL		equ	($-.second)
+endstruc
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	MQUEUE
@@ -442,6 +479,7 @@ wbClockDays		resb	1						;470 clock days
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ECONDATA		equ	($)
+wfConsoleMemAddr	resd	1						;console memory address
 wbConsoleColumn		resb	1						;console column
 wbConsoleRow		resb	1						;console row
 wbConsoleShift		resb	1						;console shift flags
@@ -456,6 +494,8 @@ wbConsoleScan5		resb	1						;scan code
 wbConsoleChar		resb	1						;ASCII code
 wzConsoleInBuffer	resb	80						;command input buffer
 wzConsoleToken		resb	80						;token buffer
+wzConsoleOutBuffer	resb	80						;response output buffer
+wsConsoleDateTime	resb	EDATETIMEL					;date-time buffer
 ECONDATALEN		equ	($-ECONDATA)					;size of console data area
 endstruc
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -1985,6 +2025,12 @@ tsvc			tsvce	PutConsoleString				;tty output asciiz string
 			tsvce	UpperCaseString					;upper-case string
 			tsvce	CompareMemory					;compare memory
 			tsvce	ResetSystem					;reset system using 8042 chip
+			tsvce	PutDateString					;put MM/DD/YYYY string
+			tsvce	PutTimeString					;put HH:MM:SS string
+			tsvce	ReadRealTimeClock				;get real-time clock date and time
+			tsvce	UnsignedToDecimalString 			;convert unsigned integer to decimal string
+			tsvce	UnsignedToHexadecimal				;convert unsigned integer to hexadecimal string
+			tsvce	HexadecimalToUnsigned				;convert hexadecimal string to unsigned integer
 maxtsvc			equ	($-tsvc)/4					;function out of range
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1993,6 +2039,10 @@ maxtsvc			equ	($-tsvc)/4					;function out of range
 ;	These macros provide positional parameterization of service request calls.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+%macro			putConsoleString 0
+			mov	al,ePutConsoleString				;AL = put string fn.
+			int	_svc						;invoke OS service
+%endmacro
 %macro			putConsoleString 1
 			mov	edx,%1						;EDX = string address
 			mov	al,ePutConsoleString				;AL = put string fn.
@@ -2026,11 +2076,150 @@ maxtsvc			equ	($-tsvc)/4					;function out of range
 			mov	al,eResetSystem					;AL = system reset fn.
 			int	_svc						;invoke OS service
 %endmacro
+%macro			putDateString 0
+			mov	al,ePutDateString				;function code
+			int	_svc						;invoke OS service
+%endmacro
+%macro			putDateString 2
+			mov	ebx,%1						;DATETIME addr
+			mov	edx,%2						;output buffer addr
+			mov	al,ePutDateString				;function code
+			int	_svc						;invoke OS service
+%endmacro
+%macro			putTimeString 0
+			mov	al,ePutTimeString				;function code
+			int	_svc						;invoke OS service
+%endmacro
+%macro			putTimeString 2
+			mov	ebx,%1						;DATETIME addr
+			mov	edx,%2						;output buffer addr
+			mov	al,ePutTimeString				;function code
+			int	_svc						;invoke OS service
+%endmacro
+%macro			readRealTimeClock 0
+			mov	al,eReadRealTimeClock				;function code
+			int	_svc						;invoke OS service
+%endmacro
+%macro			readRealTimeClock 1
+			mov	ebx,%1						;DATETIME addr
+			mov	al,eReadRealTimeClock				;function code
+			int	_svc						;invoke OS service
+%endmacro
+%macro			unsignedToDecimalString 0
+			mov	al,eUnsignedToDecimalString			;AL = function code
+			int	_svc						;invoke OS service
+%endmacro
+%macro			unsignedToHexadecimal 0
+			mov	al,eUnsignedToHexadecimal			;AL = unsigned to hexademcial fn.
+			int	_svc						;invoke OS service
+%endmacro
+%macro			hexadecimalToUnsigned 0
+			mov	al,eHexadecimalToUnsigned			;AL = hex to unsigned fn.
+			int	_svc						;invoke OS service
+%endmacro
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Kernel Function Library
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Date and Time Helper Routines
+;
+;	PutDateString
+;	PutTimeString
+;
+;-----------------------------------------------------------------------------------------------------------------------
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Routine:	PutDateString
+;
+;	Description:	This routine returns an ASCIIZ mm/dd/yyyy string at ds:edx from the date in the DATETIME
+;			structure at ds:ebx.
+;
+;	In:		DS:EBX	DATETIME address
+;			DS:EDX	output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutDateString		push	ecx						;save non-volatile regs
+			push	edi						;
+			push	es						;
+			push	ds						;store data selector ...
+			pop	es						;... in extra segment reg
+			mov	edi,edx						;output buffer address
+			mov	cl,10						;divisor
+			mov	edx,002f3030h					;ASCIIZ "00/" (reversed)
+			movzx	eax,byte [ebx+DATETIME.month]			;month
+			div	cl						;ah = rem; al = quotient
+			or	eax,edx						;apply ASCII zones and delimiter
+			cld							;forward strings
+			stosd							;store "mm/"nul
+			dec	edi						;address of terminator
+			movzx	eax,byte [ebx+DATETIME.day]			;day
+			div	cl						;ah = rem; al = quotient
+			or	eax,edx						;apply ASCII zones and delimiter
+			stosd							;store "dd/"nul
+			dec	edi						;address of terminator
+			movzx	eax,byte [ebx+DATETIME.century]			;century
+			div	cl						;ah = rem; al = quotient
+			or	eax,edx						;apply ASCII zones and delimiter
+			stosd							;store "cc/"null
+			dec	edi						;address of terminator
+			dec	edi						;address of delimiter
+			movzx	eax,byte [ebx+DATETIME.year]			;year (yy)
+			div	cl						;ah = rem; al = quotient
+			or	eax,edx						;apply ASCII zones and delimiter
+			stosb							;store quotient
+			mov	al,ah						;remainder
+			stosb							;store remainder
+			xor	al,al						;null terminator
+			stosb							;store terminator
+			pop	es						;restore non-volatile regs
+			pop	edi						;
+			pop	ecx						;
+			ret							;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Routine:	PutTimeString
+;
+;	Description:	This routine returns an ASCIIZ hh:mm:ss string at ds:edx from the date in the DATETIME
+;			structure at ds:ebx.
+;
+;	In:		DS:EBX	DATETIME address
+;			DS:EDX	output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutTimeString		push	ecx						;save non-volatile regs
+			push	edi						;
+			push	es						;
+			push	ds						;store data selector ...
+			pop	es						;... in extra segment reg
+			mov	edi,edx						;output buffer address
+			mov	cl,10						;divisor
+			mov	edx,003a3030h					;ASCIIZ "00:" (reversed)
+			movzx	eax,byte [ebx+DATETIME.hour]			;hour
+			div	cl						;ah = rem; al = quotient
+			or	eax,edx						;apply ASCII zones and delimiter
+			cld							;forward strings
+			stosd							;store "mm/"nul
+			dec	edi						;address of terminator
+			movzx	eax,byte [ebx+DATETIME.minute]			;minute
+			div	cl						;ah = rem; al = quotient
+			or	eax,edx						;apply ASCII zones and delimiter
+			stosd							;store "dd/"nul
+			dec	edi						;address of terminator
+			movzx	eax,byte [ebx+DATETIME.second]			;second
+			div	cl						;ah = rem; al = quotient
+			or	eax,edx						;apply ASCII zones and delimiter
+			stosb							;store quotient
+			mov	al,ah						;remainder
+			stosb							;store remainder
+			xor	al,al						;null terminator
+			stosb							;store terminator
+			pop	es						;restore non-volatile regs
+			pop	edi						;
+			pop	ecx						;
+			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	String Helper Routines
@@ -2491,6 +2680,141 @@ PutConsoleHexByte	push	ebx						;save non-volatile regs
 			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;	Data-Type Conversion Helper Routines
+;
+;	UnsignedToDecimalString
+;	UnsignedToHexadecimal
+;	HexadecimalToUnsigned
+;
+;-----------------------------------------------------------------------------------------------------------------------
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Routine:	UnsignedToDecimalString
+;
+;	Description:	This routine creates an ASCIIZ string representing the decimal value of binary input.
+;
+;	Input:		BH	flags		bit 0: 1 = trim leading zeros
+;						bit 1: 1 = include comma grouping delimiters
+;						bit 4: 1 = non-zero digit found (internal)
+;			ECX	32-bit binary
+;			DS:EDX	output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+UnsignedToDecimalString push	ebx						;save non-volatile regs
+			push	ecx						;
+			push	edi						;
+			push	es						;
+			push	ds						;load data selector
+			pop	es						;... into extra segment reg
+			mov	edi,edx 					;output buffer address
+			and	bh,00001111b					;zero internal flags
+			mov	edx,ecx 					;binary
+			mov	ecx,1000000000					;10^9 divisor
+			call	.30						;divide and store
+			mov	ecx,100000000					;10^8 divisor
+			call	.10						;divide and store
+			mov	ecx,10000000					;10^7 divisor
+			call	.30						;divide and store
+			mov	ecx,1000000					;10^6 divisor
+			call	.30						;divide and store
+			mov	ecx,100000					;10^5 divisor
+			call	.10						;divide and store
+			mov	ecx,10000					;10^4 divisor
+			call	.30						;divide and store
+			mov	ecx,1000					;10^3 divisor
+			call	.30						;divide and store
+			mov	ecx,100 					;10^2 divisor
+			call	.10						;divide and store
+			mov	ecx,10						;10^2 divisor
+			call	.30						;divide and store
+			mov	eax,edx 					;10^1 remainder
+			call	.40						;store
+			xor	al,al						;null terminator
+			stosb
+			pop	es						;restore non-volatile regs
+			pop	edi						;
+			pop	ecx						;
+			pop	ebx						;
+			ret							;return
+.10			test	bh,00000010b					;comma group delims?
+			jz	.30						;no, skip ahead
+			test	bh,00000001b					;trim leading zeros?
+			jz	.20						;no, store delim
+			test	bh,00010000b					;non-zero found?
+			jz	.30						;no, skip ahead
+.20			mov	al,','						;delimiter
+			stosb							;store delimiter
+.30			mov	eax,edx 					;lo-orer dividend
+			xor	edx,edx 					;zero hi-order
+			div	ecx						;divide by power of 10
+			or	al,al						;zero?
+			jz	.50						;yes, skip ahead
+			or	bh,00010000b					;non-zero found
+.40			or	al,30h						;ASCII zone
+			stosb							;store digit
+			ret							;return
+.50			test	bh,00000001b					;trim leading zeros?
+			jz	.40						;no, store and return
+			test	bh,00010000b					;non-zero found?
+			jnz	.40						;yes, store and return
+			ret							;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Routine:	UnsignedToHexadecimal
+;
+;	Description:	This routine creates an ASCIIZ string representing the hexadecimal value of binary input
+;
+;	Input:		DS:EDX	output buffer address
+;			ECX	32-bit binary
+;
+;-----------------------------------------------------------------------------------------------------------------------
+UnsignedToHexadecimal	push	edi						;store non-volatile regs
+			mov	edi,edx						;output buffer address
+			mov	edx,ecx						;32-bit unsigned
+			xor	ecx,ecx						;zero register
+			mov	cl,8						;nybble count
+.10			rol	edx,4						;next hi-order nybble in bits 0-3
+			mov	al,dl						;????bbbb
+			and	al,0fh						;mask out bits 4-7
+			or	al,30h						;mask in ascii zone
+			cmp	al,3ah						;A through F?
+			jb	.20						;no, skip ahead
+			add	al,7						;41h through 46h
+.20			stosb							;store hexnum
+			loop	.10						;next nybble
+			xor	al,al						;zero reg
+			stosb							;null terminate
+			pop	edi						;restore non-volatile regs
+			ret							;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Routine:	HexadecimalToUnsigned
+;
+;	Description:	This routine returns an unsigned integer of the value of the input ASCIIZ hexadecimal string.
+;
+;	Input:		DS:EDX	null-terminated hexadecimal string address
+;
+;	Output: 	EAX	unsigned integer value
+;
+;-----------------------------------------------------------------------------------------------------------------------
+HexadecimalToUnsigned	push	esi						;save non-volatile regs
+			mov	esi,edx						;source address
+			xor	edx,edx						;zero register
+.10			lodsb							;source byte
+			test	al,al						;end of string?
+			jz	.30						;yes, skip ahead
+			cmp	al,'9'						;hexadecimal?
+			jna	.20						;no, skip ahead
+			sub	al,37h						;'A' = 41h, less 37h = 0Ah
+.20			and	eax,0fh						;remove ascii zone
+			shl	edx,4						;previous total x 16
+			add	edx,eax						;add prior value x 16
+			jmp	.10						;next
+.30			mov	eax,edx						;result
+			pop	esi						;restore non-volatile regs
+			ret							;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;	Message Queue Helper Routines
 ;
 ;	PutMessage
@@ -2667,6 +2991,7 @@ SetConsoleChar		mov	dl,al						;ASCII character
 ;	PlaceCursor
 ;	PutPrimaryEndOfInt
 ;	PutSecondaryEndOfInt
+;	ReadRealTimeClock
 ;	ResetSystem
 ;	SetKeyboardLamps
 ;	WaitForKeyInBuffer
@@ -2725,6 +3050,76 @@ PutPrimaryEndOfInt	sti							;enable maskable interrupts
 PutSecondaryEndOfInt	sti							;enable maskable interrupts
 			mov	al,EPICEOI					;non-specific end-of-interrupt
 			out	EPICPORTSEC,al					;send EOI to secondary PIC
+			ret							;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Routine:	ReadRealTimeClock
+;
+;	Description:	This routine gets current date time from the real-time clock.
+;
+;	In:		DS:EBX	DATETIME structure
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ReadRealTimeClock	push	esi						;save non-volatile regs
+			push	edi						;
+			push	es						;
+			push	ds						;store data selector ...
+			pop	es						;... in es register
+			mov	edi,ebx						;date-time structure
+			mov	al,ERTCSECONDREG				;second register
+			out	ERTCREGPORT,al					;select second register
+			in	al,ERTCDATAPORT					;read second register
+			cld							;forward strings
+			stosb							;store second value
+			mov	al,ERTCMINUTEREG				;minute register
+			out	ERTCREGPORT,al					;select minute register
+			in	al,ERTCDATAPORT					;read minute register
+			stosb							;store minute value
+			mov	al,ERTCHOURREG					;hour register
+			out	ERTCREGPORT,al					;select hour register
+			in	al,ERTCDATAPORT					;read hour register
+			stosb							;store hour value
+			mov	al,ERTCWEEKDAYREG				;weekday register
+			out	ERTCREGPORT,al					;select weekday register
+			in	al,ERTCDATAPORT					;read weekday register
+			stosb							;store weekday value
+			mov	al,ERTCDAYREG					;day register
+			out	ERTCREGPORT,al					;select day register
+			in	al,ERTCDATAPORT					;read day register
+			stosb							;store day value
+			mov	al,ERTCMONTHREG					;month register
+			out	ERTCREGPORT,al					;select month register
+			in	al,ERTCDATAPORT					;read month register
+			stosb							;store month value
+			mov	al,ERTCYEARREG					;year register
+			out	ERTCREGPORT,al					;select year register
+			in	al,ERTCDATAPORT					;read year register
+			stosb							;store year value
+			mov	al,ERTCCENTURYREG				;century register
+			out	ERTCREGPORT,al					;select century register
+			in	al,ERTCDATAPORT					;read century register
+			stosb							;store century value
+			mov	al,ERTCSTATUSREG				;status register
+			out	ERTCREGPORT,al					;select status register
+			in	al,ERTCDATAPORT					;read status register
+			test	al,ERTCBINARYVALS				;test if values are binary
+			jnz	.20						;skip ahead if binary values
+			mov	esi,ebx						;date-time structure address
+			mov	edi,ebx						;date-time structure address
+			mov	ecx,8						;loop counter
+.10			lodsb							;BCD value
+			mov	ah,al						;BCD value
+			and	al,00001111b					;low-order decimal zone
+			and	ah,11110000b					;hi-order decimal zone
+			shr	ah,1						;hi-order decimal * 8
+			add	al,ah						;low-order + hi-order * 8
+			shr	ah,2						;hi-order decimal * 2
+			add	al,ah						;low-order + hi-order * 10
+			stosb							;replace BCD with binary
+			loop	.10						;next value
+.20			pop	es						;restore non-volatile regs
+			pop	edi						;
+			pop	esi						;
 			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -3065,12 +3460,135 @@ ConClear		clearConsoleScreen					;clear console screen
 			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;	Routine:	ConDate
+;
+;	Description:	This routine handles the DATE command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConDate			readRealTimeClock wsConsoleDateTime			;read RTC data into structure
+			putDateString	  wsConsoleDateTime, wzConsoleOutBuffer	;format date string
+			putConsoleString  wzConsoleOutBuffer			;write string to console
+			putConsoleString  czNewLine				;write newline to console
+			ret							;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;	Routine:	ConExit
 ;
 ;	Description:	This routine handles the EXIT command and its SHUTDOWN and QUIT aliases.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ConExit			resetSystem						;issue system reset
+			ret							;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Routine:	ConMem
+;
+;	Description:	This routine handles the MEMORY command and its MEM alias.
+;
+;	Input:		wzConsoleInBuffer contains parameter(s)
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConMem			push	ebx						;save non-volatile regs
+			push	esi						;
+			push	edi						;
+;
+;			update the source address if a parameter is given
+;
+			mov	edx,wzConsoleInBuffer				;console input buffer address (params)
+			mov	ebx,wzConsoleToken				;console command token address
+			call	ConTakeToken					;take first param as token
+			cmp	byte [wzConsoleToken],0				;token found?
+			je	.10						;no, branch
+			mov	edx,wzConsoleToken				;first param as token address
+
+			hexadecimalToUnsigned					;convert string token to unsigned
+
+			mov	[wfConsoleMemAddr],eax				;save console memory address
+;
+;			setup source address and row count
+;
+.10			mov	esi,[wfConsoleMemAddr]				;source memory address
+			xor	ecx,ecx						;zero register
+			mov	cl,16						;row count
+;
+;			start the row with the source address in hexadecimal
+;
+.20			push	ecx						;save remaining rows
+			mov	edi,wzConsoleOutBuffer				;output buffer address
+			mov	edx,edi						;output buffer address
+			mov	ecx,esi						;console memory address
+
+			unsignedToHexadecimal					;convert unsigned address to hex string
+
+			add	edi,8						;end of memory addr hexnum
+			mov	al,' '						;ascii space
+			stosb							;store delimiter
+;
+;			output 16 ASCII hexadecimal byte values for the row
+;
+			xor	ecx,ecx						;zero register
+			mov	cl,16						;loop count
+.30			push	ecx						;save loop count
+			lodsb							;memory byte
+			mov	ah,al						;memory byte
+			shr	al,4						;high-order in bits 3-0
+			or	al,30h						;apply ascii numeric zone
+			cmp	al,3ah						;numeric range?
+			jb	.40						;yes, skip ahead
+			add	al,7						;adjust ascii for 'A'-'F'
+.40			stosb							;store ascii hexadecimal of high-order
+			mov	al,ah						;low-order in bits 3-0
+			and	al,0fh						;mask out high-order bits
+			or	al,30h						;apply ascii numeric zone
+			cmp	al,3ah						;numeric range?
+			jb	.50						;yes, skip ahead
+			add	al,7						;adjust ascii for 'A'-'F'
+.50			stosb							;store ascii hexadecimal of low-order
+			mov	al,' '						;ascii space
+			stosb							;store ascii space delimiter
+			pop	ecx						;loop count
+			loop	.30						;next
+;
+;			output printable ASCII character section for the row
+;
+			sub	esi,16						;reset source pointer
+			mov	cl,16						;loop count
+.60			lodsb							;source byte
+			cmp	al,32						;printable? (low-range test)
+			jb	.70						;no, skip ahead
+			cmp	al,128						;printable? (high-range test)
+			jb	.80						;yes, skip ahead
+.70			mov	al,' '						;display space instead of printable
+.80			stosb							;store printable ascii byte
+			loop	.60						;next source byte
+			xor	al,al						;nul-terminator
+			stosb							;terminate output line
+;
+;			display constructed output buffer and newline
+;
+			putConsoleString wzConsoleOutBuffer			;display constructed output
+			putConsoleString czNewLine				;display new line
+;
+;			repeat until all lines displayed and preserve source address
+;
+			pop	ecx						;remaining rows
+			loop	.20						;next row
+			mov	[wfConsoleMemAddr],esi				;update console memory address
+			pop	edi						;restore regs
+			pop	esi						;
+			pop	ebx						;
+			ret							;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Routine:	ConTime
+;
+;	Description:	This routine Handles the TIME command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConTime			readRealTimeClock wsConsoleDateTime			;read RTC data into structure
+			putTimeString	  wsConsoleDateTime,wzConsoleOutBuffer	;format time string
+			putConsoleString  wzConsoleOutBuffer			;write string to console
+			putConsoleString  czNewLine				;write newline to console
 			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -3092,10 +3610,14 @@ ConVersion		putConsoleString czTitle				;display version message
 tConJmpTbl		equ	$						;command jump table
 			dd	ConExit		- ConCode			;shutdown command routine offset
 			dd	ConVersion	- ConCode			;version command routine offset
+			dd	ConMem		- ConCode			;memory command routine offset
 			dd	ConClear	- ConCode			;clear command routine offset
+			dd	ConDate		- ConCode			;date command routine offset
 			dd	ConExit		- ConCode			;exit command routine offset
 			dd	ConExit		- ConCode			;quit command routine offset
+			dd	ConTime		- ConCode			;time command routine offset
 			dd	ConClear	- ConCode			;cls command routine offset
+			dd	ConMem		- ConCode			;mem command routine offset
 			dd	ConVersion	- ConCode			;ver command routine offset
 ECONJMPTBLL		equ	($-tConJmpTbl)					;table length
 ECONJMPTBLCNT		equ	ECONJMPTBLL/4					;table entries
@@ -3105,10 +3627,14 @@ ECONJMPTBLCNT		equ	ECONJMPTBLL/4					;table entries
 tConCmdTbl		equ	$						;command name table
 			db	9,"SHUTDOWN",0					;shutdown command
 			db	8,"VERSION",0					;version command
+			db	7,"MEMORY",0					;memory command
 			db	6,"CLEAR",0					;clear command
+			db	5,"DATE",0					;date command
 			db	5,"EXIT",0					;exit command
 			db	5,"QUIT",0					;quit command
+			db	5,"TIME",0					;time command
 			db	4,"CLS",0					;cls command
+			db	4,"MEM",0					;mem command
 			db	4,"VER",0					;ver command
 			db	0						;end of table
 ;-----------------------------------------------------------------------------------------------------------------------

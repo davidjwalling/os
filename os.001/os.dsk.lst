@@ -208,7 +208,7 @@
    208 00000057 B40E                    			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
    209 00000059 CD10                    			int	EBIOSINTVIDEO					;call BIOS display interrupt
    210 0000005B EBF4                    			jmp	PutTTYString					;repeat until done
-   211 0000005D C3                      .10			ret							;return to caller
+   211 0000005D C3                      .10			ret							;return
    212                                  ;-----------------------------------------------------------------------------------------------------------------------
    213                                  ;
    214                                  ;	Loader Data

@@ -80,9 +80,9 @@
     80                                  ;			Macro names do begin with a verb.
     81                                  ;
     82                                  ;	Registers:	Registers EBX, ESI, EDI, EBP, SS, CS, DS and ES are preserved by all OS routines.
-    83                                  ;			Register EAX is preferred for returning a response/result value.
+    83                                  ;			Registers EAX and ECX are preferred for returning response/result values.
     84                                  ;			Register EBX is preferred for passing a context (structure) address parameter.
-    85                                  ;			Registers EAX, EDX and ECX are preferred for passing integral parameters.
+    85                                  ;			Registers EAX, EDX, ECX and EBX are preferred for passing integral parameters.
     86                                  ;
     87                                  ;-----------------------------------------------------------------------------------------------------------------------
     88                                  ;-----------------------------------------------------------------------------------------------------------------------
@@ -231,7 +231,7 @@
    231                                  EBIOSFNKEYSTATUS	equ	001h						;BIOS keyboard status function
    232                                  ;-----------------------------------------------------------------------------------------------------------------------
    233                                  ;
-   234                                  ;	ASCII									EASC...
+   234                                  ;	ASCII									EASCII...
    235                                  ;
    236                                  ;-----------------------------------------------------------------------------------------------------------------------
    237                                  EASCIILINEFEED		equ	10						;ASCII line feed
@@ -268,7 +268,7 @@
    268                                  EKRNADR			equ	1000h						;kernel base address
    269                                  EKRNSEG			equ	(EKRNADR >> 4)					;kernel base segment
    270                                  ;-----------------------------------------------------------------------------------------------------------------------
-   271                                  ;	Keyboard Flags
+   271                                  ;	Keyboard Flags								EKEY...
    272                                  ;-----------------------------------------------------------------------------------------------------------------------
    273                                  EKEYCTRLLEFT		equ	00000001b					;left control
    274                                  EKEYSHIFTLEFT		equ	00000010b					;left shift
@@ -641,7 +641,7 @@
    641 000000D3 A3[F201]                			mov	[wwLogicalSector],ax				;start past boot sector
    642 000000D6 A1[1600]                			mov	ax,[cwFatSectors]				;AX = 0009
    643 000000D9 A2[F401]                			mov	[wbReadCount],al				;[readcount] = 09
-   644 000000DC BB0004                  			mov	bx,EBOOTSTACKTOP				;BX = 0500
+   644 000000DC BB0004                  			mov	bx,EBOOTSTACKTOP				;BX = 0400
    645 000000DF E85A00                  			call	ReadSector					;read FAT into buffer
    646                                  ;
    647                                  ;	Get the starting cluster of the kernel program and target address.
@@ -744,12 +744,12 @@
    744 00000193 B401                    .10			mov	ah,EBIOSFNKEYSTATUS				;bios keyboard status function
    745 00000195 CD16                    			int	EBIOSINTKEYBOARD				;get keyboard status
    746 00000197 7504                    			jnz	.20						;continue if key pressed
-   747 00000199 FB                      			sti							;enable interrupts
+   747 00000199 FB                      			sti							;enable maskable interrupts
    748 0000019A F4                      			hlt							;wait for interrupt
    749 0000019B EBF6                    			jmp	.10						;repeat
    750 0000019D B0FE                    .20			mov	al,EKEYCMDRESET					;8042 pulse output port pin
    751 0000019F E664                    			out	EKEYPORTSTAT,al					;drive B0 low to restart
-   752 000001A1 FB                      .30			sti							;enable interrupts
+   752 000001A1 FB                      .30			sti							;enable maskable interrupts
    753 000001A2 F4                      			hlt							;stop until reset, int, nmi
    754 000001A3 EBFC                    			jmp	.30						;loop until restart kicks in
    755                                  ;
@@ -762,7 +762,7 @@
    762 000001AB B40E                    			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
    763 000001AD CD10                    			int	EBIOSINTVIDEO					;call BIOS display interrupt
    764 000001AF EBF4                    			jmp	BootPrint					;repeat until done
-   765 000001B1 C3                      BootReturn		ret							;return to caller
+   765 000001B1 C3                      BootReturn		ret							;return
    766                                  ;-----------------------------------------------------------------------------------------------------------------------
    767                                  ;
    768                                  ;	Constants
@@ -1425,7 +1425,7 @@
   1225                                  			inc	cl						;was hi-byte of GDTR 0xff?
   1226                                  			jz	.10						;yes, cpu is 80286
   1227                                  			inc	ax						;AX = 3
-  1228                                  .10			ret							;return to caller
+  1228                                  .10			ret							;return
   1229                                  ;-----------------------------------------------------------------------------------------------------------------------
   1230                                  ;
   1231                                  ;	Routine:	PutTTYString
@@ -1448,7 +1448,7 @@
   1248                                  			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
   1249                                  			int	EBIOSINTVIDEO					;call BIOS display interrupt
   1250                                  			jmp	PutTTYString					;repeat until done
-  1251                                  .10			ret							;return to caller
+  1251                                  .10			ret							;return
   1252                                  ;-----------------------------------------------------------------------------------------------------------------------
   1253                                  ;
   1254                                  ;	Loader Data
@@ -1720,7 +1720,7 @@
   1520                                  			menter	int31						;(reserved)
   1521                                  			push	31						;
   1522                                  intcpu			pop	eax						;
-  1523                                  			iretd
+  1523                                  			iretd							;return
   1524                                  ;-----------------------------------------------------------------------------------------------------------------------
   1525                                  ;
   1526                                  ;	Hardware Device Interupts
@@ -1746,7 +1746,7 @@
   1546                                  ;
   1547                                  ;-----------------------------------------------------------------------------------------------------------------------
   1548                                  			menter	clocktick					;clock tick interrupt
-  1549                                  			push	eax						;save volatile regs
+  1549                                  			push	eax						;save modified regs
   1550                                  			push	edx						;
   1551                                  			push	ds						;
   1552                                  			push	ESELDAT						;load OS data selector ...
@@ -1774,10 +1774,10 @@
   1574                                  			mov	dl,EFDCPORTLOOUT				;fdc digital output register
   1575                                  			out	dx,al						;turn motor off
   1576                                  irq0.20			call	PutPrimaryEndOfInt				;send end-of-interrupt to PIC
-  1577                                  			pop	ds						;restore volatile regs
+  1577                                  			pop	ds						;restore modified regs
   1578                                  			pop	edx						;
   1579                                  			pop	eax						;
-  1580                                  			iretd							;return to caller
+  1580                                  			iretd							;return
   1581                                  ;-----------------------------------------------------------------------------------------------------------------------
   1582                                  ;
   1583                                  ;	IRQ1	Keyboard Interrupt
@@ -1789,7 +1789,7 @@
   1589                                  ;
   1590                                  ;-----------------------------------------------------------------------------------------------------------------------
   1591                                  			menter	keyboard					;keyboard interrrupt
-  1592                                  			push	eax						;save volatile regs
+  1592                                  			push	eax						;save non-volatile regs
   1593                                  			push	ebx						;
   1594                                  			push	ecx						;
   1595                                  			push	esi						;
@@ -1939,12 +1939,12 @@
   1739                                  			or	[wbConsoleStatus],al				;set controller timeout flag
   1740                                  irq1.150		call	PutConsoleOIAChar				;update operator info area
   1741                                  			call	PutPrimaryEndOfInt				;send end-of-interrupt to PIC
-  1742                                  			pop	ds						;restore volatile regs
+  1742                                  			pop	ds						;restore non-volatile regs
   1743                                  			pop	esi						;
   1744                                  			pop	ecx						;
   1745                                  			pop	ebx						;
   1746                                  			pop	eax						;
-  1747                                  			iretd							;return to caller
+  1747                                  			iretd							;return
   1748                                  ;-----------------------------------------------------------------------------------------------------------------------
   1749                                  ;	Scan-Code to ASCII Translation Tables
   1750                                  ;-----------------------------------------------------------------------------------------------------------------------
@@ -1980,783 +1980,852 @@
   1780                                  			db	000h,000h,000h,000h,000h,000h,000h,000h		;E8-EF
   1781                                  			db	000h,000h,000h,000h,000h,000h,000h,000h		;F0-F7
   1782                                  			db	000h,000h,000h,000h,000h,000h,000h,000h		;F8-FF
-  1783                                  			menter	iochannel					;secondary 8259A cascade
-  1784                                  			push	eax						;
-  1785                                  			jmp	hwint						;
-  1786                                  			menter	com2						;serial port 2 interrupt
-  1787                                  			push	eax						;
-  1788                                  			jmp	hwint						;
-  1789                                  			menter	com1						;serial port 1 interrupt
-  1790                                  			push	eax						;
-  1791                                  			jmp	hwint						;
-  1792                                  			menter	lpt2						;parallel port 2 interrupt
-  1793                                  			push	eax						;
-  1794                                  			jmp	hwint						;
-  1795                                  			menter	diskette					;floppy disk interrupt
-  1796                                  			push	eax						;save non-volatile regs
-  1797                                  			push	ds						;
-  1798                                  			push	ESELDAT						;load OS data selector ...
-  1799                                  			pop	ds						;... into DS register
-  1800                                  			mov	al,[wbFDCStatus]				;al = FDC calibration status
-  1801                                  			or	al,10000000b					;set IRQ flag
-  1802                                  			mov	[wbFDCStatus],al				;update FDC calibration status
-  1803                                  			sti							;enable maskable interrupts
-  1804                                  			mov	al,20h						;non-specific end-of-interrupt
-  1805                                  			out	20h,al						;signal end of interrupt
-  1806                                  			pop	ds						;restore non-volatile regs
-  1807                                  			pop	eax						;
-  1808                                  			iretd							;return from interrupt
-  1809                                  			menter	lpt1						;parallel port 1 interrupt
-  1810                                  			push	eax						;
-  1811                                  			jmp	hwint						;
-  1812                                  			menter	rtclock						;real-time clock interrupt
+  1783                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1784                                  ;
+  1785                                  ;	IRQ2	Secondary 8259A Cascade Hardware Interrupt
+  1786                                  ;
+  1787                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1788                                  			menter	iochannel					;secondary 8259A cascade
+  1789                                  			push	eax						;
+  1790                                  			jmp	hwint						;
+  1791                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1792                                  ;
+  1793                                  ;	IRQ3	Communication Port 2 Hardware Interrupt
+  1794                                  ;
+  1795                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1796                                  			menter	com2						;serial port 2 interrupt
+  1797                                  			push	eax						;
+  1798                                  			jmp	hwint						;
+  1799                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1800                                  ;
+  1801                                  ;	IRQ4	Communication Port 1 Hardware Interrupt
+  1802                                  ;
+  1803                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1804                                  			menter	com1						;serial port 1 interrupt
+  1805                                  			push	eax						;
+  1806                                  			jmp	hwint						;
+  1807                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1808                                  ;
+  1809                                  ;	IRQ5	Parallel Port 2 Hardware Interrupt
+  1810                                  ;
+  1811                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1812                                  			menter	lpt2						;parallel port 2 interrupt
   1813                                  			push	eax						;
-  1814                                  			jmp	hwwint						;
-  1815                                  			menter	retrace						;CGA vertical retrace interrupt
-  1816                                  			push	eax						;
-  1817                                  			jmp	hwwint						;
-  1818                                  			menter	irq10						;reserved
-  1819                                  			push	eax						;
-  1820                                  			jmp	hwwint						;
-  1821                                  			menter	irq11						;reserved
-  1822                                  			push	eax						;
-  1823                                  			jmp	hwwint						;
-  1824                                  			menter	ps2mouse					;PS/2 mouse interrupt
-  1825                                  			push	eax						;
-  1826                                  			jmp	hwwint						;
-  1827                                  			menter	coprocessor					;coprocessor interrupt
-  1828                                  			push	eax						;
-  1829                                  			jmp	hwwint						;
-  1830                                  			menter	fixeddisk					;fixed disk interrupt
-  1831                                  			push	eax						;
-  1832                                  			jmp	hwwint						;
-  1833                                  			menter	irq15						;reserved
-  1834                                  			push	eax						;save volatile reg
-  1835                                  ;-----------------------------------------------------------------------------------------------------------------------
-  1836                                  ;
-  1837                                  ;	Exit from hardware interrupt
-  1838                                  ;
-  1839                                  ;-----------------------------------------------------------------------------------------------------------------------
-  1840                                  hwwint			call	PutSecondaryEndOfInt				;send EOI to secondary PIC
-  1841                                  			jmp	hwint90						;skip ahead
-  1842                                  hwint			call	PutPrimaryEndOfInt				;send EOI to primary PIC
-  1843                                  hwint90			pop	eax						;restore volatile reg
-  1844                                  			iretd							;return from interrupt
-  1845                                  ;-----------------------------------------------------------------------------------------------------------------------
-  1846                                  ;
-  1847                                  ;	INT 30h Operating System Software Service Interrupt
-  1848                                  ;
-  1849                                  ;	Interrupt 30h is used by our operating system as an entry point for many commonly-used subroutines reusable by
-  1850                                  ;	any task. These routines include low-level i/o functions that shield applications from having to handle
-  1851                                  ;	device-specific communications. On entry to this interrupt, AL contains a function number that is used to load
-  1852                                  ;	the entry address of the specific function from a table.
-  1853                                  ;
+  1814                                  			jmp	hwint						;
+  1815                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1816                                  ;
+  1817                                  ;	IRQ6	Diskette Hardware Interrupt
+  1818                                  ;
+  1819                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1820                                  			menter	diskette					;floppy disk interrupt
+  1821                                  			push	eax						;save non-volatile regs
+  1822                                  			push	ds						;
+  1823                                  			push	ESELDAT						;load OS data selector ...
+  1824                                  			pop	ds						;... into DS register
+  1825                                  			mov	al,[wbFDCStatus]				;al = FDC calibration status
+  1826                                  			or	al,10000000b					;set IRQ flag
+  1827                                  			mov	[wbFDCStatus],al				;update FDC calibration status
+  1828                                  			pop	ds						;restore non-volatile regs
+  1829                                  			jmp	hwint						;end primary PIC interrupt
+  1830                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1831                                  ;
+  1832                                  ;	IRQ7	Parallel Port 1 Hardware Interrupt
+  1833                                  ;
+  1834                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1835                                  			menter	lpt1						;parallel port 1 interrupt
+  1836                                  			push	eax						;
+  1837                                  			jmp	hwint						;
+  1838                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1839                                  ;
+  1840                                  ;	IRQ8	Real-time Clock Hardware Interrupt
+  1841                                  ;
+  1842                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1843                                  			menter	rtclock						;real-time clock interrupt
+  1844                                  			push	eax						;
+  1845                                  			jmp	hwwint						;
+  1846                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1847                                  ;
+  1848                                  ;	IRQ9	CGA Vertical Retrace Hardware Interrupt
+  1849                                  ;
+  1850                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1851                                  			menter	retrace						;CGA vertical retrace interrupt
+  1852                                  			push	eax						;
+  1853                                  			jmp	hwwint						;
   1854                                  ;-----------------------------------------------------------------------------------------------------------------------
-  1855                                  			menter	svc
-  1856                                  			cmp	al,maxtsvc					;is our function out of range?
-  1857                                  			jae	svc90						;yes, skip ahead
-  1858                                  			movzx	eax,al						;function
-  1859                                  			shl	eax,2						;offset into table
-  1860                                  			call	dword [cs:tsvc+eax]				;far call to indirect address
-  1861                                  svc90			iretd							;return from interrupt
+  1855                                  ;
+  1856                                  ;	IRQ10	Reserved Hardware Interrupt
+  1857                                  ;
+  1858                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1859                                  			menter	irq10						;reserved
+  1860                                  			push	eax						;
+  1861                                  			jmp	hwwint						;
   1862                                  ;-----------------------------------------------------------------------------------------------------------------------
   1863                                  ;
-  1864                                  ;	Service Request Table
+  1864                                  ;	IRQ11	Reserved Hardware Interrupt
   1865                                  ;
-  1866                                  ;
-  1867                                  ;	These tsvce macros expand to define an address vector table for the service request interrupt (int 30h).
-  1868                                  ;
-  1869                                  ;-----------------------------------------------------------------------------------------------------------------------
-  1870                                  tsvc			tsvce	PutConsoleString				;tty output asciiz string
-  1871                                  			tsvce	ClearConsoleScreen				;clear console screen
-  1872                                  			tsvce	PlaceCursor					;place the cursor at the current loc
-  1873                                  maxtsvc			equ	($-tsvc)/4					;function out of range
+  1866                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1867                                  			menter	irq11						;reserved
+  1868                                  			push	eax						;
+  1869                                  			jmp	hwwint						;
+  1870                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1871                                  ;
+  1872                                  ;	IRQ12	PS/2 Mouse Hardware Interrupt
+  1873                                  ;
   1874                                  ;-----------------------------------------------------------------------------------------------------------------------
-  1875                                  ;
-  1876                                  ;	Service Request Macros
-  1877                                  ;
-  1878                                  ;	These macros provide positional parameterization of service request calls.
+  1875                                  			menter	ps2mouse					;PS/2 mouse interrupt
+  1876                                  			push	eax						;
+  1877                                  			jmp	hwwint						;
+  1878                                  ;-----------------------------------------------------------------------------------------------------------------------
   1879                                  ;
-  1880                                  ;-----------------------------------------------------------------------------------------------------------------------
-  1881                                  %macro			putConsoleString 1
-  1882                                  			mov	edx,%1						;EDX = string address
-  1883                                  			mov	al,ePutConsoleString				;AL = put string fn.
-  1884                                  			int	_svc						;invoke OS service
-  1885                                  %endmacro
-  1886                                  %macro			clearConsoleScreen 0
-  1887                                  			mov	al,eClearConsoleScreen				;AL = clear console fn.
-  1888                                  			int	_svc						;invoke OS service
-  1889                                  %endmacro
-  1890                                  %macro			placeCursor 0
-  1891                                  			mov	al,ePlaceCursor					;AL = set cursor fn.
-  1892                                  			int	_svc						;invoke OS service
-  1893                                  %endmacro
+  1880                                  ;	IRQ13	Coprocessor Hardware Interrupt
+  1881                                  ;
+  1882                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1883                                  			menter	coprocessor					;coprocessor interrupt
+  1884                                  			push	eax						;
+  1885                                  			jmp	hwwint						;
+  1886                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1887                                  ;
+  1888                                  ;	IRQ14	Fixed Disk Hardware Interrupt
+  1889                                  ;
+  1890                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1891                                  			menter	fixeddisk					;fixed disk interrupt
+  1892                                  			push	eax						;
+  1893                                  			jmp	hwwint						;
   1894                                  ;-----------------------------------------------------------------------------------------------------------------------
   1895                                  ;
-  1896                                  ;	Kernel Function Library
+  1896                                  ;	IRQ15	Reserved Hardware Interrupt
   1897                                  ;
   1898                                  ;-----------------------------------------------------------------------------------------------------------------------
-  1899                                  ;-----------------------------------------------------------------------------------------------------------------------
-  1900                                  ;
-  1901                                  ;	Console Helper Routines
+  1899                                  			menter	irq15						;reserved
+  1900                                  			push	eax						;save modified regs
+  1901                                  ;-----------------------------------------------------------------------------------------------------------------------
   1902                                  ;
-  1903                                  ;	PutConsoleString
-  1904                                  ;	NextConsoleColumn
-  1905                                  ;	FirstConsoleColumn
-  1906                                  ;	NextConsoleRow
-  1907                                  ;	PutConsoleChar
-  1908                                  ;	PutConsoleOIAShift
-  1909                                  ;	PutConsoleOIAChar
-  1910                                  ;	PutConsoleHexByte
-  1911                                  ;
-  1912                                  ;-----------------------------------------------------------------------------------------------------------------------
-  1913                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1903                                  ;	Exit from hardware interrupt
+  1904                                  ;
+  1905                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1906                                  hwwint			call	PutSecondaryEndOfInt				;send EOI to secondary PIC
+  1907                                  			jmp	hwint90						;skip ahead
+  1908                                  hwint			call	PutPrimaryEndOfInt				;send EOI to primary PIC
+  1909                                  hwint90			pop	eax						;restore modified regs
+  1910                                  			iretd							;return from interrupt
+  1911                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1912                                  ;
+  1913                                  ;	INT 30h Operating System Software Service Interrupt
   1914                                  ;
-  1915                                  ;	Routine:	PutConsoleString
-  1916                                  ;
-  1917                                  ;	Description:	Write a sequence of ASCII characters to the console until null and update the console position
-  1918                                  ;			as needed.
+  1915                                  ;	Interrupt 30h is used by our operating system as an entry point for many commonly-used subroutines reusable by
+  1916                                  ;	any task. These routines include low-level i/o functions that shield applications from having to handle
+  1917                                  ;	device-specific communications. On entry to this interrupt, AL contains a function number that is used to load
+  1918                                  ;	the entry address of the specific function from a table.
   1919                                  ;
-  1920                                  ;	In:		EDX	source address
-  1921                                  ;			DS	OS data selector
-  1922                                  ;
-  1923                                  ;-----------------------------------------------------------------------------------------------------------------------
-  1924                                  PutConsoleString	push	esi						;save volatile regs
-  1925                                  			mov	esi,edx						;source address
-  1926                                  			cld							;forward strings
-  1927                                  .10			lodsb							;ASCII character
-  1928                                  			or	al,al						;end of string?
-  1929                                  			jz	.40						;yes, skip ahead
-  1930                                  			cmp	al,EASCIIRETURN					;carriage return?
-  1931                                  			jne	.20						;no, skip ahead
-  1932                                  			call	FirstConsoleColumn				;move to start of row
-  1933                                  			jmp	.10						;next character
-  1934                                  .20			cmp	al,EASCIILINEFEED				;line feed?
-  1935                                  			jne	.30						;no, skip ahead
-  1936                                  			call	NextConsoleRow					;move to next row
-  1937                                  			jmp	.10						;next character
-  1938                                  .30			call	PutConsoleChar					;output character to console
-  1939                                  			call	NextConsoleColumn				;advance to next column
-  1940                                  			jmp	.10						;next character
-  1941                                  .40			pop	esi						;restore volatile regs
-  1942                                  			ret							;return to caller
-  1943                                  ;-----------------------------------------------------------------------------------------------------------------------
-  1944                                  ;
-  1945                                  ;	Routine:	NextConsoleColumn
-  1946                                  ;
-  1947                                  ;	Description:	Advance the console position one column. Wrap the column and advance one row if needed.
-  1948                                  ;
-  1949                                  ;	In:		DS	OS data selector
-  1950                                  ;
-  1951                                  ;-----------------------------------------------------------------------------------------------------------------------
-  1952                                  NextConsoleColumn	mov	al,[wbConsoleColumn]				;current column
-  1953                                  			inc	al						;increment column
-  1954                                  			mov	[wbConsoleColumn],al				;save column
-  1955                                  			cmp	al,ECONCOLS					;end of row?
-  1956                                  			jb	.10						;no, skip ahead
-  1957                                  			call	FirstConsoleColumn				;reset column to start of row
-  1958                                  			call	NextConsoleRow					;line feed to next row
-  1959                                  .10			ret							;return to caller
+  1920                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1921                                  			menter	svc
+  1922                                  			cmp	al,maxtsvc					;is our function out of range?
+  1923                                  			jae	svc90						;yes, skip ahead
+  1924                                  			movzx	eax,al						;function
+  1925                                  			shl	eax,2						;offset into table
+  1926                                  			call	dword [cs:tsvc+eax]				;far call to indirect address
+  1927                                  svc90			iretd							;return from interrupt
+  1928                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1929                                  ;
+  1930                                  ;	Service Request Table
+  1931                                  ;
+  1932                                  ;
+  1933                                  ;	These tsvce macros expand to define an address vector table for the service request interrupt (int 30h).
+  1934                                  ;
+  1935                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1936                                  tsvc			tsvce	PutConsoleString				;tty output asciiz string
+  1937                                  			tsvce	ClearConsoleScreen				;clear console screen
+  1938                                  			tsvce	PlaceCursor					;place the cursor at the current loc
+  1939                                  maxtsvc			equ	($-tsvc)/4					;function out of range
+  1940                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1941                                  ;
+  1942                                  ;	Service Request Macros
+  1943                                  ;
+  1944                                  ;	These macros provide positional parameterization of service request calls.
+  1945                                  ;
+  1946                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1947                                  %macro			putConsoleString 1
+  1948                                  			mov	edx,%1						;EDX = string address
+  1949                                  			mov	al,ePutConsoleString				;AL = put string fn.
+  1950                                  			int	_svc						;invoke OS service
+  1951                                  %endmacro
+  1952                                  %macro			clearConsoleScreen 0
+  1953                                  			mov	al,eClearConsoleScreen				;AL = clear console fn.
+  1954                                  			int	_svc						;invoke OS service
+  1955                                  %endmacro
+  1956                                  %macro			placeCursor 0
+  1957                                  			mov	al,ePlaceCursor					;AL = set cursor fn.
+  1958                                  			int	_svc						;invoke OS service
+  1959                                  %endmacro
   1960                                  ;-----------------------------------------------------------------------------------------------------------------------
   1961                                  ;
-  1962                                  ;	Routine:	FirstConsoleColumn
+  1962                                  ;	Kernel Function Library
   1963                                  ;
-  1964                                  ;	Description:	Reset the console column to start of the row.
-  1965                                  ;
-  1966                                  ;	In:		DS	OS data selector
-  1967                                  ;
-  1968                                  ;-----------------------------------------------------------------------------------------------------------------------
-  1969                                  FirstConsoleColumn	xor	al,al						;zero column
-  1970                                  			mov	[wbConsoleColumn],al				;save column
-  1971                                  			ret							;return to caller
-  1972                                  ;-----------------------------------------------------------------------------------------------------------------------
-  1973                                  ;
-  1974                                  ;	Routine:	NextConsoleRow
-  1975                                  ;
-  1976                                  ;	Description:	Advance the console position one line. Scroll the screen one row if needed.
+  1964                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1965                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1966                                  ;
+  1967                                  ;	Console Helper Routines
+  1968                                  ;
+  1969                                  ;	PutConsoleString
+  1970                                  ;	NextConsoleColumn
+  1971                                  ;	FirstConsoleColumn
+  1972                                  ;	NextConsoleRow
+  1973                                  ;	PutConsoleChar
+  1974                                  ;	PutConsoleOIAShift
+  1975                                  ;	PutConsoleOIAChar
+  1976                                  ;	PutConsoleHexByte
   1977                                  ;
-  1978                                  ;	In:		DS	OS data selector
-  1979                                  ;
-  1980                                  ;-----------------------------------------------------------------------------------------------------------------------
-  1981                                  NextConsoleRow		mov	al,[wbConsoleRow]				;current row
-  1982                                  			inc	al						;increment row
-  1983                                  			mov	[wbConsoleRow],al				;save row
-  1984                                  			cmp	al,ECONROWS					;end of screen?
-  1985                                  			jb	.10						;no, skip ahead
-  1986                                  			call	ScrollConsoleRow				;scroll up one row
-  1987                                  			mov	al,[wbConsoleRow]				;row
-  1988                                  			dec	al						;decrement row
-  1989                                  			mov	[wbConsoleRow],al				;save row
-  1990                                  .10			ret							;return to caller
-  1991                                  ;-----------------------------------------------------------------------------------------------------------------------
-  1992                                  ;
-  1993                                  ;	Routine:	PutConsoleChar
-  1994                                  ;
-  1995                                  ;	Description:	Write one ASCII character to the console screen.
-  1996                                  ;
-  1997                                  ;	In:		AL	ASCII character
-  1998                                  ;			DS	OS data selector
-  1999                                  ;
-  2000                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2001                                  PutConsoleChar		push	ecx						;save volatile regs
-  2002                                  			push	es						;
-  2003                                  			push	ESELCGA						;load CGA selector ...
-  2004                                  			pop	es						;... into extra segment reg
-  2005                                  			mov	cl,[wbConsoleColumn]				;column
-  2006                                  			mov	ch,[wbConsoleRow]				;row
-  2007                                  			call	SetConsoleChar					;put character at row, column
-  2008                                  			pop	es						;restore volatile regs
-  2009                                  			pop	ecx						;
-  2010                                  			ret							;return to caller
-  2011                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1978                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1979                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1980                                  ;
+  1981                                  ;	Routine:	PutConsoleString
+  1982                                  ;
+  1983                                  ;	Description:	This routine writes a sequence of ASCII characters to the console until null and updates the
+  1984                                  ;			console position as needed.
+  1985                                  ;
+  1986                                  ;	In:		EDX	source address
+  1987                                  ;			DS	OS data selector
+  1988                                  ;
+  1989                                  ;-----------------------------------------------------------------------------------------------------------------------
+  1990                                  PutConsoleString	push	esi						;save non-volatile regs
+  1991                                  			mov	esi,edx						;source address
+  1992                                  			cld							;forward strings
+  1993                                  .10			lodsb							;ASCII character
+  1994                                  			or	al,al						;end of string?
+  1995                                  			jz	.40						;yes, skip ahead
+  1996                                  			cmp	al,EASCIIRETURN					;carriage return?
+  1997                                  			jne	.20						;no, skip ahead
+  1998                                  			call	FirstConsoleColumn				;move to start of row
+  1999                                  			jmp	.10						;next character
+  2000                                  .20			cmp	al,EASCIILINEFEED				;line feed?
+  2001                                  			jne	.30						;no, skip ahead
+  2002                                  			call	NextConsoleRow					;move to next row
+  2003                                  			jmp	.10						;next character
+  2004                                  .30			call	PutConsoleChar					;output character to console
+  2005                                  			call	NextConsoleColumn				;advance to next column
+  2006                                  			jmp	.10						;next character
+  2007                                  .40			pop	esi						;restore non-volatile regs
+  2008                                  			ret							;return
+  2009                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2010                                  ;
+  2011                                  ;	Routine:	NextConsoleColumn
   2012                                  ;
-  2013                                  ;	Routine:	PutConsoleOIAShift
-  2014                                  ;
-  2015                                  ;	Description:	Update the shift/ctrl/alt/lock indicators in the operator information area (OIA).
-  2016                                  ;
-  2017                                  ;	Input:		bl	shift flags
-  2018                                  ;			bh	lock flags
-  2019                                  ;			ds	OS data selector
-  2020                                  ;
-  2021                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2022                                  PutConsoleOIAShift	push	ecx						;save volatile regs
-  2023                                  			push	es						;
-  2024                                  			push	ESELCGA						;load CGA selector ...
-  2025                                  			pop	es						;... into ES register
-  2026                                  			mov	ch,ECONOIAROW					;OIA row
-  2027                                  			mov	al,EASCIISPACE					;space is default character
-  2028                                  			test	bl,EKEYSHIFTLEFT				;left-shift indicated?
-  2029                                  			jz	.10						;no, skip ahead
-  2030                                  			mov	al,'S'						;yes, indicate with 'S'
-  2031                                  .10			mov	cl,14						;indicator column
-  2032                                  			call	SetConsoleChar					;display ASCII character
-  2033                                  			mov	al,EASCIISPACE					;ASCII space
-  2034                                  			test	bl,EKEYSHIFTRIGHT				;right-shift indicated?
-  2035                                  			jz	.20						;no, skip ahead
-  2036                                  			mov	al,'S'						;yes, indicate with 'S'
-  2037                                  .20			mov	cl,64						;indicator column
-  2038                                  			call	SetConsoleChar					;display ASCII character
-  2039                                  			mov	al,EASCIISPACE					;ASCII space
-  2040                                  			test	bl,EKEYCTRLLEFT					;left-ctrl indicated?
-  2041                                  			jz	.30						;no, skip ahead
-  2042                                  			mov	al,'C'						;yes, indicate with 'C'
-  2043                                  .30			mov	cl,15						;indicator column
-  2044                                  			call	SetConsoleChar					;display ASCII character
-  2045                                  			mov	al,EASCIISPACE					;ASCII space
-  2046                                  			test	bl,EKEYCTRLRIGHT				;right-ctrl indicated?
-  2047                                  			jz	.40						;no, skip ahead
-  2048                                  			mov	al,'C'						;yes, indicate with 'C'
-  2049                                  .40			mov	cl,63						;indicator column
-  2050                                  			call	SetConsoleChar					;display ASCII character
-  2051                                  			mov	al,EASCIISPACE					;ASCII space
-  2052                                  			test	bl,EKEYALTLEFT					;left-alt indicated?
-  2053                                  			jz	.50						;no, skip ahead
-  2054                                  			mov	al,'A'						;yes, indicate with 'A'
-  2055                                  .50			mov	cl,16						;indicator column
-  2056                                  			call	SetConsoleChar					;display ASCII character
-  2057                                  			mov	al,EASCIISPACE					;ASCII space
-  2058                                  			test	bl,EKEYALTRIGHT					;right-alt indicated?
-  2059                                  			jz	.60						;no, skip ahead
-  2060                                  			mov	al,'A'						;yes, indicate with 'A'
-  2061                                  .60			mov	cl,62						;indicator column
-  2062                                  			call	SetConsoleChar					;display ASCII character
-  2063                                  			mov	al,EASCIISPACE					;ASCII space
-  2064                                  			test	bh,EKEYLOCKCAPS					;caps-lock indicated?
-  2065                                  			jz	.70						;no, skip ahead
-  2066                                  			mov	al,'C'						;yes, indicate with 'C'
-  2067                                  .70			mov	cl,78						;indicator column
-  2068                                  			call	SetConsoleChar					;display ASCII character
-  2069                                  			mov	al,EASCIISPACE					;ASCII space
-  2070                                  			test	bh,EKEYLOCKNUM					;num-lock indicated?
-  2071                                  			jz	.80						;no, skip ahead
-  2072                                  			mov	al,'N'						;yes, indicate with 'N'
-  2073                                  .80			mov	cl,77						;indicator column
-  2074                                  			call	SetConsoleChar					;display ASCII character
-  2075                                  			mov	al,EASCIISPACE					;ASCII space
-  2076                                  			test	bh,EKEYLOCKSCROLL				;scroll-lock indicated?
-  2077                                  			jz	.90						;no, skip ahead
-  2078                                  			mov	al,'S'						;yes, indicate with 'S'
-  2079                                  .90			mov	cl,76						;indicator column
-  2080                                  			call	SetConsoleChar					;display ASCII character
-  2081                                  			pop	es						;restore volatile regs
-  2082                                  			pop	ecx						;
-  2083                                  			ret							;return to caller
-  2084                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2085                                  ;
-  2086                                  ;	Routine:	PutConsoleOIAChar
+  2013                                  ;	Description:	This routine advances the console position one column. The columnn is reset to zero and the row
+  2014                                  ;			incremented if the end of the current row is reached.
+  2015                                  ;
+  2016                                  ;	In:		DS	OS data selector
+  2017                                  ;
+  2018                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2019                                  NextConsoleColumn	mov	al,[wbConsoleColumn]				;current column
+  2020                                  			inc	al						;increment column
+  2021                                  			mov	[wbConsoleColumn],al				;save column
+  2022                                  			cmp	al,ECONCOLS					;end of row?
+  2023                                  			jb	.10						;no, skip ahead
+  2024                                  			call	FirstConsoleColumn				;reset column to start of row
+  2025                                  			call	NextConsoleRow					;line feed to next row
+  2026                                  .10			ret							;return
+  2027                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2028                                  ;
+  2029                                  ;	Routine:	FirstConsoleColumn
+  2030                                  ;
+  2031                                  ;	Description:	This routine resets the console column to start of the row.
+  2032                                  ;
+  2033                                  ;	In:		DS	OS data selector
+  2034                                  ;
+  2035                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2036                                  FirstConsoleColumn	xor	al,al						;zero column
+  2037                                  			mov	[wbConsoleColumn],al				;save column
+  2038                                  			ret							;return
+  2039                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2040                                  ;
+  2041                                  ;	Routine:	NextConsoleRow
+  2042                                  ;
+  2043                                  ;	Description:	This routine advances the console position one line. Scroll the screen one row if needed.
+  2044                                  ;
+  2045                                  ;	In:		DS	OS data selector
+  2046                                  ;
+  2047                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2048                                  NextConsoleRow		mov	al,[wbConsoleRow]				;current row
+  2049                                  			inc	al						;increment row
+  2050                                  			mov	[wbConsoleRow],al				;save row
+  2051                                  			cmp	al,ECONROWS					;end of screen?
+  2052                                  			jb	.10						;no, skip ahead
+  2053                                  			call	ScrollConsoleRow				;scroll up one row
+  2054                                  			mov	al,[wbConsoleRow]				;row
+  2055                                  			dec	al						;decrement row
+  2056                                  			mov	[wbConsoleRow],al				;save row
+  2057                                  .10			ret							;return
+  2058                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2059                                  ;
+  2060                                  ;	Routine:	PutConsoleChar
+  2061                                  ;
+  2062                                  ;	Description:	This routine writes one ASCII character to the console screen.
+  2063                                  ;
+  2064                                  ;	In:		AL	ASCII character
+  2065                                  ;			DS	OS data selector
+  2066                                  ;
+  2067                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2068                                  PutConsoleChar		push	ecx						;save non-volatile regs
+  2069                                  			push	es						;
+  2070                                  			push	ESELCGA						;load CGA selector ...
+  2071                                  			pop	es						;... into extra segment reg
+  2072                                  			mov	cl,[wbConsoleColumn]				;column
+  2073                                  			mov	ch,[wbConsoleRow]				;row
+  2074                                  			call	SetConsoleChar					;put character at row, column
+  2075                                  			pop	es						;restore non-volatile regs
+  2076                                  			pop	ecx						;
+  2077                                  			ret							;return
+  2078                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2079                                  ;
+  2080                                  ;	Routine:	PutConsoleOIAShift
+  2081                                  ;
+  2082                                  ;	Description:	This routine updates the shift/ctrl/alt/lock indicators in the operator information area (OIA).
+  2083                                  ;
+  2084                                  ;	In:		BL	shift flags
+  2085                                  ;			BH	lock flags
+  2086                                  ;			DS	OS data selector
   2087                                  ;
-  2088                                  ;	Description:	Update the Operator Information Area (OIA).
-  2089                                  ;
-  2090                                  ;	In:		ds	OS data selector
-  2091                                  ;
-  2092                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2093                                  PutConsoleOIAChar	push	ebx						;save volatile regs
-  2094                                  			push	ecx						;
-  2095                                  			push	esi						;
-  2096                                  			push	ds						;
-  2097                                  			push	es						;
-  2098                                  			push	ESELDAT						;load OS data selector ...
-  2099                                  			pop	ds						;... into data segment register
-  2100                                  			push	ESELCGA						;load CGA selector ...
-  2101                                  			pop	es						;... into extra segment register
-  2102                                  			mov	esi,wbConsoleScan0				;scan codes address
-  2103                                  			mov	bh,ECONOIAROW					;OIA row
-  2104                                  			mov	bl,0						;starting column
-  2105                                  			mov	ecx,6						;maximum scan codes
-  2106                                  .10			push	ecx						;save remaining count
-  2107                                  			mov	ecx,ebx						;row, column
-  2108                                  			lodsb							;read scan code
-  2109                                  			or	al,al						;scan code present?
-  2110                                  			jz	.20						;no, skip ahead
-  2111                                  			call	PutConsoleHexByte				;display scan code
-  2112                                  			jmp	.30						;continue
-  2113                                  .20			mov	al,' '						;ASCII space
-  2114                                  			call	SetConsoleChar					;display space
-  2115                                  			inc	cl
-  2116                                  			mov	al,' '						;ASCII space
-  2117                                  			call	SetConsoleChar					;display space
-  2118                                  .30			add	bl,2						;next column (+2)
-  2119                                  			pop	ecx						;restore remaining
-  2120                                  			loop	.10						;next code
-  2121                                  			mov	al,[wbConsoleChar]				;console ASCII character
-  2122                                  			cmp	al,32						;printable? (lower-bounds)
-  2123                                  			jb	.40						;no, skip ahead
-  2124                                  			cmp	al,126						;printable? (upper-bounds)
-  2125                                  			ja	.40						;no, skip ahead
-  2126                                  			mov	ch,bh						;OIA row
-  2127                                  			mov	cl,40						;character display column
-  2128                                  			call	SetConsoleChar					;display ASCII character
-  2129                                  .40			pop	es						;restore volatile regs
-  2130                                  			pop	ds						;
-  2131                                  			pop	esi						;
-  2132                                  			pop	ecx						;
-  2133                                  			pop	ebx						;
-  2134                                  			ret							;return to caller
-  2135                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2136                                  ;
-  2137                                  ;	Routine:	PutConsoleHexByte
-  2138                                  ;
-  2139                                  ;	Description:	Write two ASCII characters to the console screen representing the value of a byte.
-  2140                                  ;
-  2141                                  ;	In:		al	byte value
-  2142                                  ;			ch	row
-  2143                                  ;			cl	column
-  2144                                  ;			ds	OS data selector
-  2145                                  ;			es	CGA selector
-  2146                                  ;
-  2147                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2148                                  PutConsoleHexByte	push	ebx						;save volatile regs
-  2149                                  			mov	bl,al						;save byte value
-  2150                                  			shr	al,4						;hi-order nybble
-  2151                                  			or	al,030h						;apply ASCII zone
-  2152                                  			cmp	al,03ah						;numeric?
-  2153                                  			jb	.10						;yes, skip ahead
-  2154                                  			add	al,7						;add ASCII offset for alpha
-  2155                                  .10			call	SetConsoleChar					;display ASCII character
-  2156                                  			inc	cl						;increment column
-  2157                                  			mov	al,bl						;byte value
-  2158                                  			and	al,0fh						;lo-order nybble
-  2159                                  			or	al,30h						;apply ASCII zone
-  2160                                  			cmp	al,03ah						;numeric?
-  2161                                  			jb	.20						;yes, skip ahead
-  2162                                  			add	al,7						;add ASCII offset for alpha
-  2163                                  .20			call	SetConsoleChar					;display ASCII character
-  2164                                  			pop	ebx						;restore volatile regs
-  2165                                  			ret							;return to caller
-  2166                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2167                                  ;
-  2168                                  ;	Memory-Mapped Video Routines
-  2169                                  ;
-  2170                                  ;	These routines read and/or write directly to CGA video memory (B800:0)
-  2171                                  ;
-  2172                                  ;	ClearConsoleScreen
-  2173                                  ;	ScrollConsoleRow
-  2174                                  ;	SetConsoleChar
-  2175                                  ;
-  2176                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2177                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2178                                  ;
-  2179                                  ;	Routine:	ClearConsoleScreen
-  2180                                  ;
-  2181                                  ;	Description:	Clear the console (CGA) screen.
-  2182                                  ;
-  2183                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2184                                  ClearConsoleScreen	push	ecx						;save volatile regs
-  2185                                  			push	edi						;
-  2186                                  			push	ds						;
-  2187                                  			push	es						;
-  2188                                  			push	ESELDAT						;load OS Data selector ...
-  2189                                  			pop	ds						;... into DS register
-  2190                                  			push	ESELCGA						;load CGA selector ...
-  2191                                  			pop	es						;... into ES register
-  2192                                  			mov	eax,ECONCLEARDWORD				;initializtion value
-  2193                                  			mov	ecx,ECONROWDWORDS*(ECONROWS)			;double-words to clear
-  2194                                  			xor	edi,edi						;target offset
-  2195                                  			cld							;forward strings
-  2196                                  			rep	stosd						;reset screen body
-  2197                                  			mov	eax,ECONOIADWORD				;OIA attribute and space
-  2198                                  			mov	ecx,ECONROWDWORDS				;double-words per row
-  2199                                  			rep	stosd						;reset OIA line
-  2200                                  			xor	al,al						;zero register
-  2201                                  			mov	[wbConsoleRow],al				;reset console row
-  2202                                  			mov	[wbConsoleColumn],al				;reset console column
-  2203                                  			call	PlaceCursor					;place cursor at current position
-  2204                                  			pop	es						;restore volatile regs
-  2205                                  			pop	ds						;
-  2206                                  			pop	edi						;
-  2207                                  			pop	ecx						;
-  2208                                  			ret							;return to caller
-  2209                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2210                                  ;
-  2211                                  ;	Routine:	ScrollConsoleRow
-  2212                                  ;
-  2213                                  ;	Description:	Scroll console (text) screen up one row.
-  2214                                  ;
-  2215                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2216                                  ScrollConsoleRow	push	ecx						;save volatile regs
-  2217                                  			push	esi						;
-  2218                                  			push	edi						;
-  2219                                  			push	ds						;
-  2220                                  			push	es						;
-  2221                                  			push	ESELCGA						;load CGA video selector ...
-  2222                                  			pop	ds						;... into DS
-  2223                                  			push	ESELCGA						;load CGA video selector ...
-  2224                                  			pop	es						;... into ES
-  2225                                  			mov	ecx,ECONROWDWORDS*(ECONROWS-1)			;double-words to move
-  2226                                  			mov	esi,ECONROWBYTES				;esi = source (line 2)
-  2227                                  			xor	edi,edi						;edi = target (line 1)
-  2228                                  			cld							;forward strings
-  2229                                  			rep	movsd						;move 24 lines up
-  2230                                  			mov	eax,ECONCLEARDWORD				;attribute and ASCII space
-  2231                                  			mov	ecx,ECONROWDWORDS				;double-words per row
-  2232                                  			rep	stosd						;clear bottom row
-  2233                                  			pop	es						;restore volatile regs
-  2234                                  			pop	ds						;
-  2235                                  			pop	edi						;
-  2236                                  			pop	esi						;
-  2237                                  			pop	ecx						;
-  2238                                  			ret							;return to caller
-  2239                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2240                                  ;
-  2241                                  ;	Routine:	SetConsoleChar
+  2088                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2089                                  PutConsoleOIAShift	push	ecx						;save non-volatile regs
+  2090                                  			push	es						;
+  2091                                  			push	ESELCGA						;load CGA selector ...
+  2092                                  			pop	es						;... into ES register
+  2093                                  			mov	ch,ECONOIAROW					;OIA row
+  2094                                  			mov	al,EASCIISPACE					;space is default character
+  2095                                  			test	bl,EKEYSHIFTLEFT				;left-shift indicated?
+  2096                                  			jz	.10						;no, skip ahead
+  2097                                  			mov	al,'S'						;yes, indicate with 'S'
+  2098                                  .10			mov	cl,14						;indicator column
+  2099                                  			call	SetConsoleChar					;display ASCII character
+  2100                                  			mov	al,EASCIISPACE					;ASCII space
+  2101                                  			test	bl,EKEYSHIFTRIGHT				;right-shift indicated?
+  2102                                  			jz	.20						;no, skip ahead
+  2103                                  			mov	al,'S'						;yes, indicate with 'S'
+  2104                                  .20			mov	cl,64						;indicator column
+  2105                                  			call	SetConsoleChar					;display ASCII character
+  2106                                  			mov	al,EASCIISPACE					;ASCII space
+  2107                                  			test	bl,EKEYCTRLLEFT					;left-ctrl indicated?
+  2108                                  			jz	.30						;no, skip ahead
+  2109                                  			mov	al,'C'						;yes, indicate with 'C'
+  2110                                  .30			mov	cl,15						;indicator column
+  2111                                  			call	SetConsoleChar					;display ASCII character
+  2112                                  			mov	al,EASCIISPACE					;ASCII space
+  2113                                  			test	bl,EKEYCTRLRIGHT				;right-ctrl indicated?
+  2114                                  			jz	.40						;no, skip ahead
+  2115                                  			mov	al,'C'						;yes, indicate with 'C'
+  2116                                  .40			mov	cl,63						;indicator column
+  2117                                  			call	SetConsoleChar					;display ASCII character
+  2118                                  			mov	al,EASCIISPACE					;ASCII space
+  2119                                  			test	bl,EKEYALTLEFT					;left-alt indicated?
+  2120                                  			jz	.50						;no, skip ahead
+  2121                                  			mov	al,'A'						;yes, indicate with 'A'
+  2122                                  .50			mov	cl,16						;indicator column
+  2123                                  			call	SetConsoleChar					;display ASCII character
+  2124                                  			mov	al,EASCIISPACE					;ASCII space
+  2125                                  			test	bl,EKEYALTRIGHT					;right-alt indicated?
+  2126                                  			jz	.60						;no, skip ahead
+  2127                                  			mov	al,'A'						;yes, indicate with 'A'
+  2128                                  .60			mov	cl,62						;indicator column
+  2129                                  			call	SetConsoleChar					;display ASCII character
+  2130                                  			mov	al,EASCIISPACE					;ASCII space
+  2131                                  			test	bh,EKEYLOCKCAPS					;caps-lock indicated?
+  2132                                  			jz	.70						;no, skip ahead
+  2133                                  			mov	al,'C'						;yes, indicate with 'C'
+  2134                                  .70			mov	cl,78						;indicator column
+  2135                                  			call	SetConsoleChar					;display ASCII character
+  2136                                  			mov	al,EASCIISPACE					;ASCII space
+  2137                                  			test	bh,EKEYLOCKNUM					;num-lock indicated?
+  2138                                  			jz	.80						;no, skip ahead
+  2139                                  			mov	al,'N'						;yes, indicate with 'N'
+  2140                                  .80			mov	cl,77						;indicator column
+  2141                                  			call	SetConsoleChar					;display ASCII character
+  2142                                  			mov	al,EASCIISPACE					;ASCII space
+  2143                                  			test	bh,EKEYLOCKSCROLL				;scroll-lock indicated?
+  2144                                  			jz	.90						;no, skip ahead
+  2145                                  			mov	al,'S'						;yes, indicate with 'S'
+  2146                                  .90			mov	cl,76						;indicator column
+  2147                                  			call	SetConsoleChar					;display ASCII character
+  2148                                  			pop	es						;restore non-volatile regs
+  2149                                  			pop	ecx						;
+  2150                                  			ret							;return
+  2151                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2152                                  ;
+  2153                                  ;	Routine:	PutConsoleOIAChar
+  2154                                  ;
+  2155                                  ;	Description:	This routine updates the Operator Information Area (OIA).
+  2156                                  ;
+  2157                                  ;	In:		DS	OS data selector
+  2158                                  ;
+  2159                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2160                                  PutConsoleOIAChar	push	ebx						;save non-volatile regs
+  2161                                  			push	ecx						;
+  2162                                  			push	esi						;
+  2163                                  			push	ds						;
+  2164                                  			push	es						;
+  2165                                  			push	ESELDAT						;load OS data selector ...
+  2166                                  			pop	ds						;... into data segment register
+  2167                                  			push	ESELCGA						;load CGA selector ...
+  2168                                  			pop	es						;... into extra segment register
+  2169                                  			mov	esi,wbConsoleScan0				;scan codes address
+  2170                                  			mov	bh,ECONOIAROW					;OIA row
+  2171                                  			mov	bl,0						;starting column
+  2172                                  			mov	ecx,6						;maximum scan codes
+  2173                                  .10			push	ecx						;save remaining count
+  2174                                  			mov	ecx,ebx						;row, column
+  2175                                  			lodsb							;read scan code
+  2176                                  			or	al,al						;scan code present?
+  2177                                  			jz	.20						;no, skip ahead
+  2178                                  			call	PutConsoleHexByte				;display scan code
+  2179                                  			jmp	.30						;continue
+  2180                                  .20			mov	al,' '						;ASCII space
+  2181                                  			call	SetConsoleChar					;display space
+  2182                                  			inc	cl
+  2183                                  			mov	al,' '						;ASCII space
+  2184                                  			call	SetConsoleChar					;display space
+  2185                                  .30			add	bl,2						;next column (+2)
+  2186                                  			pop	ecx						;restore remaining
+  2187                                  			loop	.10						;next code
+  2188                                  			mov	al,[wbConsoleChar]				;console ASCII character
+  2189                                  			cmp	al,32						;printable? (lower-bounds)
+  2190                                  			jb	.40						;no, skip ahead
+  2191                                  			cmp	al,126						;printable? (upper-bounds)
+  2192                                  			ja	.40						;no, skip ahead
+  2193                                  			mov	ch,bh						;OIA row
+  2194                                  			mov	cl,40						;character display column
+  2195                                  			call	SetConsoleChar					;display ASCII character
+  2196                                  .40			pop	es						;restore non-volatile regs
+  2197                                  			pop	ds						;
+  2198                                  			pop	esi						;
+  2199                                  			pop	ecx						;
+  2200                                  			pop	ebx						;
+  2201                                  			ret							;return
+  2202                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2203                                  ;
+  2204                                  ;	Routine:	PutConsoleHexByte
+  2205                                  ;
+  2206                                  ;	Description:	This routine writes two ASCII characters to the console screen representing the value of a byte.
+  2207                                  ;
+  2208                                  ;	In:		AL	byte value
+  2209                                  ;			CH	row
+  2210                                  ;			CL	column
+  2211                                  ;			DS	OS data selector
+  2212                                  ;			ES	CGA selector
+  2213                                  ;
+  2214                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2215                                  PutConsoleHexByte	push	ebx						;save non-volatile regs
+  2216                                  			mov	bl,al						;save byte value
+  2217                                  			shr	al,4						;hi-order nybble
+  2218                                  			or	al,030h						;apply ASCII zone
+  2219                                  			cmp	al,03ah						;numeric?
+  2220                                  			jb	.10						;yes, skip ahead
+  2221                                  			add	al,7						;add ASCII offset for alpha
+  2222                                  .10			call	SetConsoleChar					;display ASCII character
+  2223                                  			inc	cl						;increment column
+  2224                                  			mov	al,bl						;byte value
+  2225                                  			and	al,0fh						;lo-order nybble
+  2226                                  			or	al,30h						;apply ASCII zone
+  2227                                  			cmp	al,03ah						;numeric?
+  2228                                  			jb	.20						;yes, skip ahead
+  2229                                  			add	al,7						;add ASCII offset for alpha
+  2230                                  .20			call	SetConsoleChar					;display ASCII character
+  2231                                  			pop	ebx						;restore non-volatile regs
+  2232                                  			ret							;return
+  2233                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2234                                  ;
+  2235                                  ;	Memory-Mapped Video Routines
+  2236                                  ;
+  2237                                  ;	These routines read and/or write directly to CGA video memory (B800:0)
+  2238                                  ;
+  2239                                  ;	ClearConsoleScreen
+  2240                                  ;	ScrollConsoleRow
+  2241                                  ;	SetConsoleChar
   2242                                  ;
-  2243                                  ;	Description:	Output an ASCII character at the given row and column.
-  2244                                  ;
-  2245                                  ;	In:		AL	ASCII character
-  2246                                  ;			CL	column
-  2247                                  ;			CH	row
-  2248                                  ;			ES	CGA selector
+  2243                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2244                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2245                                  ;
+  2246                                  ;	Routine:	ClearConsoleScreen
+  2247                                  ;
+  2248                                  ;	Description:	This routine clears the console (CGA) screen.
   2249                                  ;
   2250                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2251                                  SetConsoleChar		mov	dl,al						;ASCII character
-  2252                                  			movzx	eax,ch						;row
-  2253                                  			mov	ah,ECONCOLS					;cols/row
-  2254                                  			mul	ah						;row * cols/row
-  2255                                  			add	al,cl						;add column
-  2256                                  			adc	ah,0						;handle carry
-  2257                                  			shl	eax,1						;screen offset
-  2258                                  			mov	[es:eax],dl					;store character
-  2259                                  			ret							;return to caller
-  2260                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2261                                  ;
-  2262                                  ;	Input/Output Routines
-  2263                                  ;
-  2264                                  ;	These routines read and/or write directly to ports.
-  2265                                  ;
-  2266                                  ;	PlaceCursor
-  2267                                  ;	PutPrimaryEndOfInt
-  2268                                  ;	PutSecondaryEndOfInt
-  2269                                  ;	SetKeyboardLamps
-  2270                                  ;	WaitForKeyInBuffer
-  2271                                  ;	WaitForKeyOutBuffer
-  2272                                  ;
-  2273                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2274                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2275                                  ;
-  2276                                  ;	Routine:	PlaceCursor
+  2251                                  ClearConsoleScreen	push	ecx						;save non-volatile regs
+  2252                                  			push	edi						;
+  2253                                  			push	ds						;
+  2254                                  			push	es						;
+  2255                                  			push	ESELDAT						;load OS Data selector ...
+  2256                                  			pop	ds						;... into DS register
+  2257                                  			push	ESELCGA						;load CGA selector ...
+  2258                                  			pop	es						;... into ES register
+  2259                                  			mov	eax,ECONCLEARDWORD				;initializtion value
+  2260                                  			mov	ecx,ECONROWDWORDS*(ECONROWS)			;double-words to clear
+  2261                                  			xor	edi,edi						;target offset
+  2262                                  			cld							;forward strings
+  2263                                  			rep	stosd						;reset screen body
+  2264                                  			mov	eax,ECONOIADWORD				;OIA attribute and space
+  2265                                  			mov	ecx,ECONROWDWORDS				;double-words per row
+  2266                                  			rep	stosd						;reset OIA line
+  2267                                  			xor	al,al						;zero register
+  2268                                  			mov	[wbConsoleRow],al				;reset console row
+  2269                                  			mov	[wbConsoleColumn],al				;reset console column
+  2270                                  			call	PlaceCursor					;place cursor at current position
+  2271                                  			pop	es						;restore non-volatile regs
+  2272                                  			pop	ds						;
+  2273                                  			pop	edi						;
+  2274                                  			pop	ecx						;
+  2275                                  			ret							;return
+  2276                                  ;-----------------------------------------------------------------------------------------------------------------------
   2277                                  ;
-  2278                                  ;	Description:	Position the cursor on the console.
+  2278                                  ;	Routine:	ScrollConsoleRow
   2279                                  ;
-  2280                                  ;	In:		DS	OS data selector
+  2280                                  ;	Description:	This routine scrolls the console (text) screen up one row.
   2281                                  ;
   2282                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2283                                  PlaceCursor		push	ecx						;save volatile regs
-  2284                                  			mov	al,[wbConsoleRow]				;al = row
-  2285                                  			mov	ah,ECONCOLS					;ah = cols/row
-  2286                                  			mul	ah						;row offset
-  2287                                  			add	al,[wbConsoleColumn]				;add column
-  2288                                  			adc	ah,0						;add overflow
-  2289                                  			mov	ecx,eax						;screen offset
-  2290                                  			mov	dl,ECRTPORTLO					;crt controller port lo
-  2291                                  			mov	dh,ECRTPORTHI					;crt controller port hi
-  2292                                  			mov	al,ECRTCURLOCHI					;crt cursor loc reg hi
-  2293                                  			out	dx,al						;select register
-  2294                                  			inc	edx						;data port
-  2295                                  			mov	al,ch						;hi-order cursor loc
-  2296                                  			out	dx,al						;store hi-order loc
-  2297                                  			dec	edx						;register select port
-  2298                                  			mov	al,ECRTCURLOCLO					;crt cursor loc reg lo
-  2299                                  			out	dx,al						;select register
-  2300                                  			inc	edx						;data port
-  2301                                  			mov	al,cl						;lo-order cursor loc
-  2302                                  			out	dx,al						;store lo-order loc
-  2303                                  			pop	ecx						;restore volatile regs
-  2304                                  			ret							;return to caller
-  2305                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2306                                  ;
-  2307                                  ;	Routine:	PutPrimaryEndOfInt
-  2308                                  ;
-  2309                                  ;	Description:	Send non-specific end-of-interrupt signal to the primary PIC.
-  2310                                  ;
-  2311                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2312                                  PutPrimaryEndOfInt	sti							;enable maskable interrupts
-  2313                                  			mov	al,EPICEOI					;non-specific end-of-interrupt
-  2314                                  			out	EPICPORTPRI,al					;send EOI to primary PIC
-  2315                                  			ret							;return to caller
-  2316                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2317                                  ;
-  2318                                  ;	Routine:	PutSecondaryEndOfInt
-  2319                                  ;
-  2320                                  ;	Description:	Send non-specific end-of-interrupt signal to the secondary PIC.
-  2321                                  ;
-  2322                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2323                                  PutSecondaryEndOfInt	sti							;enable maskable interrupts
-  2324                                  			mov	al,EPICEOI					;non-specific end-of-interrupt
-  2325                                  			out	EPICPORTSEC,al					;send EOI to secondary PIC
-  2326                                  			ret							;return to caller
+  2283                                  ScrollConsoleRow	push	ecx						;save non-volatile regs
+  2284                                  			push	esi						;
+  2285                                  			push	edi						;
+  2286                                  			push	ds						;
+  2287                                  			push	es						;
+  2288                                  			push	ESELCGA						;load CGA video selector ...
+  2289                                  			pop	ds						;... into DS
+  2290                                  			push	ESELCGA						;load CGA video selector ...
+  2291                                  			pop	es						;... into ES
+  2292                                  			mov	ecx,ECONROWDWORDS*(ECONROWS-1)			;double-words to move
+  2293                                  			mov	esi,ECONROWBYTES				;esi = source (line 2)
+  2294                                  			xor	edi,edi						;edi = target (line 1)
+  2295                                  			cld							;forward strings
+  2296                                  			rep	movsd						;move 24 lines up
+  2297                                  			mov	eax,ECONCLEARDWORD				;attribute and ASCII space
+  2298                                  			mov	ecx,ECONROWDWORDS				;double-words per row
+  2299                                  			rep	stosd						;clear bottom row
+  2300                                  			pop	es						;restore non-volatile regs
+  2301                                  			pop	ds						;
+  2302                                  			pop	edi						;
+  2303                                  			pop	esi						;
+  2304                                  			pop	ecx						;
+  2305                                  			ret							;return
+  2306                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2307                                  ;
+  2308                                  ;	Routine:	SetConsoleChar
+  2309                                  ;
+  2310                                  ;	Description:	This routine outputs an ASCII character at the given row and column.
+  2311                                  ;
+  2312                                  ;	In:		AL	ASCII character
+  2313                                  ;			CL	column
+  2314                                  ;			CH	row
+  2315                                  ;			ES	CGA selector
+  2316                                  ;
+  2317                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2318                                  SetConsoleChar		mov	dl,al						;ASCII character
+  2319                                  			movzx	eax,ch						;row
+  2320                                  			mov	ah,ECONCOLS					;cols/row
+  2321                                  			mul	ah						;row * cols/row
+  2322                                  			add	al,cl						;add column
+  2323                                  			adc	ah,0						;handle carry
+  2324                                  			shl	eax,1						;screen offset
+  2325                                  			mov	[es:eax],dl					;store character
+  2326                                  			ret							;return
   2327                                  ;-----------------------------------------------------------------------------------------------------------------------
   2328                                  ;
-  2329                                  ;	Routine:	SetKeyboardLamps
+  2329                                  ;	Input/Output Routines
   2330                                  ;
-  2331                                  ;	Description:	Send the set/reset mode indicators command.
+  2331                                  ;	These routines read and/or write directly to ports.
   2332                                  ;
-  2333                                  ;	In:		bh	00000CNS (C:Caps Lock,N:Num Lock,S:Scroll Lock)
-  2334                                  ;
-  2335                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2336                                  SetKeyboardLamps	call	WaitForKeyInBuffer				;wait for input buffer ready
-  2337                                  			mov	al,EKEYCMDLAMPS					;set/reset lamps command
-  2338                                  			out	EKEYPORTDATA,al					;send command to 8042
-  2339                                  			call	WaitForKeyOutBuffer				;wait for 8042 result
-  2340                                  			in	al,EKEYPORTDATA					;read 8042 'ACK' (0fah)
-  2341                                  			call	WaitForKeyInBuffer				;wait for input buffer ready
-  2342                                  			mov	al,bh						;set/reset lamps value
-  2343                                  			out	EKEYPORTDATA,al					;send lamps value
-  2344                                  			call	WaitForKeyOutBuffer				;wait for 8042 result
-  2345                                  			in	al,EKEYPORTDATA					;read 8042 'ACK' (0fah)
-  2346                                  			ret							;return to caller
-  2347                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2333                                  ;	PlaceCursor
+  2334                                  ;	PutPrimaryEndOfInt
+  2335                                  ;	PutSecondaryEndOfInt
+  2336                                  ;	SetKeyboardLamps
+  2337                                  ;	WaitForKeyInBuffer
+  2338                                  ;	WaitForKeyOutBuffer
+  2339                                  ;
+  2340                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2341                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2342                                  ;
+  2343                                  ;	Routine:	PlaceCursor
+  2344                                  ;
+  2345                                  ;	Description:	This routine positions the cursor on the console.
+  2346                                  ;
+  2347                                  ;	In:		DS	OS data selector
   2348                                  ;
-  2349                                  ;	Routine:	WaitForKeyInBuffer
-  2350                                  ;
-  2351                                  ;	Description:	Wait for keyboard input buffer to be ready for input.
-  2352                                  ;
-  2353                                  ;	Out:		ZF	1 = Input buffer ready
-  2354                                  ;				0 = Input buffer not ready after timeout
-  2355                                  ;
-  2356                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2357                                  WaitForKeyInBuffer	push	ecx						;save volatile regs
-  2358                                  			mov	ecx,EKEYWAITLOOP				;keyboard controller timeout
-  2359                                  .10			in	al,EKEYPORTSTAT					;keyboard status byte
-  2360                                  			test	al,EKEYBITIN					;is input buffer still full?
-  2361                                  			loopnz	.10						;yes, repeat till timeout
-  2362                                  			pop	ecx						;restore volatile regs
-  2363                                  			ret							;return to caller
-  2364                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2365                                  ;
-  2366                                  ;	Routine:	WaitForKeyOutBuffer
-  2367                                  ;
-  2368                                  ;	Description:	Wait for keyboard output buffer to have data to read.
-  2369                                  ;
-  2370                                  ;	Out:		ZF	0 = Output buffer has data from controller
-  2371                                  ;				1 = Output buffer empty after timeout
-  2372                                  ;
-  2373                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2374                                  WaitForKeyOutBuffer	push	ecx						;save volatile regs
-  2375                                  			mov	ecx,EKEYWAITLOOP				;keyboard controller timeout
-  2376                                  .10			in	al,EKEYPORTSTAT					;keyboard status byte
-  2377                                  			test	al,EKEYBITOUT					;output buffer status bit
-  2378                                  			loopz	.10						;loop until output buffer bit
-  2379                                  			pop	ecx						;restore volatile regs
-  2380                                  			ret							;return to caller
-  2381                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2382                                  ;
-  2383                                  ;	End of the Kernel Function Library
+  2349                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2350                                  PlaceCursor		push	ecx						;save non-volatile regs
+  2351                                  			mov	al,[wbConsoleRow]				;al = row
+  2352                                  			mov	ah,ECONCOLS					;ah = cols/row
+  2353                                  			mul	ah						;row offset
+  2354                                  			add	al,[wbConsoleColumn]				;add column
+  2355                                  			adc	ah,0						;add overflow
+  2356                                  			mov	ecx,eax						;screen offset
+  2357                                  			mov	dl,ECRTPORTLO					;crt controller port lo
+  2358                                  			mov	dh,ECRTPORTHI					;crt controller port hi
+  2359                                  			mov	al,ECRTCURLOCHI					;crt cursor loc reg hi
+  2360                                  			out	dx,al						;select register
+  2361                                  			inc	edx						;data port
+  2362                                  			mov	al,ch						;hi-order cursor loc
+  2363                                  			out	dx,al						;store hi-order loc
+  2364                                  			dec	edx						;register select port
+  2365                                  			mov	al,ECRTCURLOCLO					;crt cursor loc reg lo
+  2366                                  			out	dx,al						;select register
+  2367                                  			inc	edx						;data port
+  2368                                  			mov	al,cl						;lo-order cursor loc
+  2369                                  			out	dx,al						;store lo-order loc
+  2370                                  			pop	ecx						;restore non-volatile regs
+  2371                                  			ret							;return
+  2372                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2373                                  ;
+  2374                                  ;	Routine:	PutPrimaryEndOfInt
+  2375                                  ;
+  2376                                  ;	Description:	This routine sends a non-specific end-of-interrupt signal to the primary PIC.
+  2377                                  ;
+  2378                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2379                                  PutPrimaryEndOfInt	sti							;enable maskable interrupts
+  2380                                  			mov	al,EPICEOI					;non-specific end-of-interrupt
+  2381                                  			out	EPICPORTPRI,al					;send EOI to primary PIC
+  2382                                  			ret							;return
+  2383                                  ;-----------------------------------------------------------------------------------------------------------------------
   2384                                  ;
-  2385                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2386                                  			times	8190-($-$$) db 0h				;zero fill to end of section
-  2387                                  			db	055h,0AAh					;end of segment
-  2388                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2389                                  ;
-  2390                                  ;	Console Task
-  2391                                  ;
-  2392                                  ;	The only task defined in the kernel is the console task. This task consists of code, data, stack, and task state
-  2393                                  ;	segments and a local descriptor table. The console task accepts and echos user keyboard input to the console
-  2394                                  ;	screen and responds to user commands.
+  2385                                  ;	Routine:	PutSecondaryEndOfInt
+  2386                                  ;
+  2387                                  ;	Description:	This routine sends a non-specific end-of-interrupt signal to the secondary PIC.
+  2388                                  ;
+  2389                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2390                                  PutSecondaryEndOfInt	sti							;enable maskable interrupts
+  2391                                  			mov	al,EPICEOI					;non-specific end-of-interrupt
+  2392                                  			out	EPICPORTSEC,al					;send EOI to secondary PIC
+  2393                                  			ret							;return
+  2394                                  ;-----------------------------------------------------------------------------------------------------------------------
   2395                                  ;
-  2396                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2397                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2398                                  ;
-  2399                                  ;	Console Stack								@disk: 007400	@mem:  004000
-  2400                                  ;
-  2401                                  ;	This is the stack for the console task. It supports 448 nested calls.
-  2402                                  ;
-  2403                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2404                                  section			constack						;console task stack
-  2405                                  			times	1792-($-$$) db 0h				;zero fill to end of section
-  2406                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2407                                  ;
-  2408                                  ;	Console Local Descriptor Table						@disk: 007B00	@mem:  004700
-  2409                                  ;
-  2410                                  ;	This is the LDT for the console task. It defines the stack, code, data and queue segments as well as data
-  2411                                  ;	aliases for the TSS LDT. Data aliases allow inspection and altering of the TSS and LDT. This LDT can hold up to
-  2412                                  ;	16 descriptors. Six are initially defined.
-  2413                                  ;
+  2396                                  ;	Routine:	SetKeyboardLamps
+  2397                                  ;
+  2398                                  ;	Description:	This routine sends the set/reset mode indicators command to the keyboard device.
+  2399                                  ;
+  2400                                  ;	In:		BH	00000CNS (C:Caps Lock,N:Num Lock,S:Scroll Lock)
+  2401                                  ;
+  2402                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2403                                  SetKeyboardLamps	call	WaitForKeyInBuffer				;wait for input buffer ready
+  2404                                  			mov	al,EKEYCMDLAMPS					;set/reset lamps command
+  2405                                  			out	EKEYPORTDATA,al					;send command to 8042
+  2406                                  			call	WaitForKeyOutBuffer				;wait for 8042 result
+  2407                                  			in	al,EKEYPORTDATA					;read 8042 'ACK' (0fah)
+  2408                                  			call	WaitForKeyInBuffer				;wait for input buffer ready
+  2409                                  			mov	al,bh						;set/reset lamps value
+  2410                                  			out	EKEYPORTDATA,al					;send lamps value
+  2411                                  			call	WaitForKeyOutBuffer				;wait for 8042 result
+  2412                                  			in	al,EKEYPORTDATA					;read 8042 'ACK' (0fah)
+  2413                                  			ret							;return
   2414                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2415                                  section			conldt							;console local descriptors
-  2416                                  			dq	004093004780007Fh				;04 TSS alias
-  2417                                  			dq	004093004700007Fh				;0C LDT alias
-  2418                                  			dq	00409300400006FFh				;14 stack
-  2419                                  			dq	00C093000000FFFFh				;1C data
-  2420                                  			dq	00409B0050000FFFh				;24 code
-  2421                                  			dq	00409300480007FFh				;2C message queue
-  2422                                  			times	128-($-$$) db 0h				;zero fill to end of section
+  2415                                  ;
+  2416                                  ;	Routine:	WaitForKeyInBuffer
+  2417                                  ;
+  2418                                  ;	Description:	This routine waits for keyboard input buffer to be ready for input.
+  2419                                  ;
+  2420                                  ;	Out:		ZF	1 = Input buffer ready
+  2421                                  ;				0 = Input buffer not ready after timeout
+  2422                                  ;
   2423                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2424                                  ;
-  2425                                  ;	Console Task State Segment						@disk: 007B80	@mem:  004780
-  2426                                  ;
-  2427                                  ;	This is the TSS for the console task. All rings share the same stack. DS and ES are set to the console data
-  2428                                  ;	segment. CS to console code.
-  2429                                  ;
-  2430                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2431                                  section			contss							;console task state segment
-  2432                                  			dd	0						;00 back-link tss
-  2433                                  			dd	0700h						;04 esp ring 0
-  2434                                  			dd	0014h						;08 ss ring 0
-  2435                                  			dd	0700h						;0C esp ring 1
-  2436                                  			dd	0014h						;10 es ring 1
-  2437                                  			dd	0700h						;14 esp ring 2
-  2438                                  			dd	0014h						;18 ss ring 2
-  2439                                  			dd	0						;1C cr ring 3
-  2440                                  			dd	0						;20 eip
-  2441                                  			dd	0200h						;24 eflags
-  2442                                  			dd	0						;28 eax
-  2443                                  			dd	0						;2C ecx
-  2444                                  			dd	0						;30 edx
-  2445                                  			dd	0						;34 ebx
-  2446                                  			dd	0700h						;38 esp ring 3
-  2447                                  			dd	0						;3C ebp
-  2448                                  			dd	0						;40 esi
-  2449                                  			dd	0						;44 edi
-  2450                                  			dd	001Ch						;48 es
-  2451                                  			dd	0024h						;4C cs
-  2452                                  			dd	0014h						;50 ss ring 3
-  2453                                  			dd	001Ch						;54 ds
-  2454                                  			dd	0						;58 fs
-  2455                                  			dd	0						;5c gs
-  2456                                  			dd	0050h						;60 ldt selector in gdt
-  2457                                  			times	128-($-$$) db 0h				;zero fill to end of section
-  2458                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2459                                  ;
-  2460                                  ;	Console Message Queue							@disk: 007C00	@mem: 004800
-  2461                                  ;
-  2462                                  ;	The console message queue is 2048 bytes of memory organized as a queue of 510 double words (4 bytes each) and
-  2463                                  ;	two double word values that act as indices. The queue is a FIFO that is fed by the keyboard hardware interrupt
-  2464                                  ;	handler and consumed by a service routine called from a task. Each queue entry defines an input (keystroke)
-  2465                                  ;	event.
-  2466                                  ;
-  2467                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2468                                  section			conmque							;console message queue
-  2469                                  			dd	8						;head pointer
-  2470                                  			dd	8						;tail pointer
-  2471                                  			times	510 dd 0					;queue elements
-  2472                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2473                                  ;
-  2474                                  ;	Console Code								@disk: 008400	@mem: 005000
-  2475                                  ;
-  2476                                  ;	This is the code for the console task. The task is defined in the GDT in two descriptors, the Local Descriptor
-  2477                                  ;	Table (LDT) at 0050h and the Task State Segment (TSS) at 0058h. Jumping to or calling a TSS selector causes a
-  2478                                  ;	task switch, giving control to the code for the task at the CS:IP defined in the TSS for the current ring level.
-  2479                                  ;	The initial CS:IP in the Console TSS is 24h:0, where 24h is a selector in the LDT. This selector points to the
-  2480                                  ;	concode section, loaded into memory 5000h by the Loader. The console task is dedicated to accepting user key-
-  2481                                  ;	board input, echoing to the console screen and responding to user commands.
-  2482                                  ;
-  2483                                  ;	When control reaches this section, our addressability is set up according to the following diagram.
-  2484                                  ;
-  2485                                  ;	DS,ES --------> 000000	+-----------------------------------------------+ DS,ES:0000
-  2486                                  ;				|  Real Mode Interrupt Vectors			|
-  2487                                  ;			000400	+-----------------------------------------------+ DS,ES:0400
-  2488                                  ;				|  Reserved BIOS Memory Area			|
-  2489                                  ;			000800	+-----------------------------------------------+ DS,ES:0800
-  2490                                  ;				|  Shared Kernel Memory Area			|
-  2491                                  ;			001000	+-----------------------------------------------+		<-- GDTR
-  2492                                  ;				|  Global Descriptor Table (GDT)		|
-  2493                                  ;			001800	+-----------------------------------------------+		<-- IDTR
-  2494                                  ;				|  Interrupt Descriptor Table (IDT)		|
-  2495                                  ;			002000	+-----------------------------------------------+
-  2496                                  ;				|  Interrupt Handlers				|
-  2497                                  ;				|  Kernel Function Library			|
-  2498                                  ;	SS ----------->	004000	+===============================================+ SS:0000
-  2499                                  ;				|  Console Task Stack Area			|
-  2500                                  ;	SS:SP --------> 004700	+-----------------------------------------------+ SS:0700	<-- LDTR = GDT.SEL 0050h
-  2501                                  ;				|  Console Task Local Descriptor Table (LDT)	|
-  2502                                  ;			004780	+-----------------------------------------------+		<-- TR  = GDT.SEL 0058h
-  2503                                  ;				|  Console Task Task State Segment (TSS)	|
-  2504                                  ;			004800	+-----------------------------------------------+
-  2505                                  ;				|  Console Task Message Queue			|
-  2506                                  ;	CS,CS:IP ----->	005000	+-----------------------------------------------+ CS:0000
-  2507                                  ;				|  Console Task Code				|
-  2508                                  ;				|  Console Task Constants			|
-  2509                                  ;			006000	+===============================================+
-  2510                                  ;
-  2511                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2512                                  section			concode	vstart=5000h					;labels relative to 5000h
-  2513                                  ConCode			call	ConInitializeData				;initialize console variables
-  2514                                  			clearConsoleScreen					;clear the console screen
-  2515                                  			putConsoleString czTitle				;display startup message
-  2516                                  .10			putConsoleString czPrompt				;display input prompt
-  2517                                  			placeCursor						;set CRT cursor location
-  2518                                  .20			sti							;enable interrupts
-  2519                                  			hlt							;halt until interrupt
-  2520                                  			jmp	.20						;continue halt loop
-  2521                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2522                                  ;
-  2523                                  ;	Routine:	ConInitializeData
-  2524                                  ;
-  2525                                  ;	Description:	Initialize console variables used by the console task.
+  2424                                  WaitForKeyInBuffer	push	ecx						;save non-volatile regs
+  2425                                  			mov	ecx,EKEYWAITLOOP				;keyboard controller timeout
+  2426                                  .10			in	al,EKEYPORTSTAT					;keyboard status byte
+  2427                                  			test	al,EKEYBITIN					;is input buffer still full?
+  2428                                  			loopnz	.10						;yes, repeat till timeout
+  2429                                  			pop	ecx						;restore non-volatile regs
+  2430                                  			ret							;return
+  2431                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2432                                  ;
+  2433                                  ;	Routine:	WaitForKeyOutBuffer
+  2434                                  ;
+  2435                                  ;	Description:	This routine waits for keyboard output buffer to have data to read.
+  2436                                  ;
+  2437                                  ;	Out:		ZF	0 = Output buffer has data from controller
+  2438                                  ;				1 = Output buffer empty after timeout
+  2439                                  ;
+  2440                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2441                                  WaitForKeyOutBuffer	push	ecx						;save non-volatile regs
+  2442                                  			mov	ecx,EKEYWAITLOOP				;keyboard controller timeout
+  2443                                  .10			in	al,EKEYPORTSTAT					;keyboard status byte
+  2444                                  			test	al,EKEYBITOUT					;output buffer status bit
+  2445                                  			loopz	.10						;loop until output buffer bit
+  2446                                  			pop	ecx						;restore non-volatile regs
+  2447                                  			ret							;return
+  2448                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2449                                  ;
+  2450                                  ;	End of the Kernel Function Library
+  2451                                  ;
+  2452                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2453                                  			times	8190-($-$$) db 0h				;zero fill to end of section
+  2454                                  			db	055h,0AAh					;end of segment
+  2455                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2456                                  ;
+  2457                                  ;	Console Task
+  2458                                  ;
+  2459                                  ;	The only task defined in the kernel is the console task. This task consists of code, data, stack, and task state
+  2460                                  ;	segments and a local descriptor table. The console task accepts and echos user keyboard input to the console
+  2461                                  ;	screen and responds to user commands.
+  2462                                  ;
+  2463                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2464                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2465                                  ;
+  2466                                  ;	Console Stack								@disk: 007400	@mem:  004000
+  2467                                  ;
+  2468                                  ;	This is the stack for the console task. It supports 448 nested calls.
+  2469                                  ;
+  2470                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2471                                  section			constack						;console task stack
+  2472                                  			times	1792-($-$$) db 0h				;zero fill to end of section
+  2473                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2474                                  ;
+  2475                                  ;	Console Local Descriptor Table						@disk: 007B00	@mem:  004700
+  2476                                  ;
+  2477                                  ;	This is the LDT for the console task. It defines the stack, code, data and queue segments as well as data
+  2478                                  ;	aliases for the TSS LDT. Data aliases allow inspection and altering of the TSS and LDT. This LDT can hold up to
+  2479                                  ;	16 descriptors. Six are initially defined.
+  2480                                  ;
+  2481                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2482                                  section			conldt							;console local descriptors
+  2483                                  			dq	004093004780007Fh				;04 TSS alias
+  2484                                  			dq	004093004700007Fh				;0C LDT alias
+  2485                                  			dq	00409300400006FFh				;14 stack
+  2486                                  			dq	00CF93000000FFFFh				;1C data
+  2487                                  			dq	00409B0050000FFFh				;24 code
+  2488                                  			dq	00409300480007FFh				;2C message queue
+  2489                                  			times	128-($-$$) db 0h				;zero fill to end of section
+  2490                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2491                                  ;
+  2492                                  ;	Console Task State Segment						@disk: 007B80	@mem:  004780
+  2493                                  ;
+  2494                                  ;	This is the TSS for the console task. All rings share the same stack. DS and ES are set to the console data
+  2495                                  ;	segment. CS to console code.
+  2496                                  ;
+  2497                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2498                                  section			contss							;console task state segment
+  2499                                  			dd	0						;00 back-link tss
+  2500                                  			dd	0700h						;04 esp ring 0
+  2501                                  			dd	0014h						;08 ss ring 0
+  2502                                  			dd	0700h						;0C esp ring 1
+  2503                                  			dd	0014h						;10 es ring 1
+  2504                                  			dd	0700h						;14 esp ring 2
+  2505                                  			dd	0014h						;18 ss ring 2
+  2506                                  			dd	0						;1C cr ring 3
+  2507                                  			dd	0						;20 eip
+  2508                                  			dd	0200h						;24 eflags
+  2509                                  			dd	0						;28 eax
+  2510                                  			dd	0						;2C ecx
+  2511                                  			dd	0						;30 edx
+  2512                                  			dd	0						;34 ebx
+  2513                                  			dd	0700h						;38 esp ring 3
+  2514                                  			dd	0						;3C ebp
+  2515                                  			dd	0						;40 esi
+  2516                                  			dd	0						;44 edi
+  2517                                  			dd	001Ch						;48 es
+  2518                                  			dd	0024h						;4C cs
+  2519                                  			dd	0014h						;50 ss ring 3
+  2520                                  			dd	001Ch						;54 ds
+  2521                                  			dd	0						;58 fs
+  2522                                  			dd	0						;5c gs
+  2523                                  			dd	0050h						;60 ldt selector in gdt
+  2524                                  			times	128-($-$$) db 0h				;zero fill to end of section
+  2525                                  ;-----------------------------------------------------------------------------------------------------------------------
   2526                                  ;
-  2527                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2528                                  ConInitializeData	push	ecx						;save volatile regs
-  2529                                  			push	edi						;
-  2530                                  			push	es						;
-  2531                                  			push	ESELDAT						;load OS data selector ...
-  2532                                  			pop	es						;... into extra segment register
-  2533                                  			mov	edi,ECONDATA					;OS console data address
-  2534                                  			xor	al,al						;initialization value
-  2535                                  			mov	ecx,ECONDATALEN					;size of OS console data
-  2536                                  			cld							;forward strings
-  2537                                  			rep	stosb						;initialize data
-  2538                                  			pop	es						;restore volatile regs
-  2539                                  			pop	edi						;
-  2540                                  			pop	ecx						;
-  2541                                  			ret							;return to caller
-  2542                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2543                                  ;
-  2544                                  ;	Constants
-  2545                                  ;
-  2546                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2547                                  czTitle			db	"Custom Operating System 1.0",13,10,0		;version string
-  2548                                  czPrompt		db	":",0						;prompt string
-  2549                                  			times	4094-($-$$) db 0h				;zero fill to end of section
-  2550                                  			db	055h,0AAh					;end of section
-  2551                                  %endif
-  2552                                  %ifdef BUILDDISK
-  2553                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2554                                  ;
-  2555                                  ;	Free Disk Space								@disk: 009400	@mem:  n/a
-  2556                                  ;
-  2557                                  ;	Following the convention introduced by DOS, we use the value 'F6' to indicate unused floppy disk storage.
-  2558                                  ;
-  2559                                  ;-----------------------------------------------------------------------------------------------------------------------
-  2560                                  section			unused							;unused disk space
-  2561                                  			times	EBOOTDISKBYTES-09400h db 0F6h			;fill to end of disk image
-  2562                                  %endif
+  2527                                  ;	Console Message Queue							@disk: 007C00	@mem: 004800
+  2528                                  ;
+  2529                                  ;	The console message queue is 2048 bytes of memory organized as a queue of 510 double words (4 bytes each) and
+  2530                                  ;	two double word values that act as indices. The queue is a FIFO that is fed by the keyboard hardware interrupt
+  2531                                  ;	handler and consumed by a service routine called from a task. Each queue entry defines an input (keystroke)
+  2532                                  ;	event.
+  2533                                  ;
+  2534                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2535                                  section			conmque							;console message queue
+  2536                                  			dd	8						;head pointer
+  2537                                  			dd	8						;tail pointer
+  2538                                  			times	510 dd 0					;queue elements
+  2539                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2540                                  ;
+  2541                                  ;	Console Code								@disk: 008400	@mem: 005000
+  2542                                  ;
+  2543                                  ;	This is the code for the console task. The task is defined in the GDT in two descriptors, the Local Descriptor
+  2544                                  ;	Table (LDT) at 0050h and the Task State Segment (TSS) at 0058h. Jumping to or calling a TSS selector causes a
+  2545                                  ;	task switch, giving control to the code for the task at the CS:IP defined in the TSS for the current ring level.
+  2546                                  ;	The initial CS:IP in the Console TSS is 24h:0, where 24h is a selector in the LDT. This selector points to the
+  2547                                  ;	concode section, loaded into memory 5000h by the Loader. The console task is dedicated to accepting user key-
+  2548                                  ;	board input, echoing to the console screen and responding to user commands.
+  2549                                  ;
+  2550                                  ;	When control reaches this section, our addressability is set up according to the following diagram.
+  2551                                  ;
+  2552                                  ;	DS,ES --------> 000000	+-----------------------------------------------+ DS,ES:0000
+  2553                                  ;				|  Real Mode Interrupt Vectors			|
+  2554                                  ;			000400	+-----------------------------------------------+ DS,ES:0400
+  2555                                  ;				|  Reserved BIOS Memory Area			|
+  2556                                  ;			000800	+-----------------------------------------------+ DS,ES:0800
+  2557                                  ;				|  Shared Kernel Memory Area			|
+  2558                                  ;			001000	+-----------------------------------------------+		<-- GDTR
+  2559                                  ;				|  Global Descriptor Table (GDT)		|
+  2560                                  ;			001800	+-----------------------------------------------+		<-- IDTR
+  2561                                  ;				|  Interrupt Descriptor Table (IDT)		|
+  2562                                  ;			002000	+-----------------------------------------------+
+  2563                                  ;				|  Interrupt Handlers				|
+  2564                                  ;				|  Kernel Function Library			|
+  2565                                  ;	SS ----------->	004000	+===============================================+ SS:0000
+  2566                                  ;				|  Console Task Stack Area			|
+  2567                                  ;	SS:SP --------> 004700	+-----------------------------------------------+ SS:0700	<-- LDTR = GDT.SEL 0050h
+  2568                                  ;				|  Console Task Local Descriptor Table (LDT)	|
+  2569                                  ;			004780	+-----------------------------------------------+		<-- TR  = GDT.SEL 0058h
+  2570                                  ;				|  Console Task Task State Segment (TSS)	|
+  2571                                  ;			004800	+-----------------------------------------------+
+  2572                                  ;				|  Console Task Message Queue			|
+  2573                                  ;	CS,CS:IP ----->	005000	+-----------------------------------------------+ CS:0000
+  2574                                  ;				|  Console Task Code				|
+  2575                                  ;				|  Console Task Constants			|
+  2576                                  ;			006000	+===============================================+
+  2577                                  ;
+  2578                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2579                                  section			concode	vstart=5000h					;labels relative to 5000h
+  2580                                  ConCode			call	ConInitializeData				;initialize console variables
+  2581                                  
+  2582                                  			clearConsoleScreen					;clear the console screen
+  2583                                  			putConsoleString czTitle				;display startup message
+  2584                                  .10			putConsoleString czPrompt				;display input prompt
+  2585                                  			placeCursor						;set CRT cursor location
+  2586                                  
+  2587                                  .20			sti							;enable interrupts
+  2588                                  			hlt							;halt until interrupt
+  2589                                  			jmp	.20						;continue halt loop
+  2590                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2591                                  ;
+  2592                                  ;	Routine:	ConInitializeData
+  2593                                  ;
+  2594                                  ;	Description:	This routine initializes console task variables.
+  2595                                  ;
+  2596                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2597                                  ConInitializeData	push	ecx						;save non-volatile regs
+  2598                                  			push	edi						;
+  2599                                  			push	es						;
+  2600                                  			push	ESELDAT						;load OS data selector ...
+  2601                                  			pop	es						;... into extra segment register
+  2602                                  			mov	edi,ECONDATA					;OS console data address
+  2603                                  			xor	al,al						;initialization value
+  2604                                  			mov	ecx,ECONDATALEN					;size of OS console data
+  2605                                  			cld							;forward strings
+  2606                                  			rep	stosb						;initialize data
+  2607                                  			pop	es						;restore non-volatile regs
+  2608                                  			pop	edi						;
+  2609                                  			pop	ecx						;
+  2610                                  			ret							;return
+  2611                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2612                                  ;
+  2613                                  ;	Constants
+  2614                                  ;
+  2615                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2616                                  czTitle			db	"Custom Operating System 1.0",13,10,0		;version string
+  2617                                  czPrompt		db	":",0						;prompt string
+  2618                                  			times	4094-($-$$) db 0h				;zero fill to end of section
+  2619                                  			db	055h,0AAh					;end of section
+  2620                                  %endif
+  2621                                  %ifdef BUILDDISK
+  2622                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2623                                  ;
+  2624                                  ;	Free Disk Space								@disk: 009400	@mem:  n/a
+  2625                                  ;
+  2626                                  ;	Following the convention introduced by DOS, we use the value 'F6' to indicate unused floppy disk storage.
+  2627                                  ;
+  2628                                  ;-----------------------------------------------------------------------------------------------------------------------
+  2629                                  section			unused							;unused disk space
+  2630                                  			times	EBOOTDISKBYTES-09400h db 0F6h			;fill to end of disk image
+  2631                                  %endif
