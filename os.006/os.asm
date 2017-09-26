@@ -1,4 +1,4 @@
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;
 ;	File:		os.asm
 ;
@@ -8,7 +8,7 @@
 ;			are added to the queue by the keyboard interrupt handler and are read and processed by the
 ;			console task.
 ;
-;	Revised:	January 1, 2017
+;	Revised:	July 1, 2017
 ;
 ;	Assembly:	nasm os.asm -f bin -o os.dat     -l os.dat.lst     -DBUILDBOOT
 ;			nasm os.asm -f bin -o os.dsk     -l os.dsk.lst     -DBUILDDISK
@@ -19,7 +19,7 @@
 ;
 ;			Copyright (C) 2010-2017 by David J. Walling. All Rights Reserved.
 ;
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Assembly Directives
@@ -48,13 +48,18 @@
 ;
 ;	Comments:	A comment that spans the entire line begins with a semicolon in column 1.
 ;			A comment that accompanies code on a line begins with a semicolon in column 81.
+;			Register names in comments are in upper case.
+;			Hexadecimal values in comments are in lower case.
+;			Routines are preceded with a comment box that includes the routine name, description, and
+;			register contents on entry and exit.
 ;
 ;	Alignment:	Assembly instructions (mnemonics) begin in column 25.
 ;			Assembly operands begin in column 33.
 ;			Lines should not extend beyond column 120.
 ;
-;	Routines:	Routine names are in mixed case (GetYear, ReadRealTimeClock)
-;			Routine names begin with a verb (Get, Read, etc.)
+;	Routines:	Routine names are in mixed case (GetYear, ReadRealTimeClock).
+;			Routine names begin with a verb (Get, Read, etc.).
+;			Routines should have a single entry address and a single exit instruction (ret, iretd, etc.).
 ;
 ;	Constants:	Symbolic constants (equates) are named in all-caps beginning with 'E' (EDATAPORT).
 ;			Constant stored values are named in camel case, starting with 'c'.
@@ -74,71 +79,81 @@
 ;			ww......	variable word (resw)
 ;			wb......	variable byte (resb)
 ;
+;	Literals:	Literal values defined by external standards should be defined as symbolic constants (equates).
+;			Hexadecimal literals in code are in upper case with a leading '0' and trailing 'h'. e.g. 01Fh.
+;			Binary literal values in source code are encoded with a final 'b', e.g. 1010b.
+;			Decimal literal values in source code are strictly numerals, e.g. 2048.
+;			Octal literal values are avoided.
+;			String literals are enclosed in double quotes, e.g. "Loading OS".
+;			Single character literals are enclosed in single quotes, e.g. 'A'.
+;
 ;	Structures:	Structure names are in all-caps (DATETIME).
 ;			Structure names do not begin with a verb.
 ;
 ;	Macros:		Macro names are in camel case (getDateString).
 ;			Macro names do begin with a verb.
 ;
-;	Registers:	Registers EBX, ESI, EDI, EBP, SS, CS, DS and ES are preserved by all OS routines.
+;	Registers:	Register names in comments are in upper case.
+;			Register names in source code are in lower case.
+;
+;	Usage:		Registers EBX, ECX, ESI, EDI, EBP, SS, CS, DS and ES are preserved by all OS routines.
 ;			Registers EAX and ECX are preferred for returning response/result values.
 ;			Register EBX is preferred for passing a context (structure) address parameter.
 ;			Registers EAX, EDX, ECX and EBX are preferred for passing integral parameters.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;
 ;	Equates
 ;
-;	The equate (equ) statements define symbolic names for fixed values so that these values can be defined and
+;	The equate (equ) statement defines a symbolic name for a fixed value so that such a value can be defined and
 ;	verified once and then used throughout the code. Using symbolic names simplifies searching for where logical
-;	values are used. Equate names are in all-caps and are the only symbolic names that begin with the letter 'E'.
-;	Equates are grouped into related sets. Hardware-based values are listed first, followed by BIOS and protocol
-;	values and, lastly, application values.
+;	values are used. Equate names are in all-caps and begin with the letter 'E'. Equates are grouped into related
+;	sets. Hardware-based values are listed first, followed by BIOS, protocol and application values.
 ;
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;	8042 Keyboard Controller						EKEY...
+;	8042 Keyboard Controller						EKEYB...
 ;
 ;	The 8042 Keyboard Controller (8042) is a programmable controller that accepts input signals from the keyboard
-;	device. It also signals a hardware interrupt to the CPU when the low-order bit of I/O port 0x64 is set to zero.
+;	device. It also signals a hardware interrupt to the CPU when the low-order bit of I/O port 64h is set to zero.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-EKEYPORTDATA		equ	060h						;8042 data port
-EKEYPORTSTAT		equ	064h						;8042 status port
-EKEYCMDRESET		equ	0FEh						;8042 drive B0 low to restart
-EKEYBITOUT		equ	001h						;8042 output buffer status bit
-EKEYBITIN		equ	002h						;8042 input buffer status bit
-EKEYCMDLAMPS		equ	0EDh						;8042 set/reset lamps command
-EKEYWAITLOOP		equ	010000h						;8042 wait loop
+EKEYBPORTDATA		equ	060h						;data port
+EKEYBPORTSTAT		equ	064h						;status port
+EKEYBCMDRESET		equ	0FEh						;reset bit 0 to restart system
+EKEYBBITOUT		equ	001h						;output buffer status bit
+EKEYBBITIN		equ	002h						;input buffer status bit
+EKEYBCMDLAMPS		equ	0EDh						;set/reset lamps command
+EKEYBWAITLOOP		equ	010000h						;wait loop
 										;---------------------------------------
 										;	Keyboard Scan Codes
 										;---------------------------------------
-EKEYCTRLDOWN		equ	01Dh						;control key down
-EKEYPAUSEDOWN		equ	01Dh						;pause key down (e1 1d ... )
-EKEYSHIFTLDOWN		equ	02Ah						;left shift key down
-EKEYPRTSCRDOWN		equ	02Ah						;print-screen key down (e0 2a ...)
-EKEYSLASH		equ	035h						;slash
-EKEYSHIFTRDOWN		equ	036h						;right shift key down
-EKEYALTDOWN		equ	038h						;alt key down
-EKEYCAPSDOWN		equ	03Ah						;caps-lock down
-EKEYNUMDOWN		equ	045h						;num-lock down
-EKEYSCROLLDOWN		equ	046h						;scroll-lock down
-EKEYINSERTDOWN		equ	052h						;insert down (e0 52)
-EKEYUP			equ	080h						;up
-EKEYCTRLUP		equ	09Dh						;control key up
-EKEYSHIFTLUP		equ	0AAh						;left shift key up
-EKEYSLASHUP		equ	0B5h						;slash key up
-EKEYSHIFTRUP		equ	0B6h						;right shift key up
-EKEYPRTSCRUP		equ	0B7h						;print-screen key up (e0 b7 ...)
-EKEYALTUP		equ	0B8h						;alt key up
-EKEYCAPSUP		equ	0BAh						;caps-lock up
-EKEYNUMUP		equ	0C5h						;num-lock up
-EKEYSCROLLUP		equ	0C6h						;scroll-lock up
-EKEYINSERTUP		equ	0D2h						;insert up (e0 d2)
-EKEYCODEEXT0		equ	0E0h						;8042 extended scan code 0
-EKEYCODEEXT1		equ	0E1h						;8042 extended scan code 1
+EKEYBCTRLDOWN		equ	01Dh						;control key down
+EKEYBPAUSEDOWN		equ	01Dh						;pause key down (e1 1d ... )
+EKEYBSHIFTLDOWN		equ	02Ah						;left shift key down
+EKEYBPRTSCRDOWN		equ	02Ah						;print-screen key down (e0 2a ...)
+EKEYBSLASH		equ	035h						;slash
+EKEYBSHIFTRDOWN		equ	036h						;right shift key down
+EKEYBALTDOWN		equ	038h						;alt key down
+EKEYBCAPSDOWN		equ	03Ah						;caps-lock down
+EKEYBNUMDOWN		equ	045h						;num-lock down
+EKEYBSCROLLDOWN		equ	046h						;scroll-lock down
+EKEYBINSERTDOWN		equ	052h						;insert down (e0 52)
+EKEYBUP			equ	080h						;up
+EKEYBCTRLUP		equ	09Dh						;control key up
+EKEYBSHIFTLUP		equ	0AAh						;left shift key up
+EKEYBSLASHUP		equ	0B5h						;slash key up
+EKEYBSHIFTRUP		equ	0B6h						;right shift key up
+EKEYBPRTSCRUP		equ	0B7h						;print-screen key up (e0 b7 ...)
+EKEYBALTUP		equ	0B8h						;alt key up
+EKEYBCAPSUP		equ	0BAh						;caps-lock up
+EKEYBNUMUP		equ	0C5h						;num-lock up
+EKEYBSCROLLUP		equ	0C6h						;scroll-lock up
+EKEYBINSERTUP		equ	0D2h						;insert up (e0 d2)
+EKEYBCODEEXT0		equ	0E0h						;extended scan code 0
+EKEYBCODEEXT1		equ	0E1h						;extended scan code 1
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	8253 Programmable Interrupt Timer					EPIT...
@@ -147,7 +162,7 @@ EKEYCODEEXT1		equ	0E1h						;8042 extended scan code 1
 ;	approximately 18.2 times per second.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-EPITDAYTICKS		equ	1800B0h						;8253 ticks per day
+EPITDAYTICKS		equ	1800B0h						;ticks per day
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	8259 Peripheral Interrupt Controller					EPIC...
@@ -156,11 +171,11 @@ EPITDAYTICKS		equ	1800B0h						;8253 ticks per day
 ;	external devices and signals a hardware interrupt to the CPU.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-EPICPORTPRI		equ	020h						;8259 primary control port 0
-EPICPORTPRI1		equ	021h						;8259 primary control port 1
-EPICPORTSEC		equ	0A0h						;8259 secondary control port 0
-EPICPORTSEC1		equ	0A1h						;8259 secondary control port 1
-EPICEOI			equ	020h						;8259 non-specific EOI code
+EPICPORTPRI		equ	020h						;primary control port 0
+EPICPORTPRI1		equ	021h						;primary control port 1
+EPICPORTSEC		equ	0A0h						;secondary control port 0
+EPICPORTSEC1		equ	0A1h						;secondary control port 1
+EPICEOI			equ	020h						;non-specific EOI code
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	6845 Cathode Ray Tube (CRT) Controller					ECRT...
@@ -169,10 +184,10 @@ EPICEOI			equ	020h						;8259 non-specific EOI code
 ;	for CGA, EGA, VGA and compatible video modes.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-ECRTPORTHI		equ	003h						;CRT controller port hi
-ECRTPORTLO		equ	0D4h						;CRT controller port lo
-ECRTCURLOCHI		equ	00Eh						;CRT cursor loc reg hi
-ECRTCURLOCLO		equ	00Fh						;CRT cursor loc reg lo
+ECRTPORTHI		equ	003h						;controller port hi
+ECRTPORTLO		equ	0D4h						;controller port lo
+ECRTCURLOCHI		equ	00Eh						;cursor loc reg hi
+ECRTCURLOCLO		equ	00Fh						;cursor loc reg lo
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	NEC 765 Floppy Disk Controller (FDC)					EFDC...
@@ -180,11 +195,11 @@ ECRTCURLOCLO		equ	00Fh						;CRT cursor loc reg lo
 ;	The NEC 765 FDC is a programmable controller for floppy disk drives.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-EFDCPORTHI		equ	003h						;FDC controller port hi
-EFDCPORTLOOUT		equ	0F2h						;FDC digital output register lo
-EFDCPORTLOSTAT		equ	0F4h						;FDC main status register lo
-EFDCSTATBUSY		equ	010h						;FDC main status is busy
-EFDCMOTOROFF		equ	00Ch						;FDC motor off / enable / DMA
+EFDCPORTHI		equ	003h						;controller port hi
+EFDCPORTLOOUT		equ	0F2h						;digital output register lo
+EFDCPORTLOSTAT		equ	0F4h						;main status register lo
+EFDCSTATBUSY		equ	010h						;main status is busy
+EFDCMOTOROFF		equ	00Ch						;motor off / enable / DMA
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	x86 Descriptor Access Codes						EACC...
@@ -223,71 +238,78 @@ EACCCODE		equ	10011011b					;non-conforming readable code
 ;	BIOS interrupt supports several funtions. The function code is typically passed in the AH register.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-EBIOSINTVIDEO		equ	010h						;BIOS video services interrupt
-EBIOSFNTTYOUTPUT	equ	00Eh						;BIOS video TTY output function
-EBIOSINTDISKETTE	equ	013h						;BIOS diskette services interrupt
-EBIOSINTMISC		equ	015h						;BIOS miscellaneous services interrupt
-EBIOSFNINITPROTMODE	equ	089h						;BIOS initialize protected mode fn
-EBIOSINTKEYBOARD	equ	016h						;BIOS keyboard services interrupt
-EBIOSFNKEYSTATUS	equ	001h						;BIOS keyboard status function
+EBIOSINTVIDEO		equ	010h						;video services interrupt
+EBIOSFNSETVMODE		equ	000h						;video set mode function
+EBIOSMODETEXT80		equ	003h						;video mode 80x25 text
+EBIOSFNTTYOUTPUT	equ	00Eh						;video TTY output function
+EBIOSINTDISKETTE	equ	013h						;diskette services interrupt
+EBIOSINTMISC		equ	015h						;miscellaneous services interrupt
+EBIOSFNINITPROTMODE	equ	089h						;initialize protected mode fn
+EBIOSINTKEYBOARD	equ	016h						;keyboard services interrupt
+EBIOSFNKEYSTATUS	equ	001h						;keyboard status function
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	ASCII									EASCII...
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-EASCIIBACKSPACE		equ	8						;ASCII backspace
-EASCIILINEFEED		equ	10						;ASCII line feed
-EASCIIRETURN		equ	13						;ASCII carriage return
-EASCIIESCAPE		equ	27						;ASCII escape
-EASCIISPACE		equ	32						;ASCII space
-EASCIIUPPERA		equ	65						;ASCII 'A'
-EASCIIUPPERZ		equ	90						;ASCII 'Z'
-EASCIITILDE		equ	126						;ASCII '~'
-EASCIICASE		equ	00100000b					;ASCII case bit
-EASCIICASEMASK		equ	11011111b					;ASCII case mask
+EASCIIBACKSPACE		equ	008h						;backspace
+EASCIILINEFEED		equ	00Ah						;line feed
+EASCIIRETURN		equ	00Dh						;carriage return
+EASCIIESCAPE		equ	01Bh						;escape
+EASCIISPACE		equ	020h						;space
+EASCIIUPPERA		equ	041h						;'A'
+EASCIIUPPERZ		equ	05Ah						;'Z'
+EASCIITILDE		equ	07Eh						;'~'
+EASCIICASE		equ	00100000b					;case bit
+EASCIICASEMASK		equ	11011111b					;case mask
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;	Boot Sector and Loader Constants
+;	Boot Sector and Loader Constants					EBOOT...
 ;
 ;	Equates in this section support the boot sector and the 16-bit operating system loader, which will be
 ;	responsible for placing the CPU into protected mode and calling the initial operating system task.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+EBOOTSTACKTOP		equ	0100h						;boot sector stack top relative to DS
 EBOOTSECTORBYTES	equ	512						;bytes per sector
 EBOOTDISKSECTORS	equ	2880						;sectors per disk
 EBOOTDISKBYTES		equ	(EBOOTSECTORBYTES*EBOOTDISKSECTORS)		;bytes per disk
-EBOOTSTACKTOP		equ	400h						;boot sector stack top relative to DS
-EMAXTRIES		equ	5						;max read retries
+EBOOTFATBASE		equ	(EBOOTSTACKTOP+EBOOTSECTORBYTES)		;offset of FAT I/O buffer rel to DS
+EBOOTMAXTRIES		equ	5						;max read retries
 ;-----------------------------------------------------------------------------------------------------------------------
 ;	Global Descriptor Table (GDT) Selectors					ESEL...
 ;-----------------------------------------------------------------------------------------------------------------------
-ESELDAT			equ	18h						;kernel data selector
-ESELCGA			equ	20h						;cga video selector
-ESELOSCODE		equ	48h						;os kernel selector
+ESELDAT			equ	018h						;kernel data selector
+ESELCGA			equ	020h						;cga video selector
+ESELOSCODE		equ	048h						;os kernel code selector
+ESELLOADERLDT		equ	050h						;loader local descriptor table selector
+ESELLOADERTSS		equ	058h						;loader task state segment selector
+ESELCONSOLELDT		equ	060h						;console local descriptor table selector
+ESELCONSOLETSS		equ	068h						;console task state segment selector
 ;-----------------------------------------------------------------------------------------------------------------------
 ;	LDT Selectors								ESEL...
 ;-----------------------------------------------------------------------------------------------------------------------
-ESELMQ			equ	2Ch						;console task message queue
+ESELMQ			equ	02Ch						;console task message queue
 ;-----------------------------------------------------------------------------------------------------------------------
 ;	Kernel Constants							EKRN...
 ;-----------------------------------------------------------------------------------------------------------------------
 EKRNDESLEN		equ	8						;size of descriptor
-EKRNADR			equ	1000h						;kernel base address
-EKRNSEG			equ	(EKRNADR >> 4)					;kernel base segment
+EKRNCODEADR		equ	01000h						;kernel base address (0000:1000)
+EKRNCODESEG		equ	(EKRNCODEADR >> 4)				;kernel code segment (0100:0000)
 ;-----------------------------------------------------------------------------------------------------------------------
-;	Keyboard Flags								EKEY...
+;	Keyboard Flags								EKEYF...
 ;-----------------------------------------------------------------------------------------------------------------------
-EKEYCTRLLEFT		equ	00000001b					;left control
-EKEYSHIFTLEFT		equ	00000010b					;left shift
-EKEYALTLEFT		equ	00000100b					;left alt
-EKEYCTRLRIGHT		equ	00001000b					;right control
-EKEYSHIFTRIGHT		equ	00010000b					;right shift
-EKEYSHIFT		equ	00010010b					;left or right shift
-EKEYALTRIGHT		equ	00100000b					;right alt
-EKEYLOCKSCROLL		equ	00000001b					;scroll-lock flag
-EKEYLOCKNUM		equ	00000010b					;num-lock flag
-EKEYLOCKCAPS		equ	00000100b					;cap-lock flag
-EKEYTIMEOUT		equ	10000000b					;controller timeout
+EKEYFCTRLLEFT		equ	00000001b					;left control
+EKEYFSHIFTLEFT		equ	00000010b					;left shift
+EKEYFALTLEFT		equ	00000100b					;left alt
+EKEYFCTRLRIGHT		equ	00001000b					;right control
+EKEYFSHIFTRIGHT		equ	00010000b					;right shift
+EKEYFSHIFT		equ	00010010b					;left or right shift
+EKEYFALTRIGHT		equ	00100000b					;right alt
+EKEYFLOCKSCROLL		equ	00000001b					;scroll-lock flag
+EKEYFLOCKNUM		equ	00000010b					;num-lock flag
+EKEYFLOCKCAPS		equ	00000100b					;cap-lock flag
+EKEYFTIMEOUT		equ	10000000b					;controller timeout
 ;-----------------------------------------------------------------------------------------------------------------------
 ;	Console Constants							ECON...
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -297,19 +319,19 @@ ECONOIAROW		equ	24						;operator information area row
 ECONCOLBYTES		equ	2						;bytes per column
 ECONROWBYTES		equ	(ECONCOLS*ECONCOLBYTES)				;bytes per row
 ECONROWDWORDS		equ	(ECONROWBYTES/4)				;double-words per row
-ECONCLEARDWORD		equ	07200720h					;attribute and ASCII space
-ECONOIADWORD		equ	70207020h					;attribute and ASCII space
+ECONCLEARDWORD		equ	007200720h					;attribute and ASCII space
+ECONOIADWORD		equ	070207020h					;attribute and ASCII space
 ;-----------------------------------------------------------------------------------------------------------------------
 ;	Kernel Message Identifiers						EMSG...
 ;-----------------------------------------------------------------------------------------------------------------------
-EMSGKEYDOWN		equ	41000000h					;message: key-down
-EMSGKEYUP		equ	41010000h					;message: key-up
-EMSGKEYCHAR		equ	41020000h					;message: character
-;-----------------------------------------------------------------------------------------------------------------------
+EMSGKEYDOWN		equ	041000000h					;key-down
+EMSGKEYUP		equ	041010000h					;key-up
+EMSGKEYCHAR		equ	041020000h					;character
+;=======================================================================================================================
 ;
 ;	Structures
 ;
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	MQUEUE
@@ -331,35 +353,35 @@ endstruc
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 struc			OSDATA
-			resb	400h						;000 real mode interrupt vectors
+			resb	0400h						;000 real mode interrupt vectors
 			resw	1						;400 COM1 port address
 			resw	1						;402 COM2 port address
 			resw	1						;404 COM3 port address
 			resw	1						;406 COM4 port address
 			resw	1						;408 LPT1 port address
-			resw	1						;40A LPT2 port address
-			resw	1						;40C LPT3 port address
-			resw	1						;40E LPT4 port address
+			resw	1						;40a LPT2 port address
+			resw	1						;40c LPT3 port address
+			resw	1						;40e LPT4 port address
 			resb	2						;410 equipment list flags
 			resb	1						;412 errors in PCjr infrared keybd link
-			resw	1						;413 memory size (kb) INT 12H
+			resw	1						;413 memory size (kb) INT 12h
 			resb	1						;415 mfr error test scratchpad
 			resb	1						;416 PS/2 BIOS control flags
 			resb	1						;417 keyboard flag byte 0
 			resb	1						;418 keyboard flag byte 1
 			resb	1						;419 alternate keypad entry
-			resw	1						;41A keyboard buffer head offset
-			resw	1						;41C keyboard buffer tail offset
-			resb	32						;41E keyboard buffer
-wbFDCStatus		resb	1						;43E drive recalibration status
-wbFDCControl		resb	1						;43F FDC motor status/control byte
+			resw	1						;41a keyboard buffer head offset
+			resw	1						;41c keyboard buffer tail offset
+			resb	32						;41e keyboard buffer
+wbFDCStatus		resb	1						;43e drive recalibration status
+wbFDCControl		resb	1						;43f FDC motor status/control byte
 wbFDCMotor		resb	1						;440 FDC motor timeout byte
 			resb	1						;441 status of last diskette operation
 			resb	7						;442 NEC diskette controller status
 			resb	1						;449 current video mode
-			resw	1						;44A screen columns
-			resw	1						;44C video regen buffer size
-			resw	1						;44E current video page offset
+			resw	1						;44a screen columns
+			resw	1						;44c video regen buffer size
+			resw	1						;44e current video page offset
 			resw	8						;450 cursor postions of pages 1-8
 			resb	1						;460 cursor ending scanline
 			resb	1						;461 cursor start scanline
@@ -369,7 +391,7 @@ wbFDCMotor		resb	1						;440 FDC motor timeout byte
 			resb	1						;466 CGA current color palette mask
 			resw	1						;467 CS:IP for 286 return from PROT MODE
 			resb	3						;469 vague
-wfClockTicks		resd	1						;46C clock ticks
+wdClockTicks		resd	1						;46c clock ticks
 wbClockDays		resb	1						;470 clock days
 			resb	1						;471 bios break flag
 			resw	1						;472 soft reset
@@ -378,7 +400,7 @@ wbClockDays		resb	1						;470 clock days
 			resb	1						;476 XT fised disk drive control byte
 			resb	1						;477 port offset to current fixed disk adapter
 			resb	4						;478 LPT timeout values
-			resb	4						;47C COM timeout values
+			resb	4						;47c COM timeout values
 			resw	1						;480 keyboard buffer start offset
 			resw	1						;482 keyboard buffer end offset
 			resb	1						;484 Rows on screen less 1 (EGA+)
@@ -387,48 +409,48 @@ wbClockDays		resb	1						;470 clock days
 			resb	1						;487 EGA+ video mode ops
 			resb	1						;488 EGA feature bit switches
 			resb	1						;489 VGA video display data area
-			resb	1						;48A EGA+ display combination code
-			resb	1						;48B last diskette data rate selected
-			resb	1						;48C hard disk status from controller
-			resb	1						;48D hard disk error from controller
-			resb	1						;48E hard disk interrupt control flag
-			resb	1						;48F combination hard/floppy disk card
+			resb	1						;48a EGA+ display combination code
+			resb	1						;48b last diskette data rate selected
+			resb	1						;48c hard disk status from controller
+			resb	1						;48d hard disk error from controller
+			resb	1						;48e hard disk interrupt control flag
+			resb	1						;48f combination hard/floppy disk card
 			resb	4						;490 drive 0,1,2,3 media state
 			resb	1						;494 track currently seeked to on drive 0
 			resb	1						;495 track currently seeked to on drive 1
 			resb	1						;496 keyboard mode/type
 			resb	1						;497 keyboard LED flags
 			resd	1						;498 pointer to user wait complete flag
-			resd	1						;49C user wait time-out value in microseconds
-			resb	1						;4A0 RTC wait function flag
-			resb	1						;4A1 LANA DMA channel flags
-			resb	2						;4A2 status of LANA 0,1
-			resd	1						;4A4 saved hard disk interrupt vector
-			resd	1						;4A8 BIOS video save/override pointer table addr
-			resb	8						;4AC reserved
-			resb	1						;4B4 keyboard NMI control flags
-			resd	1						;4B5 keyboard break pending flags
-			resb	1						;4B9 Port 60 single byte queue
-			resb	1						;4BA scan code of last key
-			resb	1						;4BB NMI buffer head pointer
-			resb	1						;4BC NMI buffer tail pointer
-			resb	16						;4BD NMI scan code buffer
-			resb	1						;4CD unknown
-			resw	1						;4CE day counter
-			resb	32						;4D0 unknown
-			resb	16						;4F0 intra-app comm area
+			resd	1						;49c user wait time-out value in microseconds
+			resb	1						;4a0 RTC wait function flag
+			resb	1						;4a1 LANA DMA channel flags
+			resb	2						;4a2 status of LANA 0,1
+			resd	1						;4a4 saved hard disk interrupt vector
+			resd	1						;4a8 BIOS video save/override pointer table addr
+			resb	8						;4ac reserved
+			resb	1						;4b4 keyboard NMI control flags
+			resd	1						;4b5 keyboard break pending flags
+			resb	1						;4b9 Port 60 single byte queue
+			resb	1						;4ba scan code of last key
+			resb	1						;4bb NMI buffer head pointer
+			resb	1						;4bc NMI buffer tail pointer
+			resb	16						;4bd NMI scan code buffer
+			resb	1						;4cd unknown
+			resw	1						;4de day counter
+			resb	32						;4d0 unknown
+			resb	16						;4f0 intra-app comm area
 			resb	1						;500 print-screen status byte
 			resb	3						;501 used by BASIC
 			resb	1						;504 DOS single diskette mode
 			resb	10						;505 POST work area
-			resb	1						;50F BASIC shell flag
+			resb	1						;50f BASIC shell flag
 			resw	1						;510 BASIC default DS (DEF SEG)
 			resd	1						;512 BASIC INT 1C interrupt handler
 			resd	1						;516 BASIC INT 23 interrupt handler
-			resd	1						;51A BASIC INT 24 interrupt handler
-			resw	1						;51E unknown
+			resd	1						;51a BASIC INT 24 interrupt handler
+			resw	1						;51e unknown
 			resw	1						;520 DOS dynamic storage
-			resb	14						;522 DOS diskette initialization table (INT 1E)
+			resb	14						;522 DOS diskette initialization table (INT 1e)
 			resb	4						;530 MODE command
 			resb	460						;534 unused
 			resb	256						;700 i/o drivers from io.sys/ibmbio.com
@@ -436,10 +458,20 @@ wbClockDays		resb	1						;470 clock days
 ;
 ;	OS Variables								@disk: N/A	@mem: 000800
 ;
-;	These operating system variables are system global. They are defined at low memory address 800h and are
-;	accessible by any kernel task or interrupt.
+;	Operating system variables are system global. They are defined at low memory address 800h and are typically
+;	accessed using GDT selector 18H, which defines a 4GB address space at address 0:0. The variables defined here
+;	are organized based on the task that usually accesses them.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Console Task Variables
+;
+;	These variables are exclusve to the console task. These variables are initialized by the console task when
+;	the console task starts.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+			align	4
 ECONDATA		equ	($)
 wbConsoleColumn		resb	1						;console column
 wbConsoleRow		resb	1						;console row
@@ -455,6 +487,11 @@ wbConsoleScan5		resb	1						;scan code
 wbConsoleChar		resb	1						;ASCII code
 wzConsoleInBuffer	resb	80						;command input buffer
 ECONDATALEN		equ	($-ECONDATA)					;size of console data area
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	End of OS Variables
+;
+;-----------------------------------------------------------------------------------------------------------------------
 endstruc
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -479,9 +516,9 @@ e%1			equ	($-tsvc)/4
 			dd	%1
 %endmacro
 %ifdef BUILDBOOT
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;
-;	Boot Sector Code							@disk: 000000	@mem: 007c00
+;	Boot Sector								@disk: 000000	@mem: 007c00
 ;
 ;	The first sector of the disk is the boot sector. The BIOS will load the boot sector into memory and pass
 ;	control to the code at the start of the sector. The boot sector code is responsible for loading the operating
@@ -494,7 +531,7 @@ e%1			equ	($-tsvc)/4
 ;	we do not make that assumption. The CPU starts in 16-bit addressing mode. A three-byte jump instruction is
 ;	immediately followed by a disk parameter table.
 ;
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 			cpu	8086						;assume minimal CPU
 section			boot	vstart=0100h					;emulate .COM (CS,DS,ES=PSP) addressing
 			bits	16						;16-bit code at power-up
@@ -541,7 +578,7 @@ Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 			mov	bx,cs						;BX =	      0     700   7c0
 			add	bx,ax						;BX =	    7c0     7c0   7c0
 ;
-;	Now, since we are assembling our boot code to emulate the addressing of a .COM file, we need DS and ES
+;	Now, since we are assembling our boot code to emulate the addressing of a .COM file, we want the DS and ES
 ;	registers to be set to where a Program Segment Prefix (PSP) would be, exactly 100h (256) bytes prior to
 ;	the start of our code. This will correspond to our assembled data address offsets. Note that we instructed
 ;	the assembler to produce addresses for our symbols that are offset from our code by 100h. See the "vstart"
@@ -551,26 +588,23 @@ Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 			sub	bx,16						;BX = 07b0
 			mov	ds,bx						;DS = 07b0 = psp
 			mov	es,bx						;ES = 07b0 = psp
-			mov	ss,bx						;SS = 07b0 = psp
-			mov	sp,EBOOTSTACKTOP				;SP = 0400
+			mov	ss,bx						;SS = 07b0 = psp (ints disabled)
+			mov	sp,EBOOTSTACKTOP				;SP = 0100       (ints enabled)
 ;
 ;	Our boot addressability is now set up according to the following diagram.
 ;
 ;	DS,ES,SS ----->	007b00	+-----------------------------------------------+ DS:0000
-;				|  Unused (DOS Program Segment Prefix)		|
-;			007c00	+-----------------------------------------------+ DS:0100
-;				|  Boot Sector Code (vstart=100h)		|
-;				|						|
+;				|  Boot Stack & Boot PSP (Unused)		|
+;				|  256 = 100h bytes				|
+;	SS:SP -------->	007c00	+-----------------------------------------------+ DS:0100  07b0:0100
+;				|  Boot Sector (vstart=0100h)			|
+;				|  1 sector = 512 = 200h bytes			|
 ;			007e00	+-----------------------------------------------+ DS:0300
-;				|  Boot Stack					|
-;	SS:SP --------> 007f00	+-----------------------------------------------+ DS:0400
 ;				|  File Allocation Table (FAT) I/O Buffer	|
 ;				|  9x512-byte sectors = 4,608 = 1200h bytes	|
-;				|						|
-;			009100	+-----------------------------------------------+ DS:1600
+;			009000	+-----------------------------------------------+ DS:1500  08f0:0100
 ;				|  Directory Sector Buffer & Kernel Load Area	|
-;				|						|
-;			009300	+-----------------------------------------------+ DS:1800
+;			009200	+-----------------------------------------------+ DS:1700
 ;
 ;	On entry, DL indicates the drive being booted from.
 ;
@@ -580,15 +614,20 @@ Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 ;
 			mov	ax,[cwFatSectors]				;AX = 0009 = FAT sectors
 			mul	word [cwSectorBytes]				;DX:AX = 0000:1200 = FAT bytes
-			add	ax,EBOOTSTACKTOP				;AX = 1600 = end of FAT buffer
-			mov	[wwDirBuffer],ax				;[dirbuffer] = 1600
+			add	ax,EBOOTFATBASE					;AX = 1500 = end of FAT buffer
+			mov	[wwDirBuffer],ax				;[dirbuffer] = 1500
 ;
 ;	Compute segment where os.com will be loaded.
 ;
-			shr	ax,cl						;AX = 0160
-			add	ax,bx						;AX = 0160 + 07b0 = 0910
-			sub	ax,16						;AX = 0900
-			mov	[wwLoadSegment],ax				;[loadsegment] = 0900
+			shr	ax,cl						;AX = 0150
+			add	ax,bx						;AX = 0150 + 07b0 = 0900
+			sub	ax,16						;AX = 08f0
+			mov	[wwLoadSegment],ax				;[loadsegment] = 08f0
+;
+;	Set the video mode to 80 column, 25 row, text.
+;
+			mov	ax,EBIOSFNSETVMODE<<8|EBIOSMODETEXT80		;set mode function, 80x25 text mode
+			int	EBIOSINTVIDEO					;call BIOS display interrupt
 ;
 ;	Write a message to the console so we know we have our addressability established.
 ;
@@ -626,7 +665,7 @@ Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 ;
 .30			mov	al,1						;sector count
 			mov	[wbReadCount],al				;[readcount] = 01
-			mov	bx,[wwDirBuffer]				;BX = 1600
+			mov	bx,[wwDirBuffer]				;BX = 1500
 			call	ReadSector					;read sector into es:bx
 ;
 ;	Setup variables to search this directory sector.
@@ -637,7 +676,7 @@ Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 			mov	ax,[wwSectorEntries]				;yes, limit search to sector
 .40			sub	[wwEntriesLeft],ax				;update entries left to searh
 			mov	si,cbKernelProgram				;program name
-			mov	di,[wwDirBuffer]				;DI = 1600
+			mov	di,[wwDirBuffer]				;DI = 1500
 ;
 ;	Loop through directory sectors searching for kernel program.
 ;
@@ -667,13 +706,13 @@ Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 			mov	[wwLogicalSector],ax				;start past boot sector
 			mov	ax,[cwFatSectors]				;AX = 0009
 			mov	[wbReadCount],al				;[readcount] = 09
-			mov	bx,EBOOTSTACKTOP				;BX = 0400
+			mov	bx,EBOOTFATBASE					;BX = 0300
 			call	ReadSector					;read FAT into buffer
 ;
 ;	Get the starting cluster of the kernel program and target address.
 ;
 			mov	ax,[di+26]					;AX = starting cluster of file
-			les	bx,[wwLoadOffset]				;ES:BX = kernel load address
+			les	bx,[wwLoadOffset]				;ES:BX = kernel load add (08F0:0100)
 ;
 ;	Read each program cluster into RAM.
 ;
@@ -685,7 +724,7 @@ Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 			mul	cx						;DX:AX = logical cluster sector
 			add	ax,[wwOverhead]					;AX = kernel sector nbr
 			mov	[wwLogicalSector],ax				;save logical sector nbr
-			call	ReadSector					;read sectors into es:bx
+			call	ReadSector					;read sectors into ES:BX
 ;
 ;	Update buffer pointer for next cluster.
 ;
@@ -705,7 +744,7 @@ Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 			add	ax,dx						;AX = 3*(cluster/2)
 			and	di,1						;get low bit
 			add	di,ax						;add one if cluster is odd
-			add	di,EBOOTSTACKTOP				;add FAT buffer address
+			add	di,EBOOTFATBASE					;add FAT buffer address
 			mov	ax,[di]						;get cluster bytes
 ;
 ;	Adjust cluster nbr by 4 bits if cluster is odd; test for end of chain.
@@ -722,7 +761,7 @@ Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 ;
 			db	0EAh						;jmp seg:offset
 wwLoadOffset		dw	0100h						;kernel entry offset
-wwLoadSegment		dw	0900h						;kernel entry segment (computed)
+wwLoadSegment		dw	08F0h						;kernel entry segment (computed)
 ;
 ;	Read [readcount] disk sectors from [logicalsector] into ES:BX.
 ;
@@ -739,7 +778,7 @@ ReadSector		mov	ax,[cwTrackSectors]				;AX = sectors per track
 ;
 ;	Try maxtries times to read sector.
 ;
-			mov	cx,EMAXTRIES					;CX = 0005
+			mov	cx,EBOOTMAXTRIES				;CX = 0005
 .10			push	bx						;save buffer address
 			push	cx						;save retry count
 			mov	dx,[wwDriveHead]				;DH = head, DL = drive
@@ -757,11 +796,11 @@ ReadSector		mov	ax,[cwTrackSectors]				;AX = sectors per track
 			xor	ah,ah						;AX = bios error code
 			mov	dl,16						;divisor for base 16
 			div	dl						;AL = hi order, AH = lo order
-			or	ax,3030h					;apply ASCII zone bits
-			cmp	ah,3Ah						;range test ASCII numeral
+			or	ax,03030h					;apply ASCII zone bits
+			cmp	ah,03Ah						;range test ASCII numeral
 			jb	.20						;continue if numeral
 			add	ah,7						;adjust for ASCII 'A'-'F'
-.20			cmp	al,3Ah						;range test ASCII numeral
+.20			cmp	al,03Ah						;range test ASCII numeral
 			jb	.30						;continue if numeral
 			add	ah,7						;adjust for ASCII 'A'-'F'
 .30			mov	[wzErrorCode],ax				;store ASCII error code
@@ -773,8 +812,8 @@ BootExit		call	BootPrint					;display messge to console
 			sti							;enable maskable interrupts
 			hlt							;wait for interrupt
 			jmp	.10						;repeat
-.20			mov	al,EKEYCMDRESET					;8042 pulse output port pin
-			out	EKEYPORTSTAT,al					;drive B0 low to restart
+.20			mov	al,EKEYBCMDRESET				;8042 pulse output port pin
+			out	EKEYBPORTSTAT,al				;drive B0 low to restart
 .30			sti							;enable maskable interrupts
 			hlt							;stop until reset, int, nmi
 			jmp	.30						;loop until restart kicks in
@@ -797,10 +836,10 @@ BootReturn		ret							;return
 			align	2
 cwEntryLen		dw	32						;length of directory entry
 cbKernelProgram		db	"OS      COM"					;kernel program name
-czLoadMsg		db	"Loading ...",13,10,0				;loading message
+czLoadMsg		db	"Loading OS",13,10,0				;loading message
 czErrorMsg		db	"Disk error "					;error message
-wzErrorCode		db	20h,20h,0					;error code and null terminator
-czNoKernel		db	"OS.COM missing",0				;missing kernel message
+wzErrorCode		db	020h,020h,0					;error code and null terminator
+czNoKernel		db	"OS missing",0					;missing kernel message
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Work Areas
@@ -825,7 +864,7 @@ wbTrack			db	0						;track
 			db	055h,0AAh					;end of sector signature
 %endif
 %ifdef BUILDPREP
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;
 ;	Diskette Preparation Code
 ;
@@ -833,7 +872,7 @@ wbTrack			db	0						;track
 ;	which is located in the first 30 bytes of the boot sector is first read from the diskette and overlayed onto
 ;	the OS bootstrap code so that the diskette format parameters are preserved.
 ;
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;
 ;	Query the user to insert a flopppy diskette and press enter or cancel.
 ;
@@ -864,7 +903,7 @@ Prep			mov	si,czPrepMsg10					;starting message address
 ;
 ;	Try to read the boot sector.
 ;
-			mov	cx,EMAXTRIES					;try up to five times
+			mov	cx,EBOOTMAXTRIES				;try up to five times
 .20			push	cx						;save remaining tries
 			mov	bx,wcPrepInBuf					;input buffer address
 			mov	dx,0						;head zero, drive zero
@@ -889,7 +928,7 @@ Prep			mov	si,czPrepMsg10					;starting message address
 ;
 ;	Try to write boot sector to diskette.
 ;
-			mov	cx,EMAXTRIES					;try up to five times
+			mov	cx,EBOOTMAXTRIES				;try up to five times
 .40			push	cx						;save remaining tries
 			mov	bx,Boot						;output buffer address
 			mov	dx,0						;head zero, drive zero
@@ -908,11 +947,11 @@ Prep			mov	si,czPrepMsg10					;starting message address
 			mov	ah,0						;AX = error code
 			mov	dl,10h						;hexadecimal divisor
 			idiv	dl						;AL = hi-order, AH = lo-order
-			or	ax,3030h					;add ASCII zone digits
-			cmp	ah,3Ah						;AH ASCII numeral?
+			or	ax,03030h					;add ASCII zone digits
+			cmp	ah,03Ah						;AH ASCII numeral?
 			jb	.60						;yes, continue
 			add	ah,7						;no, make ASCII 'A'-'F'
-.60			cmp	al,3Ah						;al ASCII numeral?
+.60			cmp	al,03Ah						;al ASCII numeral?
 			jb	.70						;yes, continue
 			add	al,7						;no, make ASCII
 .70			mov	[si+17],ax					;put ASCII error code in message
@@ -942,8 +981,8 @@ Prep			mov	si,czPrepMsg10					;starting message address
 			je	.85						;yes, continue
 			mov	si,czPrepMsgErrXX				;unknown error message
 .85			call	BootPrint					;display result message
-.90			mov	ax,4C00H					;terminate with zero result code
-			int	21h						;terminate DOS program
+.90			mov	ax,04C00H					;terminate with zero result code
+			int	021h						;terminate DOS program
 			ret							;return (should not execute)
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -997,7 +1036,7 @@ czPrepMsgErrXX		db	13,10,"(??) Unknown Error"
 wcPrepInBuf		equ	$
 %endif
 %ifdef BUILDDISK
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;
 ;	File Allocation Tables
 ;
@@ -1013,7 +1052,7 @@ wcPrepInBuf		equ	$
 ;
 ;	db	0abh,0cdh,0efh	;even cluster: 0dabh, odd cluster: 0efch
 ;
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	FAT copy 1								@disk: 000200	@mem: n/a
@@ -1061,17 +1100,17 @@ section			fat2							;second copy of FAT
 ;-----------------------------------------------------------------------------------------------------------------------
 section			dir							;diskette directory
 			db	"OS      COM"					;file name (must contain spaces)
-			db	20h						;attribute (archive bit set)
-			times	10 db 0;					;unused
+			db	020h						;attribute (archive bit set)
+			times	10 db 0						;unused
 			dw	0h						;time
 			db	01000001b					;mmm = 10 MOD 8 = 2; ddddd = 1
 			db	01001001b					;yyyyyyy = 2016-1980 = 36 = 24h; m/8 = 1
 			dw	2						;first cluster
-			dd	5200h						;file size
+			dd	05200h						;file size
 			times	(224*32)-($-$$) db 0h				;zero fill to end of section
 %endif
 %ifdef BUILDCOM
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;
 ;	OS.COM
 ;
@@ -1085,36 +1124,39 @@ section			dir							;diskette directory
 ;	Our loader addressability is set up according to the following diagram.
 ;
 ;	SS -----------> 007b00	+-----------------------------------------------+ SS:0000
-;				|  Boot Sector & Loader Stack Area		|
+;				|  Boot Stack & Boot PSP (Unused)		|
+;				|  256 = 100h bytes				|
+;	SS:SP -------->	007c00	+-----------------------------------------------+ SS:0100  07b0:0100
+;				|  Boot Sector (vstart=0100h)			|
+;				|  1 sector = 512 = 200h bytes			|
+;			007e00	+-----------------------------------------------+
+;				|  File Allocation Table (FAT) I/O Buffer	|
+;				|  9 x 512-byte sectors = 4,608 = 1200h bytes	|
 ;				|						|
-;	SS:SP -------->	007f00	+-----------------------------------------------+ SS:0400
-;
-;
-;	CS,DS,ES ----->	009000	+-----------------------------------------------+ CS:0000
-;				|  Unused (DOS Program Segment Prefix)		|
-;	CS:IP -------->	009100	+-----------------------------------------------+ CS:0100
+;	CS,DS,ES ----->	008f00	|  Loader PSP (Unused)				| DS:0000
+;				|						|
+;	CS:IP -------->	009000	+-----------------------------------------------+ DS:0100  08f0:0100
 ;				|  Loader Code					|
-;				|						|
-;			009300	+-----------------------------------------------+ CS:0200
+;				|  1 sector = 512 = 200h bytes			|
+;			009200	+-----------------------------------------------+ DS:0300
 ;
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;	OS Loader								@disk: 004200	@mem: 009100
+;	OS Loader								@disk: 004200	@mem: 009000
 ;
 ;	This code is the operating system loader. It resides on the boot disk at the start of the data area, following
-;	the directory. The loader occupies several clusters that are mapped in the file allocation tables above. The
-;	size of the loader is limited to 65,280 bytes since the bootstrap will copy the loader into memory at 0:9100.
+;	the directory. The loader occupies several clusters that are mapped in the file allocation tables above.
 ;	The loader executes 16-bit instructions in real mode. It performs several initialization functions such as
 ;	determining whether the CPU and other resources are sufficient to run the operating system. If all minimum
 ;	resources are present, the loader initializes protected mode tables, places the CPU into protected mode and
-;	starts the kernel task. Since the loader was called either from the bootstrap or as a .com file on the boot
+;	starts the console task. Since the loader was called either from the bootstrap or as a .com file on the boot
 ;	disk, we can assume that the initial ip is 0x100 and not perform any absolute address fix-ups on our segment
 ;	registers.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 			cpu	8086						;assume minimal CPU
-section			loader	vstart=100h					;use .COM compatible addressing
+section			loader	vstart=0100h					;use .COM compatible addressing
 			bits	16						;this is 16-bit code
 Loader			push	cs						;use the code segment
 			pop	ds						;...as our data segment
@@ -1138,24 +1180,24 @@ Loader			push	cs						;use the code segment
 ;
 ;	Fixup the GDT descriptor for the current (loader) code segment.
 ;
-			mov	si,300h						;GDT offset
+			mov	si,0300h					;GDT offset
 			mov	ax,cs						;AX:SI = gdt source
 			rol	ax,4						;AX = phys addr bits 11-0,15-12
 			mov	cl,al						;CL = phys addr bits 3-0,15-12
 			and	al,0F0h						;AL = phys addr bits 11-0
 			and	cl,00Fh						;CL = phys addr bits 15-12
-			mov	word [si+30h+2],ax				;lo-order loader code (0-15)
-			mov	byte [si+30h+4],cl				;lo-order loader code (16-23)
+			mov	word [si+030h+2],ax				;lo-order loader code (0-15)
+			mov	byte [si+030h+4],cl				;lo-order loader code (16-23)
 			mov	si,czGDTOKMsg					;GDT prepared message
 			call	PutTTYString					;display message
 ;
 ;	Move the 32-bit kernel to its appropriate memory location.
 ;
-			push	EKRNSEG						;use kernel segment ...
+			push	EKRNCODESEG					;use kernel code segment ...
 			pop	es						;... as target segment
 			xor	di,di						;ES:DI = target address
-			mov	si,300h						;DS:SI = source address
-			mov	cx,5000h					;CX = kernel size
+			mov	si,0300h					;DS:SI = source address
+			mov	cx,05000h					;CX = kernel size
 			cld							;forward strings
 			rep	movsb						;copy kernel image
 			mov	si,czKernelLoadedMsg				;kernel moved message
@@ -1165,9 +1207,9 @@ Loader			push	cs						;use the code segment
 ;
 			xor	si,si						;ES:SI = gdt addr
 			mov	ss,si						;protected mode ss
-			mov	sp,1000h					;SS:SP = protected mode ss:sp
+			mov	sp,EKRNCODEADR					;initial stack immediate before code
 			mov	ah,EBIOSFNINITPROTMODE				;initialize protected mode fn.
-			mov	bx,2028h					;BH,BL = IRQ int bases
+			mov	bx,02028h					;BH,BL = IRQ int bases
 			mov	dx,001Fh					;outer delay loop count
 .10			mov	cx,0FFFFh					;inner delay loop count
 			loop	$						;wait out pending interrupts
@@ -1186,7 +1228,7 @@ Loader			push	cs						;use the code segment
 ;
 			ltr	[cs:cwLoaderTSS]				;load task register
 			lldt	[cs:cwLoaderLDT]				;load local descriptor table register
-			jmp	0058h:0						;jump to task state segment selector
+			jmp	ESELCONSOLETSS:0				;jump to task state segment selector
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Routine:	LoaderExit
@@ -1215,8 +1257,8 @@ LoaderExit		call	PutTTYString					;display error message
 ;	keyboard controller low (OUT 64h,0feh). The restart may take some microseconds to kick in, so we issue
 ;	HLT until the system resets.
 ;
-.40			mov	al,EKEYCMDRESET					;8042 pulse output port pin
-			out	EKEYPORTSTAT,al					;drive B0 low to restart
+.40			mov	al,EKEYBCMDRESET				;8042 pulse output port pin
+			out	EKEYBPORTSTAT,al				;drive B0 low to restart
 .50			sti							;enable maskable interrupts
 			hlt							;stop until reset, int, nmi
 			jmp	.50						;loop until restart kicks in
@@ -1228,7 +1270,7 @@ LoaderExit		call	PutTTYString					;display error message
 ;			the CPUID instruction was not introduced until the SL-enhanced 80486 and Pentium processors, so
 ;			to distinguish whether we have at least an 80386, other means must be used.
 ;
-;	Output:		AX	0 = 808x, v20, etc.
+;	Out:		AX	0 = 808x, v20, etc.
 ;				1 = 80186
 ;				2 = 80286
 ;				3 = 80386
@@ -1247,7 +1289,7 @@ GetCPUType		mov	al,1						;AL = 1
 			cpu	286
 			inc	ax						;AX = 2
 			sgdt	[cbLoaderGDT]					;store gdt reg in work area
-			mov	cl,[cbLoaderGDTHiByte]				;cl = hi-order byte
+			mov	cl,[cbLoaderGDTHiByte]				;CL = hi-order byte
 			inc	cl						;was hi-byte of GDTR 0xff?
 			jz	.10						;yes, cpu is 80286
 			inc	ax						;AX = 3
@@ -1284,21 +1326,19 @@ PutTTYString		cld							;forward strings
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 			align	2
-cwLoaderTSS		dw	0068h						;TSS selector
-cwLoaderLDT		dw	0060h						;LDT selector
+cwLoaderLDT		dw	ESELLOADERLDT					;loader local descriptor table selector
+cwLoaderTSS		dw	ESELLOADERTSS					;loader task state segment selector
 cbLoaderGDT		times	5 db 0						;6-byte GDTR work area
 cbLoaderGDTHiByte	db	0						;hi-order byte
-czCPUErrorMsg		db	"The operating system requires an i386 "
-			db	"or later processor.",13,10,
-			db	"Please press any key to restart the "
-			db	"computer.",13,10,0
-czCPUOKMsg		db	"CPU ok",13,10,0
+czCPUErrorMsg		db	"The operating system requires an i386 or later processor.",13,10
+			db	"Please press any key to restart the computer.",13,10,0
+czCPUOKMsg		db	"CPU OK",13,10,0
 czGDTOKMsg		db	"GDT prepared",13,10,0
 czKernelLoadedMsg	db	"Kernel loaded",13,10,0
-czStartingMsg		db	"Starting ...",13,10,0				;loader message
+czStartingMsg		db	"Starting OS",13,10,0				;starting message
 			times	510-($-$$) db 0h				;zero fill to end of sector
 			db	055h,0AAh					;end of sector signature
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;
 ;	OS Kernel								@disk: 004400	@mem: 001000
 ;
@@ -1308,12 +1348,12 @@ czStartingMsg		db	"Starting ...",13,10,0				;loader message
 ;	commands and displays ouput to video memory. The Kernel also includes a library of system functions accessible
 ;	through software interrupt 58 (30h). Finally, the Kernel provides CPU and hardware interrupt handlers.
 ;
-;-----------------------------------------------------------------------------------------------------------------------
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
+;=======================================================================================================================
 ;
-;	Tables
+;	Kernel Tables
 ;
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Global Descriptor Table							@disk: 004400	@mem: 001000
@@ -1340,23 +1380,23 @@ czStartingMsg		db	"Starting ...",13,10,0				;loader message
 ;-----------------------------------------------------------------------------------------------------------------------
 section			gdt							;global descriptor table
 			dq	0000000000000000h				;00 required null selector
-			dq	00409300100007FFh				;08 2KB  writable data (GDT)
-			dq	00409300180007FFh				;10 2KB  writable data (IDT)
-			dq	00CF93000000FFFFh				;18 4GB  writable data (OS data)
-			dq	0040930B80000FFFh				;20 4KB  writable data (CGA video)
-			dq	0040930000000FFFh				;28 4KB  writable data (Loader stack)
-			dq	00009B000000FFFFh				;30 64KB readable 16-bit code (Loader)
-			dq	00009BFF0000FFFFh				;38 64KB readable 16-bit code (BIOS)
-			dq	004093000400FFFFh				;40 64KB writable data (BIOS data)
-			dq	00409B0020001FFFh				;48 8KB  readable code (OS code)
-			dq	004082004700007Fh				;50 80B  writable system (Console LDT)
-			dq	004089004780007Fh				;58 80B  writable system (Console TSS)
-			dq	004082000F00007Fh				;60 80B  writable system (Loader LDT)
-			dq	004089000F80007Fh				;68 80B  writable system (Loader TSS)
+			dq	00409300100007FFh				;08 2KB  writable data  (GDT alias)
+			dq	00409300180007FFh				;10 2KB  writable data  (IDT alias)
+			dq	00CF93000000FFFFh				;18 4GB  writable data  (kernel)     DS:
+			dq	0040930B80000FFFh				;20 4KB  writable data  (CGA)        ES:
+			dq	0040930000000FFFh				;28 4KB  writable stack (Loader)     SS:
+			dq	00009B000000FFFFh				;30 64KB readable code  (loader)     CS:
+			dq	00009BFF0000FFFFh				;38 64KB readable code  (BIOS)
+			dq	004093000400FFFFh				;40 64KB writable data  (BIOS)
+			dq	00409B0020001FFFh				;48 8KB  readable code  (kernel)
+			dq	004082000F00007Fh				;50 80B  writable LDT   (loader)
+			dq	004089000F80007Fh				;58 80B  writable TSS   (loader)
+			dq	004082004700007Fh				;60 80B  writable LDT   (console)
+			dq	004089004780007Fh				;88 80B  writable TSS   (console)
 			times	2048-($-$$) db 0h				;zero fill to end of section
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;	Interrupt Descriptor Table						@disk: 004C00	@mem: 001800
+;	Interrupt Descriptor Table						@disk: 004c00	@mem: 001800
 ;
 ;	The Interrupt Descriptor Table (IDT) consists of one eight-byte entry (descriptor) for each interrupt. The
 ;	descriptors here are of two kinds, interrupt gates and trap gates. The "mint" and "mtrap" macros define the
@@ -1387,12 +1427,12 @@ section			idt							;interrupt descriptor table
 			mint	nocoproc					;07 no coprocessor
 			mint	doublefault					;08 double-fault
 			mint	operand						;09 operand
-			mint	badtss						;0A bad TSS
-			mint	notpresent					;0B not-present
-			mint	stacklimit					;0C stack limit
-			mint	protection					;0D general protection fault
-			mint	int14						;0E (reserved)
-			mint	int15						;0F (reserved)
+			mint	badtss						;0a bad TSS
+			mint	notpresent					;0b not-present
+			mint	stacklimit					;0c stack limit
+			mint	protection					;0d general protection fault
+			mint	int14						;0e (reserved)
+			mint	int15						;0f (reserved)
 			mint	coproccalc					;10 (reserved)
 			mint	int17						;11 (reserved)
 			mint	int18						;12 (reserved)
@@ -1403,12 +1443,12 @@ section			idt							;interrupt descriptor table
 			mint	int23						;17 (reserved)
 			mint	int24						;18 (reserved)
 			mint	int25						;19 (reserved)
-			mint	int26						;1A (reserved)
-			mint	int27						;1B (reserved)
-			mint	int28						;1C (reserved)
-			mint	int29						;1D (reserved)
-			mint	int30						;1E (reserved)
-			mint	int31						;1F (reserved)
+			mint	int26						;1a (reserved)
+			mint	int27						;1b (reserved)
+			mint	int28						;1c (reserved)
+			mint	int29						;1d (reserved)
+			mint	int30						;1e (reserved)
+			mint	int31						;1f (reserved)
 			mtrap	clocktick					;20 IRQ0 clock tick
 			mtrap	keyboard					;21 IRQ1 keyboard
 			mtrap	iochannel					;22 IRQ2 second 8259A cascade
@@ -1419,135 +1459,362 @@ section			idt							;interrupt descriptor table
 			mtrap	lpt1						;27 IRQ7 lpt1
 			mtrap	rtclock						;28 IRQ8 real-time clock
 			mtrap	retrace						;29 IRQ9 CGA vertical retrace
-			mtrap	irq10						;2A IRQA (reserved)
-			mtrap	irq11						;2B IRQB (reserved)
-			mtrap	ps2mouse					;2C IRQC ps/2 mouse
-			mtrap	coprocessor					;2D IRQD coprocessor
-			mtrap	fixeddisk					;2E IRQE fixed disk
-			mtrap	irq15						;2F IRQF (reserved)
+			mtrap	irq10						;2a IRQA (reserved)
+			mtrap	irq11						;2b IRQB (reserved)
+			mtrap	ps2mouse					;2c IRQC ps/2 mouse
+			mtrap	coprocessor					;2d IRQD coprocessor
+			mtrap	fixeddisk					;2e IRQE fixed disk
+			mtrap	irq15						;2f IRQF (reserved)
 			mtrap	svc						;30 OS services
 			times	2048-($-$$) db 0h				;zero fill to end of section
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;
 ;	Interrupt Handlers							@disk: 005400	@mem:  002000
 ;
 ;	Interrupt handlers are 32-bit routines that receive control either in response to events or by direct
 ;	invocation from other kernel code. The interrupt handlers are of three basic types. CPU interrupts occur when a
 ;	CPU exception is detected. Hardware interrupts occur when an external device (timer, keyboard, disk, etc.)
-;	signals the CPU on an interrupt request line. Software interrupts occur when directly called by other code
+;	signals the CPU on an interrupt request line (IRQ). Software interrupts occur when directly called by other code
 ;	using the INT instruction. Each interrupt handler routine is defined by using our "menter" macro, which simply
 ;	establishes a label defining the offset address of the entry point from the start of the kernel section. This
 ;	label is referenced in the "mint" and "mtrap" macros found in the IDT to specify the address of the handlers.
 ;
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 section			kernel	vstart=0h					;data offsets relative to 0
 			cpu	386						;allow 80386 instructions
 			bits	32						;this is 32-bit code
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;
 ;	CPU Interrupt Handlers
 ;
-;	The first 32 entries in the Interrupt Descriptor Table are reserved for use by CPU interrupts.
+;	The first 32 entries in the Interrupt Descriptor Table are reserved for use by CPU interrupts. The handling
+;	of these interrupts will vary. For now, we will define the entry points but simply return from the interrupt.
+;
+;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT0	Divide By Zero
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 			menter	dividebyzero					;divide by zero
-			push	0						;
-			jmp	intcpu						;
+			push	0						;store interrupt nbr
+			push	czIntDivideByZero				;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT1	Single Step
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	singlestep					;single step
-			push	1						;
-			jmp	intcpu						;
+			push	1						;store interrupt nbr
+			push	czIntSingleStep					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT2	Non-Maskable Interrupt
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	nmi						;non-maskable
-			push	2						;
-			jmp	intcpu						;
+			push	2						;store interrupt nbr
+			push	czIntNonMaskable				;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT3	Break
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	break						;break
-			push	3						;
-			jmp	intcpu						;
+			push	3						;store interrupt nbr
+			push	czIntBreak					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT4	Into
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	into						;into
-			push	4						;
-			jmp	intcpu						;
+			push	4						;store interrupt nbr
+			push	czIntInto					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT5	Bounds
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	bounds						;bounds
-			push	5						;
-			jmp	intcpu						;
+			push	5						;store interrupt nbr
+			push	czIntBounds					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT6	Bad Operation Code
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	badopcode					;bad opcode interrupt
-			push	6						;
-			jmp	intcpu						;
+			push	6						;store interrupt nbr
+			push	czIntBadOpCode					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT7	No Coprocessor
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	nocoproc					;no coprocessor interrupt
-			push	7						;
-			jmp	intcpu						;
+			push	7						;store interrupt nbr
+			push	czIntNoCoprocessor				;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT8	Double Fault
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	doublefault					;doublefault interrupt
-			push	8						;
-			jmp	intcpu						;
+			push	8						;store interrupt nbr
+			push	czIntDoubleFault				;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT9	Operand
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	operand						;operand interrupt
-			push	9						;
-			jmp	intcpu						;
+			push	9						;store interrupt nbr
+			push	czIntOperand					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT10	Bad Task State Segment
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	badtss						;bad tss interrupt
-			push	10						;
-			jmp	intcpu						;
+			push	10						;store interrupt nbr
+			push	czIntBadTSS					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT11	Not Present
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	notpresent					;not present interrupt
-			push	11						;
-			jmp	intcpu						;
+			push	11						;store interrupt nbr
+			push	czIntNotPresent					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT12	Stack Limit
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	stacklimit					;stack limit interrupt
-			push	12						;
-			jmp	intcpu						;
+			push	12						;store interrupt nbr
+			push	czIntStackLimit					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT13	General Protection Fault
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	protection					;protection fault interrupt
-			push	13						;
-			jmp	intcpu						;
+			push	13						;store interrupt nbr
+			push	czIntProtection					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT14	Reserved
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	int14						;(reserved)
-			push	14						;
-			jmp	intcpu						;
+			push	14						;store interrupt nbr
+			push	czIntReserved					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT15	Reserved
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	int15						;(reserved)
-			push	15						;
-			jmp	intcpu						;
+			push	15						;store interrupt nbr
+			push	czIntReserved					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT16	Coprocessor Calculation
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	coproccalc					;coprocessor calculation
-			push	16						;
-			jmp	intcpu						;
+			push	16						;store interrupt nbr
+			push	czIntCoprocessorCalc				;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT17	Reserved
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	int17						;(reserved)
-			push	17						;
-			jmp	intcpu						;
+			push	17						;store interrupt nbr
+			push	czIntReserved					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT18	Reserved
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	int18						;(reserved)
-			push	18						;
-			jmp	intcpu						;
+			push	18						;store interrupt nbr
+			push	czIntReserved					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT19	Reserved
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	int19						;(reserved)
-			push	19						;
-			jmp	intcpu						;
+			push	19						;store interrupt nbr
+			push	czIntReserved					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT20	Reserved
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	int20						;(reserved)
-			push	20						;
-			jmp	intcpu						;
+			push	20						;store interrupt nbr
+			push	czIntReserved					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT21	Reserved
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	int21						;(reserved)
-			push	21						;
-			jmp	intcpu						;
+			push	21						;store interrupt nbr
+			push	czIntReserved					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT22	Reserved
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	int22						;(reserved)
-			push	22						;
-			jmp	intcpu						;
+			push	22						;store interrupt nbr
+			push	czIntReserved					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT23	Reserved
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	int23						;(reserved)
-			push	23						;
-			jmp	intcpu						;
+			push	23						;store interrupt nbr
+			push	czIntReserved					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT24	Reserved
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	int24						;(reserved)
-			push	24						;
-			jmp	intcpu						;
+			push	24						;store interrupt nbr
+			push	czIntReserved					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT25	Reserved
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	int25						;(reserved)
-			push	25						;
-			jmp	intcpu						;
+			push	25						;store interrupt nbr
+			push	czIntReserved					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT26	Reserved
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	int26						;(reserved)
-			push	26						;
-			jmp	intcpu						;
+			push	26						;store interrupt nbr
+			push	czIntReserved					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT27	Reserved
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	int27						;(reserved)
-			push	27						;
-			jmp	intcpu						;
+			push	27						;store interrupt nbr
+			push	czIntReserved					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT28	Reserved
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	int28						;(reserved)
-			push	28						;
-			jmp	intcpu						;
+			push	28						;store interrupt nbr
+			push	czIntReserved					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT29	Reserved
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	int29						;(reserved)
-			push	29						;
-			jmp	intcpu						;
+			push	29						;store interrupt nbr
+			push	czIntReserved					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT30	Reserved
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	int30						;(reserved)
-			push	30						;
-			jmp	intcpu						;
+			push	30						;store interrupt nbr
+			push	czIntReserved					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	INT31	Reserved
+;
+;-----------------------------------------------------------------------------------------------------------------------
 			menter	int31						;(reserved)
-			push	31						;
-intcpu			pop	eax						;
+			push	31						;store interrupt nbr
+			push	czIntReserved					;store message offset
+			jmp	ReportInterrupt					;report interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Routine:	ReportInterrupt
+;
+;	Description:	This routine will be used to respond to processor interrupts that are not otherwise handled.
+;			At this stage, we simply restore the stack and return from the interrupt.
+;
+;	In:		[esp+4]		interrupt number (0-31)			stored by push instruction
+;			[esp+0]		error message address			stored by push instructions
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ReportInterrupt		pop	eax						;error message address
+			pop	eax						;interrupt number
 			iretd							;return
 ;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Processor Interrupt Name Strings
+;
+;-----------------------------------------------------------------------------------------------------------------------
+czIntDivideByZero	db	"Division by zero",0
+czIntSingleStep		db	"Single step",0
+czIntNonMaskable	db	"Non-maskable interrupt",0
+czIntBreak		db	"Break",0
+czIntInto		db	"Into",0
+czIntBounds		db	"Bounds",0
+czIntBadOpCode		db	"Bad Operation Code",0
+czIntNoCoprocessor	db	"No Coprocessor",0
+czIntDoubleFault	db	"Double Fault",0
+czIntOperand		db	"Operand",0
+czIntBadTSS		db	"Bad Task State Segment",0
+czIntNotPresent		db	"Not Present",0
+czIntStackLimit		db	"Stack Limit",0
+czIntProtection		db	"General Protection Fault",0
+czIntCoprocessorCalc	db	"Coprocessor Calculation",0
+czIntReserved		db	"Reserved",0
+;=======================================================================================================================
 ;
 ;	Hardware Device Interupts
 ;
@@ -1555,7 +1822,7 @@ intcpu			pop	eax						;
 ;	the hardware interrupts IRQ0-IRQF by the BIOS when the call to the BIOS is made invoking BIOS function 89h
 ;	(BX=2028h).
 ;
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	IRQ0	Clock Tick Interrupt
@@ -1575,19 +1842,28 @@ intcpu			pop	eax						;
 			push	eax						;save modified regs
 			push	edx						;
 			push	ds						;
+;
+;	Update the clock tick count and the elapsed days as needed
+;
 			push	ESELDAT						;load OS data selector ...
 			pop	ds						;... into data segment register
-			mov	eax,[wfClockTicks]				;eax = clock ticks
+			mov	eax,[wdClockTicks]				;eax = clock ticks
 			inc	eax						;increment clock ticks
 			cmp	eax,EPITDAYTICKS				;clock ticks per day?
 			jb	irq0.10						;no, skip ahead
 			inc	byte [wbClockDays]				;increment clock days
 			xor	eax,eax						;reset clock ticks
-irq0.10			mov	dword [wfClockTicks],eax			;save clock ticks
+irq0.10			mov	dword [wdClockTicks],eax			;save clock ticks
+;
+;	Decrement floppy disk motor timeout
+;
 			cmp	byte [wbFDCMotor],0				;floppy motor timeout?
 			je	irq0.20						;yes, skip ahead
 			dec	byte [wbFDCMotor]				;decrement motor timeout
 			jnz	irq0.20						;skip ahead if non-zero
+;
+;	Turn off the floppy disk motor if appropriate
+;
 			sti							;enable maskable interrupts
 irq0.15 		mov	dh,EFDCPORTHI					;FDC controller port hi
 			mov	dl,EFDCPORTLOSTAT				;FDC main status register
@@ -1599,7 +1875,13 @@ irq0.15 		mov	dh,EFDCPORTHI					;FDC controller port hi
 			mov	dh,EFDCPORTHI					;fdc port hi
 			mov	dl,EFDCPORTLOOUT				;fdc digital output register
 			out	dx,al						;turn motor off
+;
+;	Signal the end of the hardware interrupt
+;
 irq0.20			call	PutPrimaryEndOfInt				;send end-of-interrupt to PIC
+;
+;	Restore and return
+;
 			pop	ds						;restore modified regs
 			pop	edx						;
 			pop	eax						;
@@ -1631,77 +1913,77 @@ irq0.20			call	PutPrimaryEndOfInt				;send end-of-interrupt to PIC
 			mov	[wbConsoleScan5],al				;clear scan code 5
 			mov	al,' '						;space
 			mov	[wbConsoleChar],al				;set character to space
-			mov	al,EKEYTIMEOUT					;controller timeout flag
+			mov	al,EKEYFTIMEOUT					;controller timeout flag
 			not	al						;controller timeout mask
 			and	[wbConsoleStatus],al				;clear controller timeout flag
 			mov	bl,[wbConsoleShift]				;shift flags
 			mov	bh,[wbConsoleLock]				;lock flags
 			call	WaitForKeyOutBuffer				;controller timeout?
 			jz	irq1.140					;yes, skip ahead
-			in	al,EKEYPORTDATA					;read scan code 0
+			in	al,EKEYBPORTDATA				;read scan code 0
 			mov	[wbConsoleScan0],al				;save scan code 0
 			mov	ah,al						;copy scan code 0
-			mov	al,EKEYSHIFTLEFT				;left shift flag
-			cmp	ah,EKEYSHIFTLDOWN				;left shift key down code?
+			mov	al,EKEYFSHIFTLEFT				;left shift flag
+			cmp	ah,EKEYBSHIFTLDOWN				;left shift key down code?
 			je	irq1.30						;yes, set flag
-			cmp	ah,EKEYSHIFTLUP					;left shift key up code?
+			cmp	ah,EKEYBSHIFTLUP				;left shift key up code?
 			je	irq1.40						;yes, reset flag
-			mov	al,EKEYSHIFTRIGHT				;right shift flag
-			cmp	ah,EKEYSHIFTRDOWN				;right shift key down code?
+			mov	al,EKEYFSHIFTRIGHT				;right shift flag
+			cmp	ah,EKEYBSHIFTRDOWN				;right shift key down code?
 			je	irq1.30						;yes, set flag
-			cmp	ah,EKEYSHIFTRUP					;right shift key up code?
+			cmp	ah,EKEYBSHIFTRUP				;right shift key up code?
 			je	irq1.40						;yes, reset flag
-			mov	al,EKEYCTRLLEFT					;left control flag
-			cmp	ah,EKEYCTRLDOWN					;control key down code?
+			mov	al,EKEYFCTRLLEFT				;left control flag
+			cmp	ah,EKEYBCTRLDOWN				;control key down code?
 			je	irq1.30						;yes, set flag
-			cmp	ah,EKEYCTRLUP					;control key up code?
+			cmp	ah,EKEYBCTRLUP					;control key up code?
 			je	irq1.40						;yes, reset flag
-			mov	al,EKEYALTLEFT					;left alt flag
-			cmp	ah,EKEYALTDOWN					;alt key down code?
+			mov	al,EKEYFALTLEFT					;left alt flag
+			cmp	ah,EKEYBALTDOWN					;alt key down code?
 			je	irq1.30						;yes, set flag
-			cmp	ah,EKEYALTUP					;alt key up code?
+			cmp	ah,EKEYBALTUP					;alt key up code?
 			je	irq1.40						;yes, reset flag
-			mov	al,EKEYLOCKCAPS					;caps-lock flag
-			cmp	ah,EKEYCAPSDOWN					;caps-lock key down code?
+			mov	al,EKEYFLOCKCAPS				;caps-lock flag
+			cmp	ah,EKEYBCAPSDOWN				;caps-lock key down code?
 			je	irq1.50						;yes, toggle lamps and flags
-			mov	al,EKEYLOCKNUM					;num-lock flag
-			cmp	ah,EKEYNUMDOWN					;num-lock key down code?
+			mov	al,EKEYFLOCKNUM					;num-lock flag
+			cmp	ah,EKEYBNUMDOWN					;num-lock key down code?
 			je	irq1.50						;yes, toggle lamps and flags
-			mov	al,EKEYLOCKSCROLL				;scroll-lock flag
-			cmp	ah,EKEYSCROLLDOWN				;scroll-lock key down code?
+			mov	al,EKEYFLOCKSCROLL				;scroll-lock flag
+			cmp	ah,EKEYBSCROLLDOWN				;scroll-lock key down code?
 			je	irq1.50						;yes, toggle lamps and flags
-			cmp	ah,EKEYCODEEXT0					;extended scan code 0?
+			cmp	ah,EKEYBCODEEXT0				;extended scan code 0?
 			jne	irq1.70 					;no, skip ahead
 			call	WaitForKeyOutBuffer				;controller timeout?
 			jz	irq1.140					;yes, skip ahead
-			in	al,EKEYPORTDATA					;read scan code 1
+			in	al,EKEYBPORTDATA				;read scan code 1
 			mov	[wbConsoleScan1],al				;save scan code 1
 			mov	ah,al						;copy scan code 1
-			mov	al,EKEYCTRLRIGHT				;right control flag
-			cmp	ah,EKEYCTRLDOWN					;control key down code?
+			mov	al,EKEYFCTRLRIGHT				;right control flag
+			cmp	ah,EKEYBCTRLDOWN				;control key down code?
 			je	irq1.30						;yes, set flag
-			cmp	ah,EKEYCTRLUP					;control key up code?
+			cmp	ah,EKEYBCTRLUP					;control key up code?
 			je	irq1.40						;yes, reset flag
-			mov	al,EKEYALTRIGHT					;right alt flag
-			cmp	ah,EKEYALTDOWN					;alt key down code?
+			mov	al,EKEYFALTRIGHT				;right alt flag
+			cmp	ah,EKEYBALTDOWN					;alt key down code?
 			je	irq1.30						;yes, set flag
-			cmp	ah,EKEYALTUP					;alt key up code?
+			cmp	ah,EKEYBALTUP					;alt key up code?
 			je	irq1.40						;yes, reset flag
-			cmp	ah,EKEYSLASH					;slash down code?
+			cmp	ah,EKEYBSLASH					;slash down code?
 			je	irq1.80						;yes, skip ahead
-			cmp	ah,EKEYSLASHUP					;slash up code?
+			cmp	ah,EKEYBSLASHUP					;slash up code?
 			je	irq1.80						;yes, skip ahead
-			cmp	ah,EKEYPRTSCRDOWN				;print screen down code?
+			cmp	ah,EKEYBPRTSCRDOWN				;print screen down code?
 			je	irq1.10						;yes, continue
-			cmp	ah,EKEYPRTSCRUP					;print screen up code?
+			cmp	ah,EKEYBPRTSCRUP				;print screen up code?
 			jne	irq1.20						;no, skip ahead
 irq1.10			call	WaitForKeyOutBuffer				;controller timeout?
 			jz	irq1.140					;yes, skip ahead
-			in	al,EKEYPORTDATA					;read scan code 2
+			in	al,EKEYBPORTDATA				;read scan code 2
 			mov	[wbConsoleScan2],al				;save scan code 2
 			call	WaitForKeyOutBuffer				;controller timeout?
 			jz	irq1.140					;yes, skip ahead
-			in	al,EKEYPORTDATA					;read scan code 3
+			in	al,EKEYBPORTDATA				;read scan code 3
 			mov	[wbConsoleScan3],al				;read scan code 3
 irq1.20			jmp	irq1.150					;finish keyboard handling
 irq1.30			or	bl,al						;set shift flag
@@ -1715,42 +1997,42 @@ irq1.60			mov	[wbConsoleShift],bl				;save shift flags
 			mov	[wbConsoleLock],bh				;save lock flags
 			call	PutConsoleOIAShift				;update OIA indicators
 			jmp	irq1.150					;finish keyboard handling
-irq1.70			cmp	ah,EKEYCODEEXT1					;extended scan code 1?
+irq1.70			cmp	ah,EKEYBCODEEXT1				;extended scan code 1?
 			jne	irq1.80						;no continue
 			call	WaitForKeyOutBuffer				;controller timeout?
 			jz	irq1.140					;yes, skip ahead
-			in	al,EKEYPORTDATA					;read scan code 1
+			in	al,EKEYBPORTDATA				;read scan code 1
 			mov	[wbConsoleScan1],al				;save scan code 1
 			mov	ah,al						;copy scan code 1
-			cmp	ah,EKEYPAUSEDOWN				;pause key down code?
+			cmp	ah,EKEYBPAUSEDOWN				;pause key down code?
 			jne	irq1.150					;no, finish keyboard handling
 			call	WaitForKeyOutBuffer				;controller timeout?
 			jz	irq1.140					;yes, skip ahead
-			in	al,EKEYPORTDATA					;read scan code 2
+			in	al,EKEYBPORTDATA				;read scan code 2
 			mov	[wbConsoleScan2],al				;save scan code 2
 			call	WaitForKeyOutBuffer				;controller timeout?
 			jz	irq1.140					;yes, skip ahead
-			in	al,EKEYPORTDATA					;read scan code 3
+			in	al,EKEYBPORTDATA				;read scan code 3
 			mov	[wbConsoleScan3],al				;save scan code 3
 			call	WaitForKeyOutBuffer				;controller timeout?
 			jz	irq1.140					;yes, skip ahead
-			in	al,EKEYPORTDATA					;read scan code 4
+			in	al,EKEYBPORTDATA				;read scan code 4
 			mov	[wbConsoleScan4],al				;save scan code 4
 			call	WaitForKeyOutBuffer				;controller timeout?
 			jz	irq1.140					;yes, skip ahead
-			in	al,EKEYPORTDATA					;read scan code 5
+			in	al,EKEYBPORTDATA				;read scan code 5
 			mov	[wbConsoleScan5],al				;save scan code 5
 			jmp	irq1.150					;continue
 irq1.80			xor	al,al						;assume no ASCII translation
-			test	ah,EKEYUP					;release code?
-			jnz	irq1.110					;yes, skip ahead
+			test	ah,EKEYBUP					;release code?
+			jnz	irq1.130					;yes, skip ahead
 			mov	esi,tscan2ascii					;scan-to-ascii table address
-			test	bl,EKEYSHIFT					;either shift key down?
+			test	bl,EKEYFSHIFT					;either shift key down?
 			jz	irq1.90						;no, skip ahead
 			mov	esi,tscan2shift					;scan-to-shifted table address
 irq1.90			movzx	ecx,ah						;scan code offset
 			mov	al,[cs:ecx+esi]					;al = ASCII code
-			test	bh,EKEYLOCKCAPS					;caps-lock on?
+			test	bh,EKEYFLOCKCAPS				;caps-lock on?
 			jz	irq1.100					;no skip ahead
 			mov	cl,al						;copy ASCII code
 			and	cl,EASCIICASEMASK				;clear case mask of copy
@@ -1761,7 +2043,7 @@ irq1.90			movzx	ecx,ah						;scan code offset
 			xor	al,EASCIICASE					;switch case
 irq1.100		mov	[wbConsoleChar],al				;save ASCII code
 irq1.110		mov	edx,EMSGKEYDOWN					;assume key-down event
-			test	ah,EKEYUP					;release scan-code?
+			test	ah,EKEYBUP					;release scan-code?
 			jz	irq1.120					;no, skip ahead
 			mov	edx,EMSGKEYUP					;key-up event
 irq1.120		and	eax,0FFFFh					;clear high-order word
@@ -1778,7 +2060,7 @@ irq1.120		and	eax,0FFFFh					;clear high-order word
 			xor	ecx,ecx						;null param
 			call	PutMessage					;put message to console
 irq1.130		jmp	irq1.150					;finish keyboard handling
-irq1.140		mov	al,EKEYTIMEOUT					;controller timeout flag
+irq1.140		mov	al,EKEYFTIMEOUT					;controller timeout flag
 			or	[wbConsoleStatus],al				;set controller timeout flag
 irq1.150		call	PutConsoleOIAChar				;update operator info area
 			call	PutPrimaryEndOfInt				;send end-of-interrupt to PIC
@@ -1829,32 +2111,32 @@ tscan2shift		db	000h,01Bh,021h,040h,023h,024h,025h,05Eh		;80-87
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 			menter	iochannel					;secondary 8259A cascade
-			push	eax						;
-			jmp	hwint						;
+			push	eax						;save modified regs
+			jmp	hwint						;end interrupt and return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	IRQ3	Communication Port 2 Hardware Interrupt
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 			menter	com2						;serial port 2 interrupt
-			push	eax						;
-			jmp	hwint						;
+			push	eax						;save modified regs
+			jmp	hwint						;end interrupt and return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	IRQ4	Communication Port 1 Hardware Interrupt
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 			menter	com1						;serial port 1 interrupt
-			push	eax						;
-			jmp	hwint						;
+			push	eax						;save modified regs
+			jmp	hwint						;end interrupt and return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	IRQ5	Parallel Port 2 Hardware Interrupt
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 			menter	lpt2						;parallel port 2 interrupt
-			push	eax						;
-			jmp	hwint						;
+			push	eax						;save modified regs
+			jmp	hwint						;end interrupt and return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	IRQ6	Diskette Hardware Interrupt
@@ -1876,64 +2158,64 @@ tscan2shift		db	000h,01Bh,021h,040h,023h,024h,025h,05Eh		;80-87
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 			menter	lpt1						;parallel port 1 interrupt
-			push	eax						;
-			jmp	hwint						;
+			push	eax						;save modified regs
+			jmp	hwint						;end interrupt and return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	IRQ8	Real-time Clock Hardware Interrupt
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 			menter	rtclock						;real-time clock interrupt
-			push	eax						;
-			jmp	hwwint						;
+			push	eax						;save modified regs
+			jmp	hwwint						;end interrupt and return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	IRQ9	CGA Vertical Retrace Hardware Interrupt
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 			menter	retrace						;CGA vertical retrace interrupt
-			push	eax						;
-			jmp	hwwint						;
+			push	eax						;save modified regs
+			jmp	hwwint						;end interrupt and return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	IRQ10	Reserved Hardware Interrupt
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 			menter	irq10						;reserved
-			push	eax						;
-			jmp	hwwint						;
+			push	eax						;save modified regs
+			jmp	hwwint						;end interrupt and return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	IRQ11	Reserved Hardware Interrupt
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 			menter	irq11						;reserved
-			push	eax						;
-			jmp	hwwint						;
+			push	eax						;save modified regs
+			jmp	hwwint						;end interrupt and return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	IRQ12	PS/2 Mouse Hardware Interrupt
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 			menter	ps2mouse					;PS/2 mouse interrupt
-			push	eax						;
-			jmp	hwwint						;
+			push	eax						;save modified regs
+			jmp	hwwint						;end interrupt and return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	IRQ13	Coprocessor Hardware Interrupt
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 			menter	coprocessor					;coprocessor interrupt
-			push	eax						;
-			jmp	hwwint						;
+			push	eax						;save modified regs
+			jmp	hwwint						;end interrupt and return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	IRQ14	Fixed Disk Hardware Interrupt
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 			menter	fixeddisk					;fixed disk interrupt
-			push	eax						;
-			jmp	hwwint						;
+			push	eax						;save modified regs
+			jmp	hwwint						;end interrupt and return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	IRQ15	Reserved Hardware Interrupt
@@ -1941,6 +2223,7 @@ tscan2shift		db	000h,01Bh,021h,040h,023h,024h,025h,05Eh		;80-87
 ;-----------------------------------------------------------------------------------------------------------------------
 			menter	irq15						;reserved
 			push	eax						;save modified regs
+			jmp	hwwint						;end interrupt and return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Exit from hardware interrupt
@@ -1976,10 +2259,10 @@ svc90			iretd							;return from interrupt
 ;	These tsvce macros expand to define an address vector table for the service request interrupt (int 30h).
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-tsvc			tsvce	PutConsoleString				;tty output asciiz string
+tsvc			tsvce	ClearConsoleScreen				;clear console screen
 			tsvce	GetConsoleString				;get string input
-			tsvce	ClearConsoleScreen				;clear console screen
 			tsvce	PlaceCursor					;place the cursor at the current loc
+			tsvce	PutConsoleString				;tty output asciiz string
 maxtsvc			equ	($-tsvc)/4					;function out of range
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1988,33 +2271,33 @@ maxtsvc			equ	($-tsvc)/4					;function out of range
 ;	These macros provide positional parameterization of service request calls.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-%macro			putConsoleString 1
-			mov	edx,%1						;EDX = string address
-			mov	al,ePutConsoleString				;AL = put string fn.
+%macro			clearConsoleScreen 0
+			mov	al,eClearConsoleScreen				;function code
 			int	_svc						;invoke OS service
 %endmacro
 %macro			getConsoleString 4
-			mov	edx,%1						;EDX = buffer address
-			mov	ecx,%2						;ECX = max characters
-			mov	bh,%3						;BH = echo indicator
-			mov	bl,%4						;BL = terminator
-			mov	al,eGetConsoleString				;AL = get string fn.
-			int	_svc						;invoke OS service
-%endmacro
-%macro			clearConsoleScreen 0
-			mov	al,eClearConsoleScreen				;AL = clear console fn.
+			mov	edx,%1						;buffer address
+			mov	ecx,%2						;max characters
+			mov	bh,%3						;echo indicator
+			mov	bl,%4						;terminator
+			mov	al,eGetConsoleString				;function code
 			int	_svc						;invoke OS service
 %endmacro
 %macro			placeCursor 0
-			mov	al,ePlaceCursor					;AL = set cursor fn.
+			mov	al,ePlaceCursor					;function code
 			int	_svc						;invoke OS service
 %endmacro
-;-----------------------------------------------------------------------------------------------------------------------
+%macro			putConsoleString 1
+			mov	edx,%1						;string address
+			mov	al,ePutConsoleString				;function code
+			int	_svc						;invoke OS service
+%endmacro
+;=======================================================================================================================
 ;
 ;	Kernel Function Library
 ;
-;-----------------------------------------------------------------------------------------------------------------------
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
+;=======================================================================================================================
 ;
 ;	Console Helper Routines
 ;
@@ -2031,7 +2314,7 @@ maxtsvc			equ	($-tsvc)/4					;function out of range
 ;	PutConsoleOIAChar
 ;	PutConsoleHexByte
 ;
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Routine:	PutConsoleString
@@ -2068,7 +2351,7 @@ PutConsoleString	push	esi						;save non-volatile regs
 ;
 ;	Description:	This routine accepts keyboard input into a buffer.
 ;
-;	Input:		DS:EDX	target buffer address
+;	In:		DS:EDX	target buffer address
 ;			ECX	maximum number of characters to accept
 ;			BH	echo to terminal
 ;			BL	terminating character
@@ -2131,7 +2414,7 @@ GetConsoleString	push	ecx						;save non-volatile regs
 ;
 ;	Description:	This routine waits for EMSGKEYCHAR message and return character code.
 ;
-;	Output:		AL	ASCII character code
+;	Out:		AL	ASCII character code
 ;			AH	keyboard scan code
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -2163,7 +2446,7 @@ Yield			sti							;enable maskagle interrupts
 ;	Description:	This routine retreats the cursor one logical column. If the cursor was at the start of a row,
 ;			the column is set to the last position in the row and the row is decremented.
 ;
-;	Input:		DS	OS data selector
+;	In:		DS	OS data selector
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 PreviousConsoleColumn	mov	al,[wbConsoleColumn]				;current column
@@ -2264,55 +2547,55 @@ PutConsoleOIAShift	push	ecx						;save non-volatile regs
 			pop	es						;... into ES register
 			mov	ch,ECONOIAROW					;OIA row
 			mov	al,EASCIISPACE					;space is default character
-			test	bl,EKEYSHIFTLEFT				;left-shift indicated?
+			test	bl,EKEYFSHIFTLEFT				;left-shift indicated?
 			jz	.10						;no, skip ahead
 			mov	al,'S'						;yes, indicate with 'S'
 .10			mov	cl,14						;indicator column
 			call	SetConsoleChar					;display ASCII character
 			mov	al,EASCIISPACE					;ASCII space
-			test	bl,EKEYSHIFTRIGHT				;right-shift indicated?
+			test	bl,EKEYFSHIFTRIGHT				;right-shift indicated?
 			jz	.20						;no, skip ahead
 			mov	al,'S'						;yes, indicate with 'S'
 .20			mov	cl,64						;indicator column
 			call	SetConsoleChar					;display ASCII character
 			mov	al,EASCIISPACE					;ASCII space
-			test	bl,EKEYCTRLLEFT					;left-ctrl indicated?
+			test	bl,EKEYFCTRLLEFT				;left-ctrl indicated?
 			jz	.30						;no, skip ahead
 			mov	al,'C'						;yes, indicate with 'C'
 .30			mov	cl,15						;indicator column
 			call	SetConsoleChar					;display ASCII character
 			mov	al,EASCIISPACE					;ASCII space
-			test	bl,EKEYCTRLRIGHT				;right-ctrl indicated?
+			test	bl,EKEYFCTRLRIGHT				;right-ctrl indicated?
 			jz	.40						;no, skip ahead
 			mov	al,'C'						;yes, indicate with 'C'
 .40			mov	cl,63						;indicator column
 			call	SetConsoleChar					;display ASCII character
 			mov	al,EASCIISPACE					;ASCII space
-			test	bl,EKEYALTLEFT					;left-alt indicated?
+			test	bl,EKEYFALTLEFT					;left-alt indicated?
 			jz	.50						;no, skip ahead
 			mov	al,'A'						;yes, indicate with 'A'
 .50			mov	cl,16						;indicator column
 			call	SetConsoleChar					;display ASCII character
 			mov	al,EASCIISPACE					;ASCII space
-			test	bl,EKEYALTRIGHT					;right-alt indicated?
+			test	bl,EKEYFALTRIGHT				;right-alt indicated?
 			jz	.60						;no, skip ahead
 			mov	al,'A'						;yes, indicate with 'A'
 .60			mov	cl,62						;indicator column
 			call	SetConsoleChar					;display ASCII character
 			mov	al,EASCIISPACE					;ASCII space
-			test	bh,EKEYLOCKCAPS					;caps-lock indicated?
+			test	bh,EKEYFLOCKCAPS				;caps-lock indicated?
 			jz	.70						;no, skip ahead
 			mov	al,'C'						;yes, indicate with 'C'
 .70			mov	cl,78						;indicator column
 			call	SetConsoleChar					;display ASCII character
 			mov	al,EASCIISPACE					;ASCII space
-			test	bh,EKEYLOCKNUM					;num-lock indicated?
+			test	bh,EKEYFLOCKNUM					;num-lock indicated?
 			jz	.80						;no, skip ahead
 			mov	al,'N'						;yes, indicate with 'N'
 .80			mov	cl,77						;indicator column
 			call	SetConsoleChar					;display ASCII character
 			mov	al,EASCIISPACE					;ASCII space
-			test	bh,EKEYLOCKSCROLL				;scroll-lock indicated?
+			test	bh,EKEYFLOCKSCROLL				;scroll-lock indicated?
 			jz	.90						;no, skip ahead
 			mov	al,'S'						;yes, indicate with 'S'
 .90			mov	cl,76						;indicator column
@@ -2351,7 +2634,6 @@ PutConsoleOIAChar	push	ebx						;save non-volatile regs
 			jmp	.30						;continue
 .20			mov	al,' '						;ASCII space
 			call	SetConsoleChar					;display space
-			inc	cl
 			mov	al,' '						;ASCII space
 			call	SetConsoleChar					;display space
 .30			add	bl,2						;next column (+2)
@@ -2375,11 +2657,11 @@ PutConsoleOIAChar	push	ebx						;save non-volatile regs
 ;
 ;	Routine:	PutConsoleHexByte
 ;
-;	Description:	This routine writes two ASCII characters to the console screen representing the value of a byte.
+;	Description:	This routine writes two ASCII characters to the console representing a byte value.
 ;
 ;	In:		AL	byte value
-;			CH	row
 ;			CL	column
+;			CH	row
 ;			DS	OS data selector
 ;			ES	CGA selector
 ;
@@ -2392,7 +2674,6 @@ PutConsoleHexByte	push	ebx						;save non-volatile regs
 			jb	.10						;yes, skip ahead
 			add	al,7						;add ASCII offset for alpha
 .10			call	SetConsoleChar					;display ASCII character
-			inc	cl						;increment column
 			mov	al,bl						;byte value
 			and	al,0fh						;lo-order nybble
 			or	al,30h						;apply ASCII zone
@@ -2402,24 +2683,24 @@ PutConsoleHexByte	push	ebx						;save non-volatile regs
 .20			call	SetConsoleChar					;display ASCII character
 			pop	ebx						;restore non-volatile regs
 			ret							;return
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;
 ;	Message Queue Helper Routines
 ;
 ;	PutMessage
 ;	GetMessage
 ;
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Routine:	PutMessage
 ;
 ;	Description:	This routine adda a message to the message queue.
 ;
-;	Input:		ECX	hi-order data word
+;	In:		ECX	hi-order data word
 ;			EDX	lo-order data word
 ;
-;	Output:		CY	0 = success
+;	Out:		CY	0 = success
 ;				1 = fail: queue is full
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -2446,7 +2727,7 @@ PutMessage		push	ds						;save non-volatile regs
 ;
 ;	Description:	This routine reads and removes a message from the message queue.
 ;
-;	Output:		EAX	lo-order message data
+;	Out:		EAX	lo-order message data
 ;			EDX	hi-order message data
 ;
 ;			CY	0 = message read
@@ -2477,7 +2758,7 @@ GetMessage		push	ebx						;save non-volatile regs
 			pop	ecx						;
 			pop	ebx						;
 			ret							;return
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;
 ;	Memory-Mapped Video Routines
 ;
@@ -2487,7 +2768,7 @@ GetMessage		push	ebx						;save non-volatile regs
 ;	ScrollConsoleRow
 ;	SetConsoleChar
 ;
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Routine:	ClearConsoleScreen
@@ -2561,6 +2842,9 @@ ScrollConsoleRow	push	ecx						;save non-volatile regs
 ;			CH	row
 ;			ES	CGA selector
 ;
+;	Out:		EAX	last target address written (ES:)
+;			CL	column + 1
+;
 ;-----------------------------------------------------------------------------------------------------------------------
 SetConsoleChar		mov	dl,al						;ASCII character
 			movzx	eax,ch						;row
@@ -2570,8 +2854,9 @@ SetConsoleChar		mov	dl,al						;ASCII character
 			adc	ah,0						;handle carry
 			shl	eax,1						;screen offset
 			mov	[es:eax],dl					;store character
+			inc	cl						;next column
 			ret							;return
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;
 ;	Input/Output Routines
 ;
@@ -2584,7 +2869,7 @@ SetConsoleChar		mov	dl,al						;ASCII character
 ;	WaitForKeyInBuffer
 ;	WaitForKeyOutBuffer
 ;
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Routine:	PlaceCursor
@@ -2648,15 +2933,15 @@ PutSecondaryEndOfInt	sti							;enable maskable interrupts
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 SetKeyboardLamps	call	WaitForKeyInBuffer				;wait for input buffer ready
-			mov	al,EKEYCMDLAMPS					;set/reset lamps command
-			out	EKEYPORTDATA,al					;send command to 8042
+			mov	al,EKEYBCMDLAMPS				;set/reset lamps command
+			out	EKEYBPORTDATA,al				;send command to 8042
 			call	WaitForKeyOutBuffer				;wait for 8042 result
-			in	al,EKEYPORTDATA					;read 8042 'ACK' (0fah)
+			in	al,EKEYBPORTDATA				;read 8042 'ACK' (0fah)
 			call	WaitForKeyInBuffer				;wait for input buffer ready
 			mov	al,bh						;set/reset lamps value
-			out	EKEYPORTDATA,al					;send lamps value
+			out	EKEYBPORTDATA,al				;send lamps value
 			call	WaitForKeyOutBuffer				;wait for 8042 result
-			in	al,EKEYPORTDATA					;read 8042 'ACK' (0fah)
+			in	al,EKEYBPORTDATA				;read 8042 'ACK' (0fah)
 			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -2669,9 +2954,9 @@ SetKeyboardLamps	call	WaitForKeyInBuffer				;wait for input buffer ready
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 WaitForKeyInBuffer	push	ecx						;save non-volatile regs
-			mov	ecx,EKEYWAITLOOP				;keyboard controller timeout
-.10			in	al,EKEYPORTSTAT					;keyboard status byte
-			test	al,EKEYBITIN					;is input buffer still full?
+			mov	ecx,EKEYBWAITLOOP				;keyboard controller timeout
+.10			in	al,EKEYBPORTSTAT				;keyboard status byte
+			test	al,EKEYBBITIN					;is input buffer still full?
 			loopnz	.10						;yes, repeat till timeout
 			pop	ecx						;restore non-volatile regs
 			ret							;return
@@ -2681,14 +2966,14 @@ WaitForKeyInBuffer	push	ecx						;save non-volatile regs
 ;
 ;	Description:	This routine waits for keyboard output buffer to have data to read.
 ;
-;	Out:		ZF	0 = Output buffer has data from controller
-;				1 = Output buffer empty after timeout
+;	Out:		ZF	1 = Output buffer has data from controller
+;				0 = Output buffer empty after timeout
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 WaitForKeyOutBuffer	push	ecx						;save non-volatile regs
-			mov	ecx,EKEYWAITLOOP				;keyboard controller timeout
-.10			in	al,EKEYPORTSTAT					;keyboard status byte
-			test	al,EKEYBITOUT					;output buffer status bit
+			mov	ecx,EKEYBWAITLOOP				;keyboard controller timeout
+.10			in	al,EKEYBPORTSTAT				;keyboard status byte
+			test	al,EKEYBBITOUT					;output buffer status bit
 			loopz	.10						;loop until output buffer bit
 			pop	ecx						;restore non-volatile regs
 			ret							;return
@@ -2699,7 +2984,7 @@ WaitForKeyOutBuffer	push	ecx						;save non-volatile regs
 ;-----------------------------------------------------------------------------------------------------------------------
 			times	8190-($-$$) db 0h				;zero fill to end of section
 			db	055h,0AAh					;end of segment
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;
 ;	Console Task
 ;
@@ -2707,7 +2992,7 @@ WaitForKeyOutBuffer	push	ecx						;save non-volatile regs
 ;	segments and a local descriptor table. The console task accepts and echos user keyboard input to the console
 ;	screen and responds to user commands.
 ;
-;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Console Stack								@disk: 007400	@mem:  004000
@@ -2767,7 +3052,7 @@ section			contss							;console task state segment
 			dd	001Ch						;54 ds
 			dd	0						;58 fs
 			dd	0						;5c gs
-			dd	0050h						;60 ldt selector in gdt
+			dd	ESELCONSOLELDT					;60 ldt selector in gdt
 			times	128-($-$$) db 0h				;zero fill to end of section
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -2823,7 +3108,7 @@ section			conmque							;console message queue
 ;			006000	+===============================================+
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-section			concode	vstart=5000h					;labels relative to 5000h
+section			concode	vstart=05000h					;labels relative to 5000h
 ConCode			call	ConInitializeData				;initialize console variables
 
 			clearConsoleScreen					;clear the console screen
@@ -2847,6 +3132,9 @@ ConCode			call	ConInitializeData				;initialize console variables
 ConInitializeData	push	ecx						;save non-volatile regs
 			push	edi						;
 			push	es						;
+;
+;	Initialize console work areas
+;
 			push	ESELDAT						;load OS data selector ...
 			pop	es						;... into extra segment register
 			mov	edi,ECONDATA					;OS console data address
@@ -2854,6 +3142,9 @@ ConInitializeData	push	ecx						;save non-volatile regs
 			mov	ecx,ECONDATALEN					;size of OS console data
 			cld							;forward strings
 			rep	stosb						;initialize data
+;
+;	Restore and return
+;
 			pop	es						;restore non-volatile regs
 			pop	edi						;
 			pop	ecx						;
@@ -2863,10 +3154,10 @@ ConInitializeData	push	ecx						;save non-volatile regs
 ;	Constants
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-czTitle			db	"Custom Operating System 1.0",13,10,0		;version string
-czPrompt		db	":",0						;prompt string
-czUnknownCommand	db	"Unknown command",13,10,0			;unknown command response string
 czNewLine		db	13,10,0						;new line string
+czPrompt		db	":",0						;prompt string
+czTitle			db	"Custom Operating System 1.0",13,10,0		;version string
+czUnknownCommand	db	"Unknown command",13,10,0			;unknown command response string
 			times	4094-($-$$) db 0h				;zero fill to end of section
 			db	055h,0AAh					;end of section
 %endif
@@ -2881,3 +3172,8 @@ czNewLine		db	13,10,0						;new line string
 section			unused							;unused disk space
 			times	EBOOTDISKBYTES-09400h db 0F6h			;fill to end of disk image
 %endif
+;=======================================================================================================================
+;
+;	End of Program Code
+;
+;=======================================================================================================================

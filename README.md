@@ -23,9 +23,12 @@ Additional sub-projects may be added from time to time as the project progresses
 	os.005		Add keyboard interrupt handler to display characters and shift status in information area.
 	os.006		Add a message queue handler to send keyboard messages to a task.
 	os.007		Add support for "clear", "ver" and "exit" commands.
-	os.008		Add support for Real-Time Clock (RTC) access and "date" and "time" commands.
-	os.009		Add support for "mem" command to display memory across the lower 4GB of address space.
-	os.010		Add logic to probe PCI devices and display using the "pciprobe" or "lspci" commands.
+	os.008		Add processor interrupt handling code to to display register contents at interrupt.
+	os.009		Add support for Real-Time Clock (RTC) access and "date" and "time" commands.
+	os.010		Add support for "mem" command to display memory across the lower 4GB of address space.
+	os.011		Add a second "background" task and IRQ0-driven task switching.
+	os.012		Add simple memory allocation and deallocation routines and "malloc" and "free" test routines.
+	os.013		Add logic to probe PCI devices and display using the "pciprobe" or "lspci" commands.
 
 ## Compilation
 
