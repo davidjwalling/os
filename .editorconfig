@@ -5,7 +5,7 @@ end_of_line = crlf
 insert_final_newline = true
 
 [*.{asm,lst}]
-charset = latin1
-indent_style = tab
+charset = utf-8
+indent_style = space
 indent_size = 8
 trim_trailing_whitespace = false
