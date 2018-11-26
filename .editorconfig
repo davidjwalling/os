@@ -6,6 +6,7 @@ insert_final_newline = true
 
 [*.{asm,lst}]
 charset = utf-8
-indent_style = space
+indent_style = tab
 indent_size = 8
+tab_width = 8
 trim_trailing_whitespace = false
