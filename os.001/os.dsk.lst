@@ -9,14 +9,14 @@
      9                                  ;			or an entire floppy disk image is generated. Real mode BIOS interrupts are used to display
     10                                  ;			the message and poll for a keypress.
     11                                  ;
-    12                                  ;	Revised:	July 1, 2017
+    12                                  ;	Revised:	July 4, 2018
     13                                  ;
     14                                  ;	Assembly:	nasm os.asm -f bin -o os.dat -l os.dat.lst -DBUILDBOOT
     15                                  ;			nasm os.asm -f bin -o os.dsk -l os.dsk.lst -DBUILDDISK
     16                                  ;
-    17                                  ;	Assembler:	Netwide Assembler (NASM) 2.13.01
+    17                                  ;	Assembler:	Netwide Assembler (NASM) 2.13.01, May 1 2017
     18                                  ;
-    19                                  ;			Copyright (C) 2010-2017 by David J. Walling. All Rights Reserved.
+    19                                  ;	Notice:		Copyright (C) 2010-2018 David J. Walling. All Rights Reserved.
     20                                  ;
     21                                  ;=======================================================================================================================
     22                                  ;-----------------------------------------------------------------------------------------------------------------------
@@ -29,284 +29,345 @@
     29                                  ;	BUILDDISK	Creates os.dsk, a 1.44MB (3.5") floppy disk image file.
     30                                  ;
     31                                  ;-----------------------------------------------------------------------------------------------------------------------
-    32                                  %ifdef BUILDDISK
-    33                                  %define BUILDBOOT
+    32                                  %ifdef BUILDDISK								;if we are building a disk image ...
+    33                                  %define BUILDBOOT								;... build the boot sector
     34                                  %endif
     35                                  ;-----------------------------------------------------------------------------------------------------------------------
     36                                  ;
     37                                  ;	Conventions
     38                                  ;
-    39                                  ;	Labels:		Labels within a routine are numeric and begin with a period (.10, .20).
-    40                                  ;			Labels within a routine begin at ".10" and increment by 10.
-    41                                  ;
-    42                                  ;	Comments:	A comment that spans the entire line begins with a semicolon in column 1.
-    43                                  ;			A comment that accompanies code on a line begins with a semicolon in column 81.
-    44                                  ;			Register names in comments are in upper case.
-    45                                  ;			Hexadecimal values in comments are in lower case.
-    46                                  ;			Routines are preceded with a comment box that includes the routine name, description, and
-    47                                  ;			register contents on entry and exit.
-    48                                  ;
-    49                                  ;	Alignment:	Assembly instructions (mnemonics) begin in column 25.
-    50                                  ;			Assembly operands begin in column 33.
-    51                                  ;			Lines should not extend beyond column 120.
-    52                                  ;
-    53                                  ;	Routines:	Routine names are in mixed case (GetYear, ReadRealTimeClock).
-    54                                  ;			Routine names begin with a verb (Get, Read, etc.).
-    55                                  ;			Routines should have a single entry address and a single exit instruction (ret, iretd, etc.).
-    56                                  ;
-    57                                  ;	Constants:	Symbolic constants (equates) are named in all-caps beginning with 'E' (EDATAPORT).
-    58                                  ;			Constant stored values are named in camel case, starting with 'c'.
-    59                                  ;			The 2nd letter of the constant label indicates the storage type.
-    60                                  ;
-    61                                  ;			cq......	constant quad-word (dq)
-    62                                  ;			cd......	constant double-word (dd)
-    63                                  ;			cw......	constant word (dw)
-    64                                  ;			cb......	constant byte (db)
-    65                                  ;			cz......	constant ASCIIZ (null-terminated) string
-    66                                  ;
-    67                                  ;	Variables:	Variables are named in camel case, starting with 'w'.
-    68                                  ;			The 2nd letter of the variable label indicates the storage type.
-    69                                  ;
-    70                                  ;			wq......	variable quad-word (resq)
-    71                                  ;			wd......	variable double-word (resd)
-    72                                  ;			ww......	variable word (resw)
-    73                                  ;			wb......	variable byte (resb)
-    74                                  ;
-    75                                  ;	Literals:	Literal values defined by external standards should be defined as symbolic constants (equates).
-    76                                  ;			Hexadecimal literals in code are in upper case with a leading '0' and trailing 'h'. e.g. 01Fh.
-    77                                  ;			Binary literal values in source code are encoded with a final 'b', e.g. 1010b.
-    78                                  ;			Decimal literal values in source code are strictly numerals, e.g. 2048.
-    79                                  ;			Octal literal values are avoided.
-    80                                  ;			String literals are enclosed in double quotes, e.g. "Loading OS".
-    81                                  ;			Single character literals are enclosed in single quotes, e.g. 'A'.
-    82                                  ;
-    83                                  ;	Structures:	Structure names are in all-caps (DATETIME).
-    84                                  ;			Structure names do not begin with a verb.
-    85                                  ;
-    86                                  ;	Macros:		Macro names are in camel case (getDateString).
-    87                                  ;			Macro names do begin with a verb.
-    88                                  ;
-    89                                  ;	Registers:	Register names in comments are in upper case.
-    90                                  ;			Register names in source code are in lower case.
-    91                                  ;
-    92                                  ;	Usage:		Registers EBX, ECX, ESI, EDI, EBP, SS, CS, DS and ES are preserved by all OS routines.
-    93                                  ;			Registers EAX and ECX are preferred for returning response/result values.
-    94                                  ;			Register EBX is preferred for passing a context (structure) address parameter.
-    95                                  ;			Registers EAX, EDX, ECX and EBX are preferred for passing integral parameters.
+    39                                  ;	Alignment:	In this document, columns are numbered beginning with 1.
+    40                                  ;			Assembly instructions (mnemonics) begin in column 25.
+    41                                  ;			Assembly operands begin in column 33.
+    42                                  ;			Inline comments begin in column 81.
+    43                                  ;			Lines should not extend beyond column 120.
+    44                                  ;
+    45                                  ;	Arguments:	Arguments are passed as registers and generally follow this order: EAX, ECX, EDX, EBX.
+    46                                  ;			However, ECX may be used as the first parameter if a test for zero is required. EBX and EBP
+    47                                  ;			may be used as parameters if the routine is considered a "method" of an "object". In this
+    48                                  ;			case, EBX or EBP will address the object storage. If the routine is general-purpose string
+    49                                  ;			or character-array manipulator, ESI and EDI may be used as parameters to address input and/or
+    50                                  ;			ouput buffers, respectively.
+    51                                  ;
+    52                                  ;	Code Order:	Routines should appear in the order of their first likely use.
+    53                                  ;			Negative relative call or jump addresses indicate reuse.
+    54                                  ;
+    55                                  ;	Comments:	A comment that spans the entire line begins with a semicolon in column 1.
+    56                                  ;			A comment that accompanies code on a line begins with a semicolon in column 81.
+    57                                  ;			Register names in comments are in upper case (EAX, EDI).
+    58                                  ;			Hexadecimal values in comments are in lower case (01fh, 0dah).
+    59                                  ;			Routines are preceded with a comment box that includes the routine name, description, and
+    60                                  ;			register contents on entry and exit.
+    61                                  ;
+    62                                  ;	Constants:	Symbolic constants (equates) are named in all-caps beginning with 'E' (EDATAPORT).
+    63                                  ;			Constant stored values are named in camel case, starting with 'c' (cbMaxLines).
+    64                                  ;			The 2nd letter of the constant label indicates the storage type.
+    65                                  ;
+    66                                  ;			cq......	constant quad-word (dq)
+    67                                  ;			cd......	constant double-word (dd)
+    68                                  ;			cw......	constant word (dw)
+    69                                  ;			cb......	constant byte (db)
+    70                                  ;			cz......	constant ASCIIZ (null-terminated) string
+    71                                  ;
+    72                                  ;	Instructions:	32-bit instructions are generally favored.
+    73                                  ;			8-bit instructions and data are preferred for flags and status fields, etc.
+    74                                  ;			16-bit instructions are avoided wherever possible to avoid prefix bytes.
+    75                                  ;
+    76                                  ;	Labels:		Labels within a routine are numeric and begin with a period (.10, .20).
+    77                                  ;			Labels within a routine begin at ".10" and increment by 10.
+    78                                  ;
+    79                                  ;	Literals:	Literal values defined by external standards should be defined as symbolic constants (equates).
+    80                                  ;			Hexadecimal literals in code are in upper case with a leading '0' and trailing 'h' (01Fh).
+    81                                  ;			Binary literal values in source code are encoded with a final 'b' (1010b).
+    82                                  ;			Decimal literal values in source code are strictly numerals (2048).
+    83                                  ;			Octal literal values are avoided.
+    84                                  ;			String literals are enclosed in double quotes, e.g. "Loading OS".
+    85                                  ;			Single character literals are enclosed in single quotes, e.g. 'A'.
+    86                                  ;
+    87                                  ;	Macros:		Macro names are in camel case, beginning with a lower-case letter (getDateString).
+    88                                  ;			Macro names describe an action and so DO begin with a verb.
+    89                                  ;
+    90                                  ;	Memory Use:	Operating system memory allocation is avoided wherever possible.
+    91                                  ;			Buffers are kept to as small a size as practicable.
+    92                                  ;			Data and code intermingling is avoided wherever possible.
+    93                                  ;
+    94                                  ;	Registers:	Register names in comments are in upper case (EAX, EDX).
+    95                                  ;			Register names in source code are in lower case (eax, edx).
     96                                  ;
-    97                                  ;-----------------------------------------------------------------------------------------------------------------------
-    98                                  ;=======================================================================================================================
-    99                                  ;
-   100                                  ;	Equates
-   101                                  ;
-   102                                  ;	The equate (equ) statement defines a symbolic name for a fixed value so that such a value can be defined and
-   103                                  ;	verified once and then used throughout the code. Using symbolic names simplifies searching for where logical
-   104                                  ;	values are used. Equate names are in all-caps and begin with the letter 'E'. Equates are grouped into related
-   105                                  ;	sets. Hardware-based values are listed first, followed by BIOS, protocol and application values.
+    97                                  ;	Return Values:	Routines return result values in EAX or ECX or both. Routines should indicate failure by
+    98                                  ;			setting the carry flag to 1. Routines may prefer the use of ECX as a return value if the
+    99                                  ;			value is to be tested for null upon return (using the jecxz instruction).
+   100                                  ;
+   101                                  ;	Routines:	Routine names are in mixed case, capitalized (GetYear, ReadRealTimeClock).
+   102                                  ;			Routine names begin with a verb (Get, Read, Load).
+   103                                  ;			Routines should have a single entry address and a single exit instruction (ret, iretd, etc.).
+   104                                  ;			Routines that serve as wrappers for library functions carry the same name as the library
+   105                                  ;			function but begin with a leading underscore (_) character.
    106                                  ;
-   107                                  ;=======================================================================================================================
-   108                                  ;-----------------------------------------------------------------------------------------------------------------------
+   107                                  ;	Structures:	Structure names are in all-caps (DATETIME).
+   108                                  ;			Structure names describe a "thing" and so do NOT begin with a verb.
    109                                  ;
-   110                                  ;	8042 Keyboard Controller						EKEYB...
-   111                                  ;
-   112                                  ;	The 8042 Keyboard Controller (8042) is a programmable controller that accepts input signals from the keyboard
-   113                                  ;	device. It also signals a hardware interrupt to the CPU when the low-order bit of I/O port 64h is set to zero.
-   114                                  ;
-   115                                  ;-----------------------------------------------------------------------------------------------------------------------
-   116                                  EKEYBPORTSTAT		equ	064h						;status port
-   117                                  EKEYBCMDRESET		equ	0FEh						;reset bit 0 to restart system
-   118                                  ;-----------------------------------------------------------------------------------------------------------------------
-   119                                  ;
-   120                                  ;	BIOS Interrupts and Functions						EBIOS...
-   121                                  ;
-   122                                  ;	Basic Input/Output System (BIOS) functions are grouped and accessed by issuing an interrupt call. Each
-   123                                  ;	BIOS interrupt supports several funtions. The function code is typically passed in the AH register.
+   110                                  ;	Usage:		Registers EBX, ECX, EBP, SS, CS, DS and ES are preserved by routines.
+   111                                  ;			Registers ESI and EDI are preserved unless they are input parameters.
+   112                                  ;			Registers EAX and ECX are preferred for returning response/result values.
+   113                                  ;			Registers EBX and EBP are preferred for context (structure) address parameters.
+   114                                  ;			Registers EAX, ECX, EDX and EBX are preferred for integral parameters.
+   115                                  ;
+   116                                  ;	Variables:	Variables are named in camel case, starting with 'w'.
+   117                                  ;			The 2nd letter of the variable label indicates the storage type.
+   118                                  ;
+   119                                  ;			wq......	variable quad-word (resq)
+   120                                  ;			wd......	variable double-word (resd)
+   121                                  ;			ww......	variable word (resw)
+   122                                  ;			wb......	variable byte (resb)
+   123                                  ;			ws......	writable structure
    124                                  ;
    125                                  ;-----------------------------------------------------------------------------------------------------------------------
-   126                                  EBIOSINTVIDEO		equ	010h						;video services interrupt
-   127                                  EBIOSFNSETVMODE		equ	000h						;video set mode function
-   128                                  EBIOSMODETEXT80		equ	003h						;video mode 80x25 text
-   129                                  EBIOSFNTTYOUTPUT	equ	00Eh						;video TTY output function
-   130                                  EBIOSINTKEYBOARD	equ	016h						;keyboard services interrupt
-   131                                  EBIOSFNKEYSTATUS	equ	001h						;keyboard status function
-   132                                  ;-----------------------------------------------------------------------------------------------------------------------
-   133                                  ;
-   134                                  ;	Boot Sector and Loader Constants					EBOOT...
-   135                                  ;
-   136                                  ;	Equates in this section support the boot sector and the 16-bit operating system loader, which will be
-   137                                  ;	responsible for placing the CPU into protected mode and calling the initial operating system task.
+   126                                  ;=======================================================================================================================
+   127                                  ;
+   128                                  ;	Equates
+   129                                  ;
+   130                                  ;	The equate (equ) statement defines a symbolic name for a fixed value so that such a value can be defined and
+   131                                  ;	verified once and then used throughout the code. Using symbolic names simplifies searching for where logical
+   132                                  ;	values are used. Equate names are in all-caps and begin with the letter 'E'. Equates are grouped into related
+   133                                  ;	sets. Equates here are defined in the following groupings:
+   134                                  ;
+   135                                  ;	Hardware-Defined Values
+   136                                  ;
+   137                                  ;	EKEYB...	8042 or "PS/2 Controller" (Keyboard Controller) values
    138                                  ;
-   139                                  ;-----------------------------------------------------------------------------------------------------------------------
-   140                                  EBOOTSTACKTOP		equ	0100h						;boot sector stack top relative to DS
-   141                                  EBOOTSECTORBYTES	equ	512						;bytes per sector
-   142                                  EBOOTDISKSECTORS	equ	2880						;sectors per disk
-   143                                  EBOOTDISKBYTES		equ	(EBOOTSECTORBYTES*EBOOTDISKSECTORS)		;bytes per disk
-   144                                  %ifdef BUILDBOOT
-   145                                  ;=======================================================================================================================
+   139                                  ;	Firmware-Defined Values
+   140                                  ;
+   141                                  ;	EBIOS...	Basic Input/Output System (BIOS) values
+   142                                  ;
+   143                                  ;	Operating System Values
+   144                                  ;
+   145                                  ;	EBOOT...	Boot sector and loader values
    146                                  ;
-   147                                  ;	Boot Sector								@disk: 000000	@mem: 007c00
-   148                                  ;
-   149                                  ;	The first sector of the disk is the boot sector. The BIOS will load the boot sector into memory and pass
-   150                                  ;	control to the code at the start of the sector. The boot sector code is responsible for loading the operating
-   151                                  ;	system into memory. The boot sector contains a disk parameter table describing the geometry and allocation
-   152                                  ;	of the disk. Following the disk parameter table is code to load the operating system kernel into memory.
-   153                                  ;
-   154                                  ;	The 'cpu' directive limits emitted code to those instructions supported by the most primitive processor
-   155                                  ;	we expect to ever execute our code. The 'vstart' parameter indicates addressability of symbols so as to
-   156                                  ;	emulating the DOS .COM program model. Although the BIOS is expected to load the boot sector at address 7c00,
-   157                                  ;	we do not make that assumption. The CPU starts in 16-bit addressing mode. A three-byte jump instruction is
-   158                                  ;	immediately followed by a disk parameter table.
+   147                                  ;=======================================================================================================================
+   148                                  ;-----------------------------------------------------------------------------------------------------------------------
+   149                                  ;
+   150                                  ;	Hardware-Defined Values
+   151                                  ;
+   152                                  ;-----------------------------------------------------------------------------------------------------------------------
+   153                                  ;-----------------------------------------------------------------------------------------------------------------------
+   154                                  ;
+   155                                  ;	8042 Keyboard Controller						EKEYB...
+   156                                  ;
+   157                                  ;	The 8042 Keyboard Controller (8042) is a programmable controller that accepts input signals from the keyboard
+   158                                  ;	device. It also signals a hardware interrupt to the CPU when the low-order bit of I/O port 64h is set to zero.
    159                                  ;
-   160                                  ;=======================================================================================================================
-   161                                  			cpu	8086						;assume minimal CPU
-   162                                  section			boot	vstart=0100h					;emulate .COM (CS,DS,ES=PSP) addressing
-   163                                  			bits	16						;16-bit code at power-up
-   164 00000000 E91B00                  Boot			jmp	word Boot.10					;jump over parameter table
-   165                                  ;-----------------------------------------------------------------------------------------------------------------------
+   160                                  ;-----------------------------------------------------------------------------------------------------------------------
+   161                                  EKEYBPORTSTAT		equ	064h						;status port
+   162                                  EKEYBCMDRESET		equ	0FEh						;reset bit 0 to restart system
+   163                                  ;-----------------------------------------------------------------------------------------------------------------------
+   164                                  ;
+   165                                  ;	Firmware-Defined Values
    166                                  ;
-   167                                  ;	Disk Parameter Table
-   168                                  ;
-   169                                  ;	The disk parameter table informs the BIOS of the floppy disk architecture. Here, we use parameters for the
-   170                                  ;	3.5" 1.44MB floppy disk since this format is widely supported by virtual machine hypervisors.
+   167                                  ;-----------------------------------------------------------------------------------------------------------------------
+   168                                  ;-----------------------------------------------------------------------------------------------------------------------
+   169                                  ;
+   170                                  ;	BIOS Interrupts and Functions						EBIOS...
    171                                  ;
-   172                                  ;-----------------------------------------------------------------------------------------------------------------------
-   173 00000003 437573746F6D4F53        			db	"CustomOS"					;eight-byte label
-   174 0000000B 0002                    cwSectorBytes		dw	EBOOTSECTORBYTES				;bytes per sector
-   175 0000000D 01                      cbClusterSectors	db	1						;sectors per cluster
-   176 0000000E 0100                    cwReservedSectors	dw	1						;reserved sectors
-   177 00000010 02                      cbFatCount		db	2						;file allocation table copies
-   178 00000011 E000                    cwDirEntries		dw	224						;max directory entries
-   179 00000013 400B                    cwDiskSectors		dw	EBOOTDISKSECTORS				;sectors per disk
-   180 00000015 F0                      cbDiskType		db	0F0h						;1.44MB
-   181 00000016 0900                    cwFatSectors		dw	9						;sectors per FAT copy
-   182                                  cbTrackSectors		equ	$						;sectors per track (as byte)
-   183 00000018 1200                    cwTrackSectors		dw	18						;sectors per track (as word)
-   184 0000001A 0200                    cwDiskSides		dw	2						;sides per disk
-   185 0000001C 0000                    cwSpecialSectors	dw	0						;special sectors
-   186                                  ;
-   187                                  ;	BIOS typically loads the boot sector at absolute address 7c00 and sets the stack pointer at 512 bytes past the
-   188                                  ;	end of the boot sector. But, since BIOS code varies, we don't make any assumptions as to where our boot sector
-   189                                  ;	is loaded. For example, the initial CS:IP could be 0:7c00, 700:c00, 7c0:0, etc. So, to avoid assumptions, we
-   190                                  ;	first normalize CS:IP to get the absolute segment address in BX. The comments below show the effect of this code
-   191                                  ;	given several possible starting values for CS:IP.
-   192                                  ;
-   193                                  										;CS:IP	 0:7c00 700:c00 7c0:0
-   194 0000001E E80000                  Boot.10			call	word .20					;[ESP] =   7c21     c21    21
-   195                                  .@20			equ	$-$$						;.@20 = 021h
-   196 00000021 58                      .20			pop	ax						;AX =	   7c21     c21    21
-   197 00000022 83E821                  			sub	ax,.@20						;BX =	   7c00     c00     0
-   198 00000025 B104                    			mov	cl,4						;shift count
-   199 00000027 D3E8                    			shr	ax,cl						;AX =	    7c0      c0     0
-   200 00000029 8CCB                    			mov	bx,cs						;BX =	      0     700   7c0
-   201 0000002B 01C3                    			add	bx,ax						;BX =	    7c0     7c0   7c0
+   172                                  ;	Basic Input/Output System (BIOS) functions are grouped and accessed by issuing an interrupt call. Each
+   173                                  ;	BIOS interrupt supports several funtions. The function code is typically passed in the AH register.
+   174                                  ;
+   175                                  ;-----------------------------------------------------------------------------------------------------------------------
+   176                                  EBIOSINTVIDEO		equ	010h						;video services interrupt
+   177                                  EBIOSFNSETVMODE		equ	000h						;video set mode function
+   178                                  EBIOSMODETEXT80		equ	003h						;video mode 80x25 text
+   179                                  EBIOSFNTTYOUTPUT	equ	00Eh						;video TTY output function
+   180                                  EBIOSINTKEYBOARD	equ	016h						;keyboard services interrupt
+   181                                  EBIOSFNKEYSTATUS	equ	001h						;keyboard status function
+   182                                  ;-----------------------------------------------------------------------------------------------------------------------
+   183                                  ;
+   184                                  ;	Operating System Values
+   185                                  ;
+   186                                  ;-----------------------------------------------------------------------------------------------------------------------
+   187                                  ;-----------------------------------------------------------------------------------------------------------------------
+   188                                  ;
+   189                                  ;	Boot Sector and Loader Constants					EBOOT...
+   190                                  ;
+   191                                  ;	Equates in this section support the boot sector and the 16-bit operating system loader, which will be
+   192                                  ;	responsible for placing the CPU into protected mode and calling the initial operating system task.
+   193                                  ;
+   194                                  ;-----------------------------------------------------------------------------------------------------------------------
+   195                                  EBOOTSTACKTOP		equ	0100h						;boot sector stack top relative to DS
+   196                                  EBOOTSECTORBYTES	equ	512						;bytes per sector
+   197                                  EBOOTDIRENTRIES		equ	224						;directory entries
+   198                                  EBOOTDISKSECTORS	equ	2880						;sectors per disk
+   199                                  EBOOTDISKBYTES		equ	(EBOOTSECTORBYTES*EBOOTDISKSECTORS)		;bytes per disk
+   200                                  %ifdef BUILDBOOT
+   201                                  ;=======================================================================================================================
    202                                  ;
-   203                                  ;	Now, since we are assembling our boot code to emulate the addressing of a .COM file, we want the DS and ES
-   204                                  ;	registers to be set to where a Program Segment Prefix (PSP) would be, exactly 100h (256) bytes prior to
-   205                                  ;	the start of our code. This will correspond to our assembled data address offsets. Note that we instructed
-   206                                  ;	the assembler to produce addresses for our symbols that are offset from our code by 100h. See the "vstart"
-   207                                  ;	parameter for the "section" directive above. We also set SS to the PSP and SP to the address of our i/o
-   208                                  ;	buffer. This leaves 256 bytes of usable stack from 7b0:300 to 7b0:400.
+   203                                  ;	Boot Sector								@disk: 000000	@mem: 007c00
+   204                                  ;
+   205                                  ;	The first sector of the disk is the boot sector. The BIOS will load the boot sector into memory and pass
+   206                                  ;	control to the code at the start of the sector. The boot sector code is responsible for loading the operating
+   207                                  ;	system into memory. The boot sector contains a disk parameter table describing the geometry and allocation
+   208                                  ;	of the disk. Following the disk parameter table is code to load the operating system kernel into memory.
    209                                  ;
-   210 0000002D 83EB10                  			sub	bx,16						;BX = 07b0
-   211 00000030 8EDB                    			mov	ds,bx						;DS = 07b0 = psp
-   212 00000032 8EC3                    			mov	es,bx						;ES = 07b0 = psp
-   213 00000034 8ED3                    			mov	ss,bx						;SS = 07b0 = psp (ints disabled)
-   214 00000036 BC0001                  			mov	sp,EBOOTSTACKTOP				;SP = 0100       (ints enabled)
+   210                                  ;	The "cpu" directive limits emitted code to those instructions supported by the most primitive processor
+   211                                  ;	we expect to ever execute our code. The "vstart" parameter indicates addressability of symbols so as to
+   212                                  ;	emulate the DOS .COM program model. Although the BIOS is expected to load the boot sector at address 7c00,
+   213                                  ;	we do not make that assumption. The CPU starts in 16-bit addressing mode. A three-byte jump instruction is
+   214                                  ;	immediately followed by a disk parameter table.
    215                                  ;
-   216                                  ;	Our boot addressability is now set up according to the following diagram.
-   217                                  ;
-   218                                  ;	DS,ES,SS ----->	007b00	+-----------------------------------------------+ DS:0000
-   219                                  ;				|  Boot Stack & Boot PSP (Unused)		|
-   220                                  ;				|  256 = 100h bytes				|
-   221                                  ;	SS:SP -------->	007c00	+-----------------------------------------------+ DS:0100  07b0:0100
-   222                                  ;				|  Boot Sector (vstart=0100h)			|
-   223                                  ;				|  1 sector = 512 = 200h bytes			|
-   224                                  ;			007e00	+-----------------------------------------------+ DS:0300
-   225                                  ;
-   226                                  ;	Set the video mode to 80 column, 25 row, text.
+   216                                  ;=======================================================================================================================
+   217                                  			cpu	8086						;assume minimal CPU
+   218                                  section			boot	vstart=0100h					;emulate .COM (CS,DS,ES=PSP) addressing
+   219                                  			bits	16						;16-bit code at power-up
+   220 00000000 E91B00                  Boot			jmp	word Boot.10					;jump over parameter table
+   221                                  ;-----------------------------------------------------------------------------------------------------------------------
+   222                                  ;
+   223                                  ;	Disk Parameter Table
+   224                                  ;
+   225                                  ;	The disk parameter table informs the BIOS of the floppy disk architecture. Here, we use parameters for the
+   226                                  ;	3.5" 1.44MB floppy disk since this format is widely supported by virtual machine hypervisors.
    227                                  ;
-   228 00000039 B80300                  			mov	ax,EBIOSFNSETVMODE<<8|EBIOSMODETEXT80		;set mode function, 80x25 text mode
-   229 0000003C CD10                    			int	EBIOSINTVIDEO					;call BIOS display interrupt
-   230                                  ;
-   231                                  ;	Write a message to the console so we know we have our addressability established.
-   232                                  ;
-   233 0000003E BE[6300]                			mov	si,czStartingMsg				;starting message
-   234 00000041 E81200                  			call	PutTTYString					;display loader message
-   235                                  ;
-   236                                  ;	Now we want to wait for a keypress. We can use a keyboard interrupt function for this (INT 16h, AH=0).
-   237                                  ;	However, some hypervisor BIOS implementations have been seen to implement the "wait" as simply a fast
-   238                                  ;	iteration of the keyboard status function call (INT 16h, AH=1), causing a CPU race condition. So, instead
-   239                                  ;	we will use the keyboard status call and iterate over a halt (HLT) instruction until a key is pressed.
-   240                                  ;	By convention, we enable maskable interrupts with STI before issuing HLT, so as not to catch fire.
-   241                                  ;
-   242 00000044 B401                    .30			mov	ah,EBIOSFNKEYSTATUS				;keyboard status function
-   243 00000046 CD16                    			int	EBIOSINTKEYBOARD				;call BIOS keyboard interrupt
-   244 00000048 7504                    			jnz	.40						;exit if key pressed
-   245 0000004A FB                      			sti							;enable maskable interrupts
-   246 0000004B F4                      			hlt							;wait for interrupt
-   247 0000004C EBF6                    			jmp	.30						;repeat until keypress
+   228                                  ;-----------------------------------------------------------------------------------------------------------------------
+   229 00000003 437573746F6D4F53        			db	"CustomOS"					;eight-byte label
+   230 0000000B 0002                    cwSectorBytes		dw	EBOOTSECTORBYTES				;bytes per sector
+   231 0000000D 01                      cbClusterSectors	db	1						;sectors per cluster
+   232 0000000E 0100                    cwReservedSectors	dw	1						;reserved sectors
+   233 00000010 02                      cbFatCount		db	2						;file allocation table copies
+   234 00000011 E000                    cwDirEntries		dw	EBOOTDIRENTRIES					;max directory entries
+   235 00000013 400B                    cwDiskSectors		dw	EBOOTDISKSECTORS				;sectors per disk
+   236 00000015 F0                      cbDiskType		db	0F0h						;1.44MB
+   237 00000016 0900                    cwFatSectors		dw	9						;sectors per FAT copy
+   238                                  cbTrackSectors		equ	$						;sectors per track (as byte)
+   239 00000018 1200                    cwTrackSectors		dw	18						;sectors per track (as word)
+   240 0000001A 0200                    cwDiskSides		dw	2						;sides per disk
+   241 0000001C 0000                    cwSpecialSectors	dw	0						;special sectors
+   242                                  ;
+   243                                  ;	BIOS typically loads the boot sector at absolute address 7c00 and sets the stack pointer at 512 bytes past the
+   244                                  ;	end of the boot sector. But, since BIOS code varies, we don't make any assumptions as to where our boot sector
+   245                                  ;	is loaded. For example, the initial CS:IP could be 0:7c00, 700:c00, 7c0:0, etc. So, to avoid assumptions, we
+   246                                  ;	first normalize CS:IP to get the absolute segment address in BX. The comments below show the effect of this code
+   247                                  ;	given several possible starting values for CS:IP.
    248                                  ;
-   249                                  ;	Now that a key has been pressed, we signal the system to restart by driving the B0 line on the 8042
-   250                                  ;	keyboard controller low (OUT 64h,0feh). The restart may take some microseconds to kick in, so we issue
-   251                                  ;	HLT until the system resets.
-   252                                  ;
-   253 0000004E B0FE                    .40			mov	al,EKEYBCMDRESET				;8042 pulse output port pin
-   254 00000050 E664                    			out	EKEYBPORTSTAT,al				;drive B0 low to restart
-   255 00000052 FB                      .50			sti							;enable maskable interrupts
-   256 00000053 F4                      			hlt							;stop until reset, int, nmi
-   257 00000054 EBFC                    			jmp	.50						;loop until restart kicks in
-   258                                  ;-----------------------------------------------------------------------------------------------------------------------
-   259                                  ;
-   260                                  ;	Routine:	PutTTYString
-   261                                  ;
-   262                                  ;	Description:	This routine sends a NUL-terminated string of characters to the TTY output device. We use the
-   263                                  ;			TTY output function of the BIOS video interrupt, passing the address of the string in DS:SI
-   264                                  ;			and the BIOS teletype function code in AH. After a return from the BIOS interrupt, we repeat
-   265                                  ;			for the next string character until a NUL is found. Note that we clear the direction flag (DF)
-   266                                  ;			with CLD before each LODSB. This is just in case the direction flag is ever returned as set
-   267                                  ;			by the video interrupt. This is a precaution since a well-written BIOS should preserve all
-   268                                  ;			registers and flags unless used to indicate return status.
-   269                                  ;
-   270                                  ;	In:		DS:SI	address of string
+   249                                  										;CS:IP	 0:7c00 700:c00 7c0:0
+   250 0000001E E80000                  Boot.10			call	word .20					;[ESP] =   7c21     c21    21
+   251                                  .@20			equ	$-$$						;.@20 = 021h
+   252 00000021 58                      .20			pop	ax						;AX =	   7c21     c21    21
+   253 00000022 83E821                  			sub	ax,.@20						;AX =	   7c00     c00     0
+   254 00000025 B104                    			mov	cl,4						;shift count
+   255 00000027 D3E8                    			shr	ax,cl						;AX =	    7c0      c0     0
+   256 00000029 8CCB                    			mov	bx,cs						;BX =	      0     700   7c0
+   257 0000002B 01C3                    			add	bx,ax						;BX =	    7c0     7c0   7c0
+   258                                  ;
+   259                                  ;	Now, since we are assembling our boot code to emulate the addressing of a .COM file, we want the DS and ES
+   260                                  ;	registers to be set to where a Program Segment Prefix (PSP) would be, exactly 100h (256) bytes prior to
+   261                                  ;	the start of our code. This will correspond to our assembled data address offsets. Note that we instructed
+   262                                  ;	the assembler to produce addresses for our symbols that are offset from our code by 100h. See the "vstart"
+   263                                  ;	parameter for the "section" directive above. We also set SS to the PSP and SP to the address of our i/o
+   264                                  ;	buffer. This leaves 256 bytes of usable stack from 7b0:0 to 7b0:100.
+   265                                  ;
+   266 0000002D 83EB10                  			sub	bx,16						;BX = 07b0
+   267 00000030 8EDB                    			mov	ds,bx						;DS = 07b0 = psp
+   268 00000032 8EC3                    			mov	es,bx						;ES = 07b0 = psp
+   269 00000034 8ED3                    			mov	ss,bx						;SS = 07b0 = psp (ints disabled)
+   270 00000036 BC0001                  			mov	sp,EBOOTSTACKTOP				;SP = 0100       (ints enabled)
    271                                  ;
-   272                                  ;-----------------------------------------------------------------------------------------------------------------------
-   273 00000056 FC                      PutTTYString		cld							;forward strings
-   274 00000057 AC                      			lodsb							;load next byte at DS:SI in AL
-   275 00000058 84C0                    			test	al,al						;end of string?
-   276 0000005A 7406                    			jz	.10						;... yes, exit our loop
-   277 0000005C B40E                    			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
-   278 0000005E CD10                    			int	EBIOSINTVIDEO					;call BIOS display interrupt
-   279 00000060 EBF4                    			jmp	PutTTYString					;repeat until done
-   280 00000062 C3                      .10			ret							;return
-   281                                  ;-----------------------------------------------------------------------------------------------------------------------
-   282                                  ;
-   283                                  ;	Loader Data
-   284                                  ;
-   285                                  ;	Our only "data" is the string displayed when system starts. It ends with ASCII carriage-return (13) and line-
-   286                                  ;	feed (10) values. The remainder of the boot sector is filled with NUL. The boot sector finally ends with the
-   287                                  ;	required two-byte signature checked by the BIOS. Note that recent versions of NASM will issue a warning if
-   288                                  ;	the calculated address for the end-of-sector signature produces a negative value for "510-($-$$)". This will
-   289                                  ;	indicate if we have added too much data and exceeded the length of the sector.
-   290                                  ;
-   291                                  ;-----------------------------------------------------------------------------------------------------------------------
-   292 00000063 5374617274696E6720-     czStartingMsg		db	"Starting OS",13,10,0				;starting message
-   292 0000006C 4F530D0A00         
-   293 00000071 00<rept>                			times	510-($-$$) db 0h				;zero fill to end of sector
-   294 000001FE 55AA                    			db	055h,0AAh					;end of sector signature
-   295                                  %endif
-   296                                  %ifdef BUILDDISK
-   297                                  ;-----------------------------------------------------------------------------------------------------------------------
-   298                                  ;
-   299                                  ;	Free Disk Space								@disk: 000200	@mem:  n/a
-   300                                  ;
-   301                                  ;	Following the convention introduced by DOS, we use the value 'F6' to indicate unused floppy disk storage.
-   302                                  ;
-   303                                  ;-----------------------------------------------------------------------------------------------------------------------
-   304                                  section			unused							;unused disk space
-   305 00000000 F6<rept>                			times 	EBOOTDISKBYTES-0200h db 0F6h			;fill to end of disk image
-   306                                  %endif
-   307                                  ;=======================================================================================================================
+   272                                  ;	Our boot addressability is now set up according to the following diagram.
+   273                                  ;
+   274                                  ;	DS,ES,SS ----->	007b00	+-----------------------------------------------+ DS:0000
+   275                                  ;				|  Boot Stack & Boot PSP (Unused)		|
+   276                                  ;				|  256 = 100h bytes				|
+   277                                  ;	SS:SP -------->	007c00	+-----------------------------------------------+ DS:0100  07b0:0100
+   278                                  ;				|  Boot Sector (vstart=0100h)			|
+   279                                  ;				|  1 sector = 512 = 200h bytes			|
+   280                                  ;			007e00	+-----------------------------------------------+ DS:0300
+   281                                  ;
+   282                                  ;	Set the video mode to 80 column, 25 row, text.
+   283                                  ;
+   284 00000039 B80300                  			mov	ax,EBIOSFNSETVMODE<<8|EBIOSMODETEXT80		;set mode function, 80x25 text mode
+   285 0000003C CD10                    			int	EBIOSINTVIDEO					;call BIOS display interrupt
+   286                                  ;
+   287                                  ;	Write a message to the console so we know we have our addressability established.
+   288                                  ;
+   289 0000003E BE[6300]                			mov	si,czStartingMsg				;starting message
+   290 00000041 E81200                  			call	PutTTYString					;display loader message
+   291                                  ;
+   292                                  ;	Now we want to wait for a keypress. We can use a keyboard interrupt function for this (INT 16h, AH=0).
+   293                                  ;	However, some hypervisor BIOS implementations have been seen to implement the "wait" as simply a fast
+   294                                  ;	iteration of the keyboard status function call (INT 16h, AH=1), causing a CPU race condition. So, instead
+   295                                  ;	we will use the keyboard status call and iterate over a halt (HLT) instruction until a key is pressed.
+   296                                  ;	By convention, we enable maskable interrupts with STI before issuing HLT, so as not to catch fire.
+   297                                  ;
+   298 00000044 B401                    .30			mov	ah,EBIOSFNKEYSTATUS				;keyboard status function
+   299 00000046 CD16                    			int	EBIOSINTKEYBOARD				;call BIOS keyboard interrupt
+   300 00000048 7504                    			jnz	.40						;exit if key pressed
+   301 0000004A FB                      			sti							;enable maskable interrupts
+   302 0000004B F4                      			hlt							;wait for interrupt
+   303 0000004C EBF6                    			jmp	.30						;repeat until keypress
+   304                                  ;
+   305                                  ;	Now that a key has been pressed, we signal the system to restart by driving the B0 line on the 8042
+   306                                  ;	keyboard controller low (OUT 64h,0feh). The restart may take some microseconds to kick in, so we issue
+   307                                  ;	HLT until the system resets.
    308                                  ;
-   309                                  ;	End of Program Code
-   310                                  ;
-   311                                  ;=======================================================================================================================
+   309 0000004E B0FE                    .40			mov	al,EKEYBCMDRESET				;8042 pulse output port pin
+   310 00000050 E664                    			out	EKEYBPORTSTAT,al				;drive B0 low to restart
+   311 00000052 FB                      .50			sti							;enable maskable interrupts
+   312 00000053 F4                      			hlt							;stop until reset, int, nmi
+   313 00000054 EBFC                    			jmp	.50						;loop until restart kicks in
+   314                                  ;-----------------------------------------------------------------------------------------------------------------------
+   315                                  ;
+   316                                  ;	Routine:	PutTTYString
+   317                                  ;
+   318                                  ;	Description:	This routine sends a NUL-terminated string of characters to the TTY output device. We use the
+   319                                  ;			TTY output function of the BIOS video interrupt, passing the address of the string in DS:SI
+   320                                  ;			and the BIOS teletype function code in AH. After a return from the BIOS interrupt, we repeat
+   321                                  ;			for the next string character until a NUL is found. Note that we clear the direction flag (DF)
+   322                                  ;			with CLD before the first LODSB. The direction flag is not guaranteed to be preseved between
+   323                                  ;                       calls within the OS. However, the "int" instruction does store the EFLAGS register on the
+   324                                  ;                       stack and restores it on return. Therefore, clearing the direction flag before subsequent calls
+   325                                  ;                       to LODSB is not needed.
+   326                                  ;
+   327                                  ;	In:		DS:SI	address of string
+   328                                  ;
+   329                                  ;       Out:            DF      0
+   330                                  ;                       ZF      1
+   331                                  ;                       AL      0
+   332                                  ;
+   333                                  ;-----------------------------------------------------------------------------------------------------------------------
+   334 00000056 FC                      PutTTYString		cld							;forward strings
+   335 00000057 AC                      .10			lodsb							;load next byte at DS:SI in AL
+   336 00000058 84C0                    			test	al,al						;end of string?
+   337 0000005A 7406                    			jz	.20						;... yes, exit our loop
+   338 0000005C B40E                    			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
+   339 0000005E CD10                    			int	EBIOSINTVIDEO					;call BIOS display interrupt
+   340 00000060 EBF5                    			jmp	.10     					;repeat until done
+   341 00000062 C3                      .20			ret							;return
+   342                                  ;-----------------------------------------------------------------------------------------------------------------------
+   343                                  ;
+   344                                  ;	Loader Data
+   345                                  ;
+   346                                  ;	Our only "data" is the string displayed when system starts. It ends with ASCII carriage-return (13) and line-
+   347                                  ;	feed (10) values. The remainder of the boot sector is filled with NUL. The boot sector finally ends with the
+   348                                  ;	required two-byte signature checked by the BIOS. Note that recent versions of NASM will issue a warning if
+   349                                  ;	the calculated address for the end-of-sector signature produces a negative value for "510-($-$$)". This will
+   350                                  ;	indicate if we have added too much data and exceeded the length of the sector.
+   351                                  ;
+   352                                  ;-----------------------------------------------------------------------------------------------------------------------
+   353 00000063 5374617274696E6720-     czStartingMsg		db	"Starting OS",13,10,0				;starting message
+   353 0000006C 4F530D0A00         
+   354 00000071 00<rept>                			times	510-($-$$) db 0h				;zero fill to end of sector
+   355 000001FE 55AA                    			db	055h,0AAh					;end of sector signature
+   356                                  %endif
+   357                                  %ifdef BUILDDISK
+   358                                  ;-----------------------------------------------------------------------------------------------------------------------
+   359                                  ;
+   360                                  ;	Free Disk Space								@disk: 000200	@mem:  n/a
+   361                                  ;
+   362                                  ;	Following the convention introduced by DOS, we use the value 'F6' to indicate unused floppy disk storage.
+   363                                  ;
+   364                                  ;-----------------------------------------------------------------------------------------------------------------------
+   365                                  section			unused							;unused disk space
+   366 00000000 F6<rept>                			times 	EBOOTDISKBYTES-0200h db 0F6h			;fill to end of disk image
+   367                                  %endif
+   368                                  ;=======================================================================================================================
+   369                                  ;
+   370                                  ;	End of Program Code
+   371                                  ;
+   372                                  ;=======================================================================================================================

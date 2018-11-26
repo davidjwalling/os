@@ -5,18 +5,18 @@
 ;	Project:	os.002
 ;
 ;	Description:	This sample program adds code to load the operating system kernel program from the disk image.
-;			The boot sector now searches the disk for the loader program, loads it into memory and runs it.
-;			The loader program in this sample simply displays a greeting.
+;			The boot sector searches the disk for the loader program, loads it into memory and runs it. The
+;			loader program in this sample simply displays a greeting.
 ;
-;	Revised:	July 1, 2017
+;	Revised:	July 4, 2018
 ;
 ;	Assembly:	nasm os.asm -f bin -o os.dat -l os.dat.lst -DBUILDBOOT
 ;			nasm os.asm -f bin -o os.dsk -l os.dsk.lst -DBUILDDISK
 ;			nasm os.asm -f bin -o os.com -l os.com.lst -DBUILDCOM
 ;
-;	Assembler:	Netwide Assembler (NASM) 2.13.01
+;	Assembler:	Netwide Assembler (NASM) 2.13.01, May 1 2017
 ;
-;			Copyright (C) 2010-2017 by David J. Walling. All Rights Reserved.
+;	Notice:		Copyright (C) 2010-2018 David J. Walling. All Rights Reserved.
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -30,34 +30,39 @@
 ;	BUILDCOM	Creates os.com, the OS loader and kernel as a standalone DOS program.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-%ifdef BUILDDISK
-%define BUILDBOOT
-%define BUILDCOM
+%ifdef BUILDDISK								;if we are building a disk image ...
+%define BUILDBOOT								;... build the boot sector
+%define BUILDCOM								;... and the OS kernel
 %endif
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Conventions
 ;
-;	Labels:		Labels within a routine are numeric and begin with a period (.10, .20).
-;			Labels within a routine begin at ".10" and increment by 10.
+;	Alignment:	In this document, columns are numbered beginning with 1.
+;			Assembly instructions (mnemonics) begin in column 25.
+;			Assembly operands begin in column 33.
+;			Inline comments begin in column 81.
+;			Lines should not extend beyond column 120.
+;
+;	Arguments:	Arguments are passed as registers and generally follow this order: EAX, ECX, EDX, EBX.
+;			However, ECX may be used as the first parameter if a test for zero is required. EBX and EBP
+;			may be used as parameters if the routine is considered a "method" of an "object". In this
+;			case, EBX or EBP will address the object storage. If the routine is general-purpose string
+;			or character-array manipulator, ESI and EDI may be used as parameters to address input and/or
+;			ouput buffers, respectively.
+;
+;	Code Order:	Routines should appear in the order of their first likely use.
+;			Negative relative call or jump addresses indicate reuse.
 ;
 ;	Comments:	A comment that spans the entire line begins with a semicolon in column 1.
 ;			A comment that accompanies code on a line begins with a semicolon in column 81.
-;			Register names in comments are in upper case.
-;			Hexadecimal values in comments are in lower case.
+;			Register names in comments are in upper case (EAX, EDI).
+;			Hexadecimal values in comments are in lower case (01fh, 0dah).
 ;			Routines are preceded with a comment box that includes the routine name, description, and
 ;			register contents on entry and exit.
 ;
-;	Alignment:	Assembly instructions (mnemonics) begin in column 25.
-;			Assembly operands begin in column 33.
-;			Lines should not extend beyond column 120.
-;
-;	Routines:	Routine names are in mixed case (GetYear, ReadRealTimeClock).
-;			Routine names begin with a verb (Get, Read, etc.).
-;			Routines should have a single entry address and a single exit instruction (ret, iretd, etc.).
-;
 ;	Constants:	Symbolic constants (equates) are named in all-caps beginning with 'E' (EDATAPORT).
-;			Constant stored values are named in camel case, starting with 'c'.
+;			Constant stored values are named in camel case, starting with 'c' (cbMaxLines).
 ;			The 2nd letter of the constant label indicates the storage type.
 ;
 ;			cq......	constant quad-word (dq)
@@ -66,6 +71,50 @@
 ;			cb......	constant byte (db)
 ;			cz......	constant ASCIIZ (null-terminated) string
 ;
+;	Instructions:	32-bit instructions are generally favored.
+;			8-bit instructions and data are preferred for flags and status fields, etc.
+;			16-bit instructions are avoided wherever possible to avoid prefix bytes.
+;
+;	Labels:		Labels within a routine are numeric and begin with a period (.10, .20).
+;			Labels within a routine begin at ".10" and increment by 10.
+;
+;	Literals:	Literal values defined by external standards should be defined as symbolic constants (equates).
+;			Hexadecimal literals in code are in upper case with a leading '0' and trailing 'h' (01Fh).
+;			Binary literal values in source code are encoded with a final 'b' (1010b).
+;			Decimal literal values in source code are strictly numerals (2048).
+;			Octal literal values are avoided.
+;			String literals are enclosed in double quotes, e.g. "Loading OS".
+;			Single character literals are enclosed in single quotes, e.g. 'A'.
+;
+;	Macros:		Macro names are in camel case, beginning with a lower-case letter (getDateString).
+;			Macro names describe an action and so DO begin with a verb.
+;
+;	Memory Use:	Operating system memory allocation is avoided wherever possible.
+;			Buffers are kept to as small a size as practicable.
+;			Data and code intermingling is avoided wherever possible.
+;
+;	Registers:	Register names in comments are in upper case (EAX, EDX).
+;			Register names in source code are in lower case (eax, edx).
+;
+;	Return Values:	Routines return result values in EAX or ECX or both. Routines should indicate failure by
+;			setting the carry flag to 1. Routines may prefer the use of ECX as a return value if the
+;			value is to be tested for null upon return (using the jecxz instruction).
+;
+;	Routines:	Routine names are in mixed case, capitalized (GetYear, ReadRealTimeClock).
+;			Routine names begin with a verb (Get, Read, Load).
+;			Routines should have a single entry address and a single exit instruction (ret, iretd, etc.).
+;			Routines that serve as wrappers for library functions carry the same name as the library
+;			function but begin with a leading underscore (_) character.
+;
+;	Structures:	Structure names are in all-caps (DATETIME).
+;			Structure names describe a "thing" and so do NOT begin with a verb.
+;
+;	Usage:		Registers EBX, ECX, EBP, SS, CS, DS and ES are preserved by routines.
+;			Registers ESI and EDI are preserved unless they are input parameters.
+;			Registers EAX and ECX are preferred for returning response/result values.
+;			Registers EBX and EBP are preferred for context (structure) address parameters.
+;			Registers EAX, ECX, EDX and EBX are preferred for integral parameters.
+;
 ;	Variables:	Variables are named in camel case, starting with 'w'.
 ;			The 2nd letter of the variable label indicates the storage type.
 ;
@@ -73,28 +122,7 @@
 ;			wd......	variable double-word (resd)
 ;			ww......	variable word (resw)
 ;			wb......	variable byte (resb)
-;
-;	Literals:	Literal values defined by external standards should be defined as symbolic constants (equates).
-;			Hexadecimal literals in code are in upper case with a leading '0' and trailing 'h'. e.g. 01Fh.
-;			Binary literal values in source code are encoded with a final 'b', e.g. 1010b.
-;			Decimal literal values in source code are strictly numerals, e.g. 2048.
-;			Octal literal values are avoided.
-;			String literals are enclosed in double quotes, e.g. "Loading OS".
-;			Single character literals are enclosed in single quotes, e.g. 'A'.
-;
-;	Structures:	Structure names are in all-caps (DATETIME).
-;			Structure names do not begin with a verb.
-;
-;	Macros:		Macro names are in camel case (getDateString).
-;			Macro names do begin with a verb.
-;
-;	Registers:	Register names in comments are in upper case.
-;			Register names in source code are in lower case.
-;
-;	Usage:		Registers EBX, ECX, ESI, EDI, EBP, SS, CS, DS and ES are preserved by all OS routines.
-;			Registers EAX and ECX are preferred for returning response/result values.
-;			Register EBX is preferred for passing a context (structure) address parameter.
-;			Registers EAX, EDX, ECX and EBX are preferred for passing integral parameters.
+;			ws......	writable structure
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ;=======================================================================================================================
@@ -104,9 +132,26 @@
 ;	The equate (equ) statement defines a symbolic name for a fixed value so that such a value can be defined and
 ;	verified once and then used throughout the code. Using symbolic names simplifies searching for where logical
 ;	values are used. Equate names are in all-caps and begin with the letter 'E'. Equates are grouped into related
-;	sets. Hardware-based values are listed first, followed by BIOS, protocol and application values.
+;	sets. Equates here are defined in the following groupings:
+;
+;	Hardware-Defined Values
+;
+;	EKEYB...	8042 or "PS/2 Controller" (Keyboard Controller) values
+;
+;	Firmware-Defined Values
+;
+;	EBIOS...	Basic Input/Output System (BIOS) values
+;
+;	Operating System Values
+;
+;	EBOOT...	Boot sector and loader values
 ;
 ;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Hardware-Defined Values
+;
+;-----------------------------------------------------------------------------------------------------------------------
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	8042 Keyboard Controller						EKEYB...
@@ -117,6 +162,11 @@
 ;-----------------------------------------------------------------------------------------------------------------------
 EKEYBPORTSTAT		equ	064h						;status port
 EKEYBCMDRESET		equ	0FEh						;reset bit 0 to restart system
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Firmware-Defined Values
+;
+;-----------------------------------------------------------------------------------------------------------------------
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	BIOS Interrupts and Functions						EBIOS...
@@ -134,6 +184,11 @@ EBIOSINTKEYBOARD	equ	016h						;keyboard services interrupt
 EBIOSFNKEYSTATUS	equ	001h						;keyboard status function
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;	Operating System Values
+;
+;-----------------------------------------------------------------------------------------------------------------------
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;	Boot Sector and Loader Constants					EBOOT...
 ;
 ;	Equates in this section support the boot sector and the 16-bit operating system loader, which will be
@@ -142,6 +197,7 @@ EBIOSFNKEYSTATUS	equ	001h						;keyboard status function
 ;-----------------------------------------------------------------------------------------------------------------------
 EBOOTSTACKTOP		equ	0100h						;boot sector stack top relative to DS
 EBOOTSECTORBYTES	equ	512						;bytes per sector
+EBOOTDIRENTRIES		equ	224						;directory entries
 EBOOTDISKSECTORS	equ	2880						;sectors per disk
 EBOOTDISKBYTES		equ	(EBOOTSECTORBYTES*EBOOTDISKSECTORS)		;bytes per disk
 EBOOTFATBASE		equ	(EBOOTSTACKTOP+EBOOTSECTORBYTES)		;offset of FAT I/O buffer rel to DS
@@ -156,9 +212,9 @@ EBOOTMAXTRIES		equ	5						;max read retries
 ;	system into memory. The boot sector contains a disk parameter table describing the geometry and allocation
 ;	of the disk. Following the disk parameter table is code to load the operating system kernel into memory.
 ;
-;	The 'cpu' directive limits emitted code to those instructions supported by the most primitive processor
-;	we expect to ever execute our code. The 'vstart' parameter indicates addressability of symbols so as to
-;	emulating the DOS .COM program model. Although the BIOS is expected to load the boot sector at address 7c00,
+;	The "cpu" directive limits emitted code to those instructions supported by the most primitive processor
+;	we expect to ever execute our code. The "vstart" parameter indicates addressability of symbols so as to
+;	emulate the DOS .COM program model. Although the BIOS is expected to load the boot sector at address 7c00,
 ;	we do not make that assumption. The CPU starts in 16-bit addressing mode. A three-byte jump instruction is
 ;	immediately followed by a disk parameter table.
 ;
@@ -180,7 +236,7 @@ cwSectorBytes		dw	EBOOTSECTORBYTES				;bytes per sector
 cbClusterSectors	db	1						;sectors per cluster
 cwReservedSectors	dw	1						;reserved sectors
 cbFatCount		db	2						;file allocation table copies
-cwDirEntries		dw	224						;max directory entries
+cwDirEntries		dw	EBOOTDIRENTRIES					;max directory entries
 cwDiskSectors		dw	EBOOTDISKSECTORS				;sectors per disk
 cbDiskType		db	0F0h						;1.44MB
 cwFatSectors		dw	9						;sectors per FAT copy
@@ -199,7 +255,7 @@ cwSpecialSectors	dw	0						;special sectors
 Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 .@20			equ	$-$$						;.@20 = 021h
 .20			pop	ax						;AX =	   7c21     c21    21
-			sub	ax,.@20						;BX =	   7c00     c00     0
+			sub	ax,.@20						;AX =	   7c00     c00     0
 			mov	cl,4						;shift count
 			shr	ax,cl						;AX =	    7c0      c0     0
 			mov	bx,cs						;BX =	      0     700   7c0
@@ -210,7 +266,7 @@ Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 ;	the start of our code. This will correspond to our assembled data address offsets. Note that we instructed
 ;	the assembler to produce addresses for our symbols that are offset from our code by 100h. See the "vstart"
 ;	parameter for the "section" directive above. We also set SS to the PSP and SP to the address of our i/o
-;	buffer. This leaves 256 bytes of usable stack from 7b0:300 to 7b0:400.
+;	buffer. This leaves 256 bytes of usable stack from 7b0:0 to 7b0:100.
 ;
 			sub	bx,16						;BX = 07b0
 			mov	ds,bx						;DS = 07b0 = psp
@@ -231,25 +287,26 @@ Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 ;				|  9x512-byte sectors = 4,608 = 1200h bytes	|
 ;			009000	+-----------------------------------------------+ DS:1500  08f0:0100
 ;				|  Directory Sector Buffer & Kernel Load Area	|
-;			009200	+-----------------------------------------------+ DS:1700
+;				|  2 sectors = 1024 = 400h bytes
+;			009400	+-----------------------------------------------+ DS:1900
 ;
 ;	On entry, DL indicates the drive being booted from.
 ;
-			mov	[wbDrive],dl					;[drive] = drive being booted from
+			mov	[wbDrive],dl					;[wbDrive] = drive being booted from
 ;
 ;	Compute directory i/o buffer address.
 ;
 			mov	ax,[cwFatSectors]				;AX = 0009 = FAT sectors
 			mul	word [cwSectorBytes]				;DX:AX = 0000:1200 = FAT bytes
 			add	ax,EBOOTFATBASE					;AX = 1500 = end of FAT buffer
-			mov	[wwDirBuffer],ax				;[dirbuffer] = 1500
+			mov	[wwDirBuffer],ax				;[wwDirBuffer] = 1500
 ;
 ;	Compute segment where os.com will be loaded.
 ;
 			shr	ax,cl						;AX = 0150
 			add	ax,bx						;AX = 0150 + 07b0 = 0900
 			sub	ax,16						;AX = 08f0
-			mov	[wwLoadSegment],ax				;[loadsegment] = 08f0
+			mov	[wwLoadSegment],ax				;[wwLoadSegment] = 08f0
 ;
 ;	Set the video mode to 80 column, 25 row, text.
 ;
@@ -264,20 +321,20 @@ Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 ;	Initialize the number of directory sectors to search.
 ;
 			mov	ax,[cwDirEntries]				;AX = 224 = max dir entries
-			mov	[wwEntriesLeft],ax				;[entriesleft] = 224
+			mov	[wwEntriesLeft],ax				;[wwEntriesLeft] = 224
 ;
 ;	Compute number of directory sectors and initialize overhead count.
 ;
 			mov	cx,ax						;CX = 00e0 = 224 entries
 			mul	word [cwEntryLen]				;DX:AX = 224 * 32 = 7168
 			div	word [cwSectorBytes]				;AX = 7168 / 512 = 14 = dir sectors
-			mov	[wwOverhead],ax					;[overhead] = 000e
+			mov	[wwOverhead],ax					;[wwOverhead] = 000e
 ;
 ;	Compute directory entries per sector.
 ;
-			xchg	ax,cx						;DX:AX = 0:00e0, DX = 0000e
+			xchg	ax,cx						;DX:AX = 0:00e0, CX = 0000e
 			div	cx						;AX = 0010 = entries per dir sector
-			mov	[wwSectorEntries],ax				;[sectorentries] = 0010
+			mov	[wwSectorEntries],ax				;[wwSectorEntries] = 0010
 ;
 ;	Compute first logical directory sector and update overhead count.
 ;
@@ -285,13 +342,13 @@ Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 			mul	byte [cbFatCount]				;AX = 0012 = FAT sectors
 			add	ax,[cwReservedSectors]				;AX = 0013 = FAT plus reserved
 			add	ax,[cwSpecialSectors]				;AX = 0013 = FAT + reserved + special
-			mov	[wwLogicalSector],ax				;[logicalsector] = 0013
-			add	[wwOverhead],ax					;[overhead] = 0021 = res+spec+FAT+dir
+			mov	[wwLogicalSector],ax				;[wwLogicalSector] = 0013
+			add	[wwOverhead],ax					;[wwOverhead] = 0021 = res+spec+FAT+dir
 ;
 ;	Read directory sector.
 ;
 .30			mov	al,1						;sector count
-			mov	[wbReadCount],al				;[readcount] = 01
+			mov	[wbReadCount],al				;[wbReadCount] = 01
 			mov	bx,[wwDirBuffer]				;BX = 1500
 			call	ReadSector					;read sector into es:bx
 ;
@@ -332,14 +389,14 @@ Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 .60			mov	ax,[cwReservedSectors]				;AX = 0001
 			mov	[wwLogicalSector],ax				;start past boot sector
 			mov	ax,[cwFatSectors]				;AX = 0009
-			mov	[wbReadCount],al				;[readcount] = 09
+			mov	[wbReadCount],al				;[wbReadCount] = 09
 			mov	bx,EBOOTFATBASE					;BX = 0300
 			call	ReadSector					;read FAT into buffer
 ;
 ;	Get the starting cluster of the kernel program and target address.
 ;
 			mov	ax,[di+26]					;AX = starting cluster of file
-			les	bx,[wwLoadOffset]				;ES:BX = kernel load add (08F0:0100)
+			les	bx,[wwLoadOffset]				;ES:BX = kernel load add (08f0:0100)
 ;
 ;	Read each program cluster into RAM.
 ;
@@ -390,18 +447,18 @@ Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 wwLoadOffset		dw	0100h						;kernel entry offset
 wwLoadSegment		dw	08F0h						;kernel entry segment (computed)
 ;
-;	Read [readcount] disk sectors from [logicalsector] into ES:BX.
+;	Read [wbReadCount] disk sectors from [wwLogicalSector] into ES:BX.
 ;
 ReadSector		mov	ax,[cwTrackSectors]				;AX = sectors per track
 			mul	word [cwDiskSides]				;DX:AX = sectors per cylinder
 			mov	cx,ax						;CX = sectors per cylinder
 			mov	ax,[wwLogicalSector]				;DX:AX = logical sector
 			div	cx						;AX = cylinder; DX = cyl sector
-			mov	[wbTrack],al					;[track] = cylinder
+			mov	[wbTrack],al					;[wbTrack] = cylinder
 			mov	ax,dx						;AX = cyl sector
 			div	byte [cbTrackSectors]				;AH = sector, AL = head
 			inc	ah						;AH = sector (1,2,3,...)
-			mov	[wbHead],ax					;[head]= head, [sector]= sector
+			mov	[wbHead],ax					;[wbHead]= head, [wwSectorTrack]= sector
 ;
 ;	Try maxtries times to read sector.
 ;
@@ -433,12 +490,18 @@ ReadSector		mov	ax,[cwTrackSectors]				;AX = sectors per track
 .30			mov	[wzErrorCode],ax				;store ASCII error code
 			mov	si,czErrorMsg					;error message address
 BootExit		call	BootPrint					;display messge to console
-.10			mov	ah,EBIOSFNKEYSTATUS				;bios keyboard status function
+;
+;	Wait for a key press.
+;
+.10			mov	ah,EBIOSFNKEYSTATUS				;BIOS keyboard status function
 			int	EBIOSINTKEYBOARD				;get keyboard status
 			jnz	.20						;continue if key pressed
 			sti							;enable maskable interrupts
 			hlt							;wait for interrupt
 			jmp	.10						;repeat
+;
+;	Reset the system.
+;
 .20			mov	al,EKEYBCMDRESET				;8042 pulse output port pin
 			out	EKEYBPORTSTAT,al				;drive B0 low to restart
 .30			sti							;enable maskable interrupts
@@ -448,12 +511,12 @@ BootExit		call	BootPrint					;display messge to console
 ;	Display text message.
 ;
 BootPrint		cld							;forward strings
-			lodsb							;load next byte at DS:SI in AL
+.10			lodsb							;load next byte at DS:SI in AL
 			test	al,al						;end of string?
 			jz	BootReturn					;... yes, exit our loop
 			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
 			int	EBIOSINTVIDEO					;call BIOS display interrupt
-			jmp	BootPrint					;repeat until done
+			jmp	.10     					;repeat until done
 BootReturn		ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -497,10 +560,10 @@ wbTrack			db	0						;track
 ;
 ;	The disk contains two copies of the File Allocation Table (FAT). On our disk, each FAT copy is 1200h bytes in
 ;	length. Each FAT entry contains the logical number of the next cluster. The first two entries are reserved. Our
-;	OS.COM file here is 200h bytes in length. These 200h bytes contain familiar code that displays a message to the
+;	OS.COM file here is 400h bytes in length. These 400h bytes contain familiar code that displays a message to the
 ;	screen. Our disk parameter table defines a cluster as containing one sector and each sector having 200h bytes.
-;	Therefore, our FAT table must reserve only one cluster for OS.COM. The cluster used by OS.COM, then, will be
-;	cluster 2. The entry value for this cluster is set to "0fffh" to indicate that it is the last cluster in the
+;	Therefore, our FAT table must reserve only two clusters for OS.COM. The clusters used by OS.COM, then, will be
+;	clusters 2 and 3. The entry value for cluster 3 is set to "0fffh" to indicate that it is the last cluster in the
 ;	chain.
 ;
 ;	Every three bytes encode two FAT entries as follows:
@@ -514,7 +577,7 @@ wbTrack			db	0						;track
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section			fat1							;first copy of FAT
-			db	0F0h,0FFh,0FFh,	0FFh,00Fh,000h
+			db	0F0h,0FFh,0FFh,	003h,0F0h,0FFh
 			times	(9*512)-($-$$) db 0				;zero fill to end of section
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -522,7 +585,7 @@ section			fat1							;first copy of FAT
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section			fat2							;second copy of FAT
-			db	0F0h,0FFh,0FFh,	0FFh,00Fh,000h
+			db	0F0h,0FFh,0FFh,	003h,0F0h,0FFh
 			times	(9*512)-($-$$) db 0				;zero fill to end of section
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -541,8 +604,8 @@ section			dir							;diskette directory
 			db	01000001b					;mmm = 10 MOD 8 = 2; ddddd = 1
 			db	01001001b					;yyyyyyy = 2016-1980 = 36 = 24h; m/8 = 1
 			dw	2						;first cluster
-			dd	200h						;file size
-			times	(224*32)-($-$$) db 0h				;zero fill to end of section
+			dd	400h						;file size
+			times	(EBOOTDIRENTRIES*32)-($-$$) db 0h		;zero fill to end of section
 %endif
 %ifdef BUILDCOM
 ;=======================================================================================================================
@@ -572,8 +635,8 @@ section			dir							;diskette directory
 ;				|						|
 ;	CS:IP -------->	009000	+-----------------------------------------------+ DS:0100  08f0:0100
 ;				|  Loader Code					|
-;				|  1 sector = 512 = 200h bytes			|
-;			009200	+-----------------------------------------------+ DS:0300
+;				|  2 sectors = 1024 = 400h bytes		|
+;			009400	+-----------------------------------------------+ DS:0500
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -633,21 +696,26 @@ Loader			push	cs						;use the code segment
 ;			TTY output function of the BIOS video interrupt, passing the address of the string in DS:SI
 ;			and the BIOS teletype function code in AH. After a return from the BIOS interrupt, we repeat
 ;			for the next string character until a NUL is found. Note that we clear the direction flag (DF)
-;			with CLD before each LODSB. This is just in case the direction flag is ever returned as set
-;			by the video interrupt. This is a precaution since a well-written BIOS should preserve all
-;			registers and flags unless used to indicate return status.
+;			with CLD before the first LODSB. The direction flag is not guaranteed to be preseved between
+;                       calls within the OS. However, the "int" instruction does store the EFLAGS register on the
+;                       stack and restores it on return. Therefore, clearing the direction flag before subsequent calls
+;                       to LODSB is not needed.
 ;
 ;	In:		DS:SI	address of string
 ;
+;       Out:            DF      0
+;                       ZF      1
+;                       AL      0
+;
 ;-----------------------------------------------------------------------------------------------------------------------
 PutTTYString		cld							;forward strings
-			lodsb							;load next byte at DS:SI in AL
+.10			lodsb							;load next byte at DS:SI in AL
 			test	al,al						;end of string?
-			jz	.10						;... yes, exit our loop
+			jz	.20						;... yes, exit our loop
 			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
 			int	EBIOSINTVIDEO					;call BIOS display interrupt
-			jmp	PutTTYString					;repeat until done
-.10			ret							;return
+			jmp	.10     					;repeat until done
+.20			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Loader Data
@@ -655,24 +723,24 @@ PutTTYString		cld							;forward strings
 ;	Our only "data" is the string displayed when system starts. It ends with ASCII carriage-return (13) and line-
 ;	feed (10) values. The remainder of the boot sector is filled with NUL. The boot sector finally ends with the
 ;	required two-byte signature checked by the BIOS. Note that recent versions of NASM will issue a warning if
-;	the calculated address for the end-of-sector signature produces a negative value for "510-($-$$)". This will
-;	indicate if we have added too much data and exceeded the length of the sector.
+;	the calculated address for the end-of-sector signature produces a negative value for "1024-($-$$)". This will
+;	indicate if we have added too much data and exceeded the length of the sector. Note also that since we are at
+;	the end of a "file" (os.com) and not the boot sector, there is no end-of-sector marker (0x55 0xaa) here.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 czStartingMsg		db	"Starting OS",13,10,0				;starting message
-			times	510-($-$$) db 0h				;zero fill to end of sector
-			db	055h,0AAh					;end of sector signature
+			times	1024-($-$$) db 0h				;zero fill to end of sector
 %endif
 %ifdef BUILDDISK
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;	Free Disk Space								@disk: 004400	@mem:  n/a
+;	Free Disk Space								@disk: 004600	@mem:  n/a
 ;
 ;	Following the convention introduced by DOS, we use the value 'F6' to indicate unused floppy disk storage.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section			unused							;unused disk space
-			times 	EBOOTDISKBYTES-04400h db 0F6h			;fill to end of disk image
+			times 	EBOOTDISKBYTES-04600h db 0F6h			;fill to end of disk image
 %endif
 ;=======================================================================================================================
 ;

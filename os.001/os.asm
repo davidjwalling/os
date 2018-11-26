@@ -9,14 +9,14 @@
 ;			or an entire floppy disk image is generated. Real mode BIOS interrupts are used to display
 ;			the message and poll for a keypress.
 ;
-;	Revised:	July 1, 2017
+;	Revised:	July 4, 2018
 ;
 ;	Assembly:	nasm os.asm -f bin -o os.dat -l os.dat.lst -DBUILDBOOT
 ;			nasm os.asm -f bin -o os.dsk -l os.dsk.lst -DBUILDDISK
 ;
-;	Assembler:	Netwide Assembler (NASM) 2.13.01
+;	Assembler:	Netwide Assembler (NASM) 2.13.01, May 1 2017
 ;
-;			Copyright (C) 2010-2017 by David J. Walling. All Rights Reserved.
+;	Notice:		Copyright (C) 2010-2018 David J. Walling. All Rights Reserved.
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -29,33 +29,38 @@
 ;	BUILDDISK	Creates os.dsk, a 1.44MB (3.5") floppy disk image file.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-%ifdef BUILDDISK
-%define BUILDBOOT
+%ifdef BUILDDISK								;if we are building a disk image ...
+%define BUILDBOOT								;... build the boot sector
 %endif
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Conventions
 ;
-;	Labels:		Labels within a routine are numeric and begin with a period (.10, .20).
-;			Labels within a routine begin at ".10" and increment by 10.
+;	Alignment:	In this document, columns are numbered beginning with 1.
+;			Assembly instructions (mnemonics) begin in column 25.
+;			Assembly operands begin in column 33.
+;			Inline comments begin in column 81.
+;			Lines should not extend beyond column 120.
+;
+;	Arguments:	Arguments are passed as registers and generally follow this order: EAX, ECX, EDX, EBX.
+;			However, ECX may be used as the first parameter if a test for zero is required. EBX and EBP
+;			may be used as parameters if the routine is considered a "method" of an "object". In this
+;			case, EBX or EBP will address the object storage. If the routine is general-purpose string
+;			or character-array manipulator, ESI and EDI may be used as parameters to address input and/or
+;			ouput buffers, respectively.
+;
+;	Code Order:	Routines should appear in the order of their first likely use.
+;			Negative relative call or jump addresses indicate reuse.
 ;
 ;	Comments:	A comment that spans the entire line begins with a semicolon in column 1.
 ;			A comment that accompanies code on a line begins with a semicolon in column 81.
-;			Register names in comments are in upper case.
-;			Hexadecimal values in comments are in lower case.
+;			Register names in comments are in upper case (EAX, EDI).
+;			Hexadecimal values in comments are in lower case (01fh, 0dah).
 ;			Routines are preceded with a comment box that includes the routine name, description, and
 ;			register contents on entry and exit.
 ;
-;	Alignment:	Assembly instructions (mnemonics) begin in column 25.
-;			Assembly operands begin in column 33.
-;			Lines should not extend beyond column 120.
-;
-;	Routines:	Routine names are in mixed case (GetYear, ReadRealTimeClock).
-;			Routine names begin with a verb (Get, Read, etc.).
-;			Routines should have a single entry address and a single exit instruction (ret, iretd, etc.).
-;
 ;	Constants:	Symbolic constants (equates) are named in all-caps beginning with 'E' (EDATAPORT).
-;			Constant stored values are named in camel case, starting with 'c'.
+;			Constant stored values are named in camel case, starting with 'c' (cbMaxLines).
 ;			The 2nd letter of the constant label indicates the storage type.
 ;
 ;			cq......	constant quad-word (dq)
@@ -64,6 +69,50 @@
 ;			cb......	constant byte (db)
 ;			cz......	constant ASCIIZ (null-terminated) string
 ;
+;	Instructions:	32-bit instructions are generally favored.
+;			8-bit instructions and data are preferred for flags and status fields, etc.
+;			16-bit instructions are avoided wherever possible to avoid prefix bytes.
+;
+;	Labels:		Labels within a routine are numeric and begin with a period (.10, .20).
+;			Labels within a routine begin at ".10" and increment by 10.
+;
+;	Literals:	Literal values defined by external standards should be defined as symbolic constants (equates).
+;			Hexadecimal literals in code are in upper case with a leading '0' and trailing 'h' (01Fh).
+;			Binary literal values in source code are encoded with a final 'b' (1010b).
+;			Decimal literal values in source code are strictly numerals (2048).
+;			Octal literal values are avoided.
+;			String literals are enclosed in double quotes, e.g. "Loading OS".
+;			Single character literals are enclosed in single quotes, e.g. 'A'.
+;
+;	Macros:		Macro names are in camel case, beginning with a lower-case letter (getDateString).
+;			Macro names describe an action and so DO begin with a verb.
+;
+;	Memory Use:	Operating system memory allocation is avoided wherever possible.
+;			Buffers are kept to as small a size as practicable.
+;			Data and code intermingling is avoided wherever possible.
+;
+;	Registers:	Register names in comments are in upper case (EAX, EDX).
+;			Register names in source code are in lower case (eax, edx).
+;
+;	Return Values:	Routines return result values in EAX or ECX or both. Routines should indicate failure by
+;			setting the carry flag to 1. Routines may prefer the use of ECX as a return value if the
+;			value is to be tested for null upon return (using the jecxz instruction).
+;
+;	Routines:	Routine names are in mixed case, capitalized (GetYear, ReadRealTimeClock).
+;			Routine names begin with a verb (Get, Read, Load).
+;			Routines should have a single entry address and a single exit instruction (ret, iretd, etc.).
+;			Routines that serve as wrappers for library functions carry the same name as the library
+;			function but begin with a leading underscore (_) character.
+;
+;	Structures:	Structure names are in all-caps (DATETIME).
+;			Structure names describe a "thing" and so do NOT begin with a verb.
+;
+;	Usage:		Registers EBX, ECX, EBP, SS, CS, DS and ES are preserved by routines.
+;			Registers ESI and EDI are preserved unless they are input parameters.
+;			Registers EAX and ECX are preferred for returning response/result values.
+;			Registers EBX and EBP are preferred for context (structure) address parameters.
+;			Registers EAX, ECX, EDX and EBX are preferred for integral parameters.
+;
 ;	Variables:	Variables are named in camel case, starting with 'w'.
 ;			The 2nd letter of the variable label indicates the storage type.
 ;
@@ -71,28 +120,7 @@
 ;			wd......	variable double-word (resd)
 ;			ww......	variable word (resw)
 ;			wb......	variable byte (resb)
-;
-;	Literals:	Literal values defined by external standards should be defined as symbolic constants (equates).
-;			Hexadecimal literals in code are in upper case with a leading '0' and trailing 'h'. e.g. 01Fh.
-;			Binary literal values in source code are encoded with a final 'b', e.g. 1010b.
-;			Decimal literal values in source code are strictly numerals, e.g. 2048.
-;			Octal literal values are avoided.
-;			String literals are enclosed in double quotes, e.g. "Loading OS".
-;			Single character literals are enclosed in single quotes, e.g. 'A'.
-;
-;	Structures:	Structure names are in all-caps (DATETIME).
-;			Structure names do not begin with a verb.
-;
-;	Macros:		Macro names are in camel case (getDateString).
-;			Macro names do begin with a verb.
-;
-;	Registers:	Register names in comments are in upper case.
-;			Register names in source code are in lower case.
-;
-;	Usage:		Registers EBX, ECX, ESI, EDI, EBP, SS, CS, DS and ES are preserved by all OS routines.
-;			Registers EAX and ECX are preferred for returning response/result values.
-;			Register EBX is preferred for passing a context (structure) address parameter.
-;			Registers EAX, EDX, ECX and EBX are preferred for passing integral parameters.
+;			ws......	writable structure
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ;=======================================================================================================================
@@ -102,9 +130,26 @@
 ;	The equate (equ) statement defines a symbolic name for a fixed value so that such a value can be defined and
 ;	verified once and then used throughout the code. Using symbolic names simplifies searching for where logical
 ;	values are used. Equate names are in all-caps and begin with the letter 'E'. Equates are grouped into related
-;	sets. Hardware-based values are listed first, followed by BIOS, protocol and application values.
+;	sets. Equates here are defined in the following groupings:
+;
+;	Hardware-Defined Values
+;
+;	EKEYB...	8042 or "PS/2 Controller" (Keyboard Controller) values
+;
+;	Firmware-Defined Values
+;
+;	EBIOS...	Basic Input/Output System (BIOS) values
+;
+;	Operating System Values
+;
+;	EBOOT...	Boot sector and loader values
 ;
 ;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Hardware-Defined Values
+;
+;-----------------------------------------------------------------------------------------------------------------------
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	8042 Keyboard Controller						EKEYB...
@@ -115,6 +160,11 @@
 ;-----------------------------------------------------------------------------------------------------------------------
 EKEYBPORTSTAT		equ	064h						;status port
 EKEYBCMDRESET		equ	0FEh						;reset bit 0 to restart system
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;	Firmware-Defined Values
+;
+;-----------------------------------------------------------------------------------------------------------------------
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	BIOS Interrupts and Functions						EBIOS...
@@ -131,6 +181,11 @@ EBIOSINTKEYBOARD	equ	016h						;keyboard services interrupt
 EBIOSFNKEYSTATUS	equ	001h						;keyboard status function
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;	Operating System Values
+;
+;-----------------------------------------------------------------------------------------------------------------------
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;	Boot Sector and Loader Constants					EBOOT...
 ;
 ;	Equates in this section support the boot sector and the 16-bit operating system loader, which will be
@@ -139,6 +194,7 @@ EBIOSFNKEYSTATUS	equ	001h						;keyboard status function
 ;-----------------------------------------------------------------------------------------------------------------------
 EBOOTSTACKTOP		equ	0100h						;boot sector stack top relative to DS
 EBOOTSECTORBYTES	equ	512						;bytes per sector
+EBOOTDIRENTRIES		equ	224						;directory entries
 EBOOTDISKSECTORS	equ	2880						;sectors per disk
 EBOOTDISKBYTES		equ	(EBOOTSECTORBYTES*EBOOTDISKSECTORS)		;bytes per disk
 %ifdef BUILDBOOT
@@ -151,9 +207,9 @@ EBOOTDISKBYTES		equ	(EBOOTSECTORBYTES*EBOOTDISKSECTORS)		;bytes per disk
 ;	system into memory. The boot sector contains a disk parameter table describing the geometry and allocation
 ;	of the disk. Following the disk parameter table is code to load the operating system kernel into memory.
 ;
-;	The 'cpu' directive limits emitted code to those instructions supported by the most primitive processor
-;	we expect to ever execute our code. The 'vstart' parameter indicates addressability of symbols so as to
-;	emulating the DOS .COM program model. Although the BIOS is expected to load the boot sector at address 7c00,
+;	The "cpu" directive limits emitted code to those instructions supported by the most primitive processor
+;	we expect to ever execute our code. The "vstart" parameter indicates addressability of symbols so as to
+;	emulate the DOS .COM program model. Although the BIOS is expected to load the boot sector at address 7c00,
 ;	we do not make that assumption. The CPU starts in 16-bit addressing mode. A three-byte jump instruction is
 ;	immediately followed by a disk parameter table.
 ;
@@ -175,7 +231,7 @@ cwSectorBytes		dw	EBOOTSECTORBYTES				;bytes per sector
 cbClusterSectors	db	1						;sectors per cluster
 cwReservedSectors	dw	1						;reserved sectors
 cbFatCount		db	2						;file allocation table copies
-cwDirEntries		dw	224						;max directory entries
+cwDirEntries		dw	EBOOTDIRENTRIES					;max directory entries
 cwDiskSectors		dw	EBOOTDISKSECTORS				;sectors per disk
 cbDiskType		db	0F0h						;1.44MB
 cwFatSectors		dw	9						;sectors per FAT copy
@@ -194,7 +250,7 @@ cwSpecialSectors	dw	0						;special sectors
 Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 .@20			equ	$-$$						;.@20 = 021h
 .20			pop	ax						;AX =	   7c21     c21    21
-			sub	ax,.@20						;BX =	   7c00     c00     0
+			sub	ax,.@20						;AX =	   7c00     c00     0
 			mov	cl,4						;shift count
 			shr	ax,cl						;AX =	    7c0      c0     0
 			mov	bx,cs						;BX =	      0     700   7c0
@@ -205,7 +261,7 @@ Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 ;	the start of our code. This will correspond to our assembled data address offsets. Note that we instructed
 ;	the assembler to produce addresses for our symbols that are offset from our code by 100h. See the "vstart"
 ;	parameter for the "section" directive above. We also set SS to the PSP and SP to the address of our i/o
-;	buffer. This leaves 256 bytes of usable stack from 7b0:300 to 7b0:400.
+;	buffer. This leaves 256 bytes of usable stack from 7b0:0 to 7b0:100.
 ;
 			sub	bx,16						;BX = 07b0
 			mov	ds,bx						;DS = 07b0 = psp
@@ -263,21 +319,26 @@ Boot.10			call	word .20					;[ESP] =   7c21     c21    21
 ;			TTY output function of the BIOS video interrupt, passing the address of the string in DS:SI
 ;			and the BIOS teletype function code in AH. After a return from the BIOS interrupt, we repeat
 ;			for the next string character until a NUL is found. Note that we clear the direction flag (DF)
-;			with CLD before each LODSB. This is just in case the direction flag is ever returned as set
-;			by the video interrupt. This is a precaution since a well-written BIOS should preserve all
-;			registers and flags unless used to indicate return status.
+;			with CLD before the first LODSB. The direction flag is not guaranteed to be preseved between
+;                       calls within the OS. However, the "int" instruction does store the EFLAGS register on the
+;                       stack and restores it on return. Therefore, clearing the direction flag before subsequent calls
+;                       to LODSB is not needed.
 ;
 ;	In:		DS:SI	address of string
 ;
+;       Out:            DF      0
+;                       ZF      1
+;                       AL      0
+;
 ;-----------------------------------------------------------------------------------------------------------------------
 PutTTYString		cld							;forward strings
-			lodsb							;load next byte at DS:SI in AL
+.10			lodsb							;load next byte at DS:SI in AL
 			test	al,al						;end of string?
-			jz	.10						;... yes, exit our loop
+			jz	.20						;... yes, exit our loop
 			mov	ah,EBIOSFNTTYOUTPUT				;BIOS teletype function
 			int	EBIOSINTVIDEO					;call BIOS display interrupt
-			jmp	PutTTYString					;repeat until done
-.10			ret							;return
+			jmp	.10     					;repeat until done
+.20			ret							;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;	Loader Data
