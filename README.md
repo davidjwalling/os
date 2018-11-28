@@ -26,8 +26,8 @@ Additional sub-projects may be added from time to time as the project progresses
 	os.008		Add "int6" command to demonstrate CPU interrupt handling.
 	os.009		Add support for Real-Time Clock (RTC) access and "date" and "time" commands.
 	os.010		Add support for "mem" command to display memory across the lower 4GB of address space.
-	os.011		Add a second "background" task and IRQ0-driven task switching.
-	os.012		Add simple memory allocation and deallocation routines and "malloc" and "free" test routines.
+	os.011		Add simple memory allocation and deallocation routines and "malloc" and "free" test routines.
+	os.012		Add a second "background" task and IRQ0-driven task switching.
 	os.013		Add logic to probe PCI devices and display using the "pciprobe" or "lspci" commands.
 
 ## Compilation
