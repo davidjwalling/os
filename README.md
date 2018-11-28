@@ -1,6 +1,6 @@
 ## CustomOS
 
-	Copyright (C) 2010-2017 David J. Walling. All Rights Reserved.
+	Copyright (C) 2010-2018 David J. Walling. All Rights Reserved.
 
 ## Synopsis
 
@@ -22,8 +22,8 @@ Additional sub-projects may be added from time to time as the project progresses
 	os.004		Expands the loader to enter protected mode and start a task.
 	os.005		Add keyboard interrupt handler to display characters and shift status in information area.
 	os.006		Add a message queue handler to send keyboard messages to a task.
-	os.007		Add support for "clear", "ver" and "exit" commands.
-	os.008		Add processor interrupt handling code to to display register contents at interrupt.
+	os.007		Add support for "clear", "cls", "ver", "version" and "exit" commands.
+	os.008		Add "int6" command to demonstrate CPU interrupt handling.
 	os.009		Add support for Real-Time Clock (RTC) access and "date" and "time" commands.
 	os.010		Add support for "mem" command to display memory across the lower 4GB of address space.
 	os.011		Add a second "background" task and IRQ0-driven task switching.
