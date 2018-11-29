@@ -16,18 +16,29 @@ CustomOS is intended as a learning resource, although all code is intended to be
 CustomOS is provided as a progressive series of sub-projects that incrementally introduce and demonstrate concepts.
 Additional sub-projects may be added from time to time as the project progresses.
 
+Part 1.			Boot to Protected Mode
+
 	os.001		A simple boot sector that displays a message.
 	os.002		A boot sector that loads and runs a program that displays a message.
 	os.003		Creates osprep.com, a utility to write the boot sector to a diskette.
 	os.004		Expands the loader to enter protected mode and start a task.
+
+Part 2.			Interrupts, Messages and Commands
+
 	os.005		Add keyboard interrupt handler to display characters and shift status in information area.
 	os.006		Add a message queue handler to send keyboard messages to a task.
 	os.007		Add support for "clear", "cls", "ver", "version" and "exit" commands.
 	os.008		Add "int6" command to demonstrate CPU interrupt handling.
-	os.009		Add support for Real-Time Clock (RTC) access and "date" and "time" commands.
-	os.010		Add support for "mem" command to display memory across the lower 4GB of address space.
-	os.011		Add simple memory allocation and deallocation routines and "malloc" and "free" test routines.
+
+Part 3.			Memory, Clock and Task
+
+	os.009		Add support for "mem" and "memory" commands to display memory across the lower 4GB of address space.
+	os.010		Add simple memory allocation and deallocation routines and "malloc" and "free" test routines.
+	os.011		Add support for Real-Time Clock (RTC) access, memory size, and "date" and "time" commands.
 	os.012		Add a second "background" task and IRQ0-driven task switching.
+
+Part 4.			Network Adapter
+
 	os.013		Add logic to probe PCI devices and display using the "pciprobe" or "lspci" commands.
 
 ## Compilation
