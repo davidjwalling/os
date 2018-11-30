@@ -14,7 +14,7 @@
     14                                  ;       Assembly:       nasm os.asm -f bin -o os.dat -l os.dat.lst -DBUILDBOOT
     15                                  ;                       nasm os.asm -f bin -o os.dsk -l os.dsk.lst -DBUILDDISK
     16                                  ;
-    17                                  ;       Assembler:      Netwide Assembler (NASM) 2.13.01, May 1 2017
+    17                                  ;       Assembler:      Netwide Assembler (NASM) 2.13.03, Feb 7 2018
     18                                  ;
     19                                  ;       Notice:         Copyright (C) 2010-2018 David J. Walling. All Rights Reserved.
     20                                  ;
@@ -291,7 +291,7 @@
    291                                  ;
    292                                  ;       Now we want to wait for a keypress. We can use a keyboard interrupt function for this (INT 16h, AH=0).
    293                                  ;       However, some hypervisor BIOS implementations have been seen to implement the "wait" as simply a fast
-   294                                  ;       iteration of the keyboard status function call (INT 16h, AH=1), causing a CPU race condition. So, instead
+   294                                  ;       iteration of the keyboard status function call (INT 16h, AH=1), causing a max CPU condition. So, instead,
    295                                  ;       we will use the keyboard status call and iterate over a halt (HLT) instruction until a key is pressed.
    296                                  ;       By convention, we enable maskable interrupts with STI before issuing HLT, so as not to catch fire.
    297                                  ;
@@ -364,7 +364,7 @@
    363                                  ;
    364                                  ;-----------------------------------------------------------------------------------------------------------------------
    365                                  section                 unused                                                  ;unused disk space
-   366 00000000 F6<rept>                                        times   EBOOTDISKBYTES-0200h db 0F6h                    ;fill to end of disk image
+   366 00000000 F6<rept>                                        times   EBOOTDISKBYTES-EBOOTSECTORBYTES db 0F6h         ;fill to end of disk image
    367                                  %endif
    368                                  ;=======================================================================================================================
    369                                  ;
