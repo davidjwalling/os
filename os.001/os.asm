@@ -14,7 +14,7 @@
 ;       Assembly:       nasm os.asm -f bin -o os.dat -l os.dat.lst -DBUILDBOOT
 ;                       nasm os.asm -f bin -o os.dsk -l os.dsk.lst -DBUILDDISK
 ;
-;       Assembler:      Netwide Assembler (NASM) 2.13.01, May 1 2017
+;       Assembler:      Netwide Assembler (NASM) 2.13.03, Feb 7 2018
 ;
 ;       Notice:         Copyright (C) 2010-2018 David J. Walling. All Rights Reserved.
 ;
@@ -291,7 +291,7 @@ Boot.10                 call    word .20                                        
 ;
 ;       Now we want to wait for a keypress. We can use a keyboard interrupt function for this (INT 16h, AH=0).
 ;       However, some hypervisor BIOS implementations have been seen to implement the "wait" as simply a fast
-;       iteration of the keyboard status function call (INT 16h, AH=1), causing a CPU race condition. So, instead
+;       iteration of the keyboard status function call (INT 16h, AH=1), causing a max CPU condition. So, instead,
 ;       we will use the keyboard status call and iterate over a halt (HLT) instruction until a key is pressed.
 ;       By convention, we enable maskable interrupts with STI before issuing HLT, so as not to catch fire.
 ;
@@ -363,7 +363,7 @@ czStartingMsg           db      "Starting OS",13,10,0                           
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 unused                                                  ;unused disk space
-                        times   EBOOTDISKBYTES-0200h db 0F6h                    ;fill to end of disk image
+                        times   EBOOTDISKBYTES-EBOOTSECTORBYTES db 0F6h         ;fill to end of disk image
 %endif
 ;=======================================================================================================================
 ;
