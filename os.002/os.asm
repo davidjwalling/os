@@ -14,7 +14,7 @@
 ;                       nasm os.asm -f bin -o os.dsk -l os.dsk.lst -DBUILDDISK
 ;                       nasm os.asm -f bin -o os.com -l os.com.lst -DBUILDCOM
 ;
-;       Assembler:      Netwide Assembler (NASM) 2.13.01, May 1 2017
+;       Assembler:      Netwide Assembler (NASM) 2.13.03, Feb 7 2018
 ;
 ;       Notice:         Copyright (C) 2010-2018 David J. Walling. All Rights Reserved.
 ;
@@ -180,6 +180,7 @@ EBIOSFNSETVMODE         equ     000h                                            
 EBIOSMODETEXT80         equ     003h                                            ;video mode 80x25 text
 EBIOSFNTTYOUTPUT        equ     00Eh                                            ;video TTY output function
 EBIOSINTDISKETTE        equ     013h                                            ;diskette services interrupt
+EBIOSFNREADSECTOR       equ     002h                                            ;diskette read sector function
 EBIOSINTKEYBOARD        equ     016h                                            ;keyboard services interrupt
 EBIOSFNKEYSTATUS        equ     001h                                            ;keyboard status function
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -543,7 +544,7 @@ wwSectorEntries         dw      0                                               
 wwLogicalSector         dw      0                                               ;current logical sector
 wwReadCountCommand      equ     $                                               ;read count and command
 wbReadCount             db      0                                               ;sectors to read
-cbReadCommand           db      2                                               ;BIOS read disk fn code
+cbReadCommand           db      EBIOSFNREADSECTOR                               ;BIOS read disk fn code
 wwDriveHead             equ     $                                               ;drive, head (word)
 wbDrive                 db      0                                               ;drive
 wbHead                  db      0                                               ;head
