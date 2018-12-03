@@ -372,7 +372,7 @@ ECONROWDWORDS           equ     (ECONROWBYTES/4)                                
 ECONCLEARDWORD          equ     007200720h                                      ;attribute and ASCII space
 ECONOIADWORD            equ     070207020h                                      ;attribute and ASCII space
 ;-----------------------------------------------------------------------------------------------------------------------
-;       Global Descriptor Table (GDT) Selectors                                 ESEL...
+;       Global Descriptor Table (GDT) Selectors                                 EGDT...
 ;-----------------------------------------------------------------------------------------------------------------------
 EGDTOSDATA              equ     018h                                            ;kernel data selector
 EGDTCGA                 equ     020h                                            ;cga video selector
@@ -404,7 +404,7 @@ EKRNCODESEG             equ     (EKRNCODEBASE >> 4)                             
 EKRNCODELEN             equ     5000h                                           ;kernel code size (1000h to 6000h)
 EKRNCODESRCADR          equ     500h                                            ;kernel code offset to loader DS:
 ;-----------------------------------------------------------------------------------------------------------------------
-;       Local Descriptor Table (LDT) Selectors                                  ESEL...
+;       Local Descriptor Table (LDT) Selectors                                  ELDT...
 ;-----------------------------------------------------------------------------------------------------------------------
 ELDTMQ                  equ     02Ch                                            ;console task message queue
 ;-----------------------------------------------------------------------------------------------------------------------

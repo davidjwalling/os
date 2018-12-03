@@ -372,7 +372,7 @@
    372                                  ECONCLEARDWORD          equ     007200720h                                      ;attribute and ASCII space
    373                                  ECONOIADWORD            equ     070207020h                                      ;attribute and ASCII space
    374                                  ;-----------------------------------------------------------------------------------------------------------------------
-   375                                  ;       Global Descriptor Table (GDT) Selectors                                 ESEL...
+   375                                  ;       Global Descriptor Table (GDT) Selectors                                 EGDT...
    376                                  ;-----------------------------------------------------------------------------------------------------------------------
    377                                  EGDTOSDATA              equ     018h                                            ;kernel data selector
    378                                  EGDTCGA                 equ     020h                                            ;cga video selector
@@ -404,7 +404,7 @@
    404                                  EKRNCODELEN             equ     5000h                                           ;kernel code size (1000h to 6000h)
    405                                  EKRNCODESRCADR          equ     500h                                            ;kernel code offset to loader DS:
    406                                  ;-----------------------------------------------------------------------------------------------------------------------
-   407                                  ;       Local Descriptor Table (LDT) Selectors                                  ESEL...
+   407                                  ;       Local Descriptor Table (LDT) Selectors                                  ELDT...
    408                                  ;-----------------------------------------------------------------------------------------------------------------------
    409                                  ELDTMQ                  equ     02Ch                                            ;console task message queue
    410                                  ;-----------------------------------------------------------------------------------------------------------------------

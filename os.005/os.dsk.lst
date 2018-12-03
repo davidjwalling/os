@@ -367,7 +367,7 @@
    367                                  ECONCLEARDWORD          equ     007200720h                                      ;attribute and ASCII space
    368                                  ECONOIADWORD            equ     070207020h                                      ;attribute and ASCII space
    369                                  ;-----------------------------------------------------------------------------------------------------------------------
-   370                                  ;       Global Descriptor Table (GDT) Selectors                                 ESEL...
+   370                                  ;       Global Descriptor Table (GDT) Selectors                                 EGDT...
    371                                  ;-----------------------------------------------------------------------------------------------------------------------
    372                                  EGDTOSDATA              equ     018h                                            ;kernel data selector
    373                                  EGDTCGA                 equ     020h                                            ;cga video selector
