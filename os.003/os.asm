@@ -190,6 +190,7 @@ EBIOSMODETEXT80         equ     003h                                            
 EBIOSFNTTYOUTPUT        equ     00Eh                                            ;video TTY output function
 EBIOSINTDISKETTE        equ     013h                                            ;diskette services interrupt
 EBIOSFNREADSECTOR       equ     002h                                            ;diskette read sector function
+EBIOSFNWRITESECTOR      equ     003h                                            ;diskette write sector function
 EBIOSINTKEYBOARD        equ     016h                                            ;keyboard services interrupt
 EBIOSFNKEYSTATUS        equ     001h                                            ;keyboard status function
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -624,7 +625,8 @@ Prep                    mov     si,czPrepMsg10                                  
                         mov     bx,wcPrepInBuf                                  ;input buffer address
                         mov     dx,0                                            ;head zero, drive zero
                         mov     cx,1                                            ;track zero, sector one
-                        mov     ax,0201h                                        ;read one sector
+                        mov     al,1                                            ;one sector
+                        mov     ah,EBIOSFNREADSECTOR                            ;read function
                         int     EBIOSINTDISKETTE                                ;attempt the read
                         pop     cx                                              ;restore remaining retries
                         jnc     .50                                             ;skip ahead if successful
@@ -649,7 +651,8 @@ Prep                    mov     si,czPrepMsg10                                  
                         mov     bx,Boot                                         ;output buffer address
                         mov     dx,0                                            ;head zero, drive zero
                         mov     cx,1                                            ;track zero, sector one
-                        mov     ax,0301h                                        ;write one sector
+                        mov     al,1                                            ;one sector
+                        mov     ah,EBIOSFNWRITESECTOR                           ;write function
                         int     EBIOSINTDISKETTE                                ;attempt the write
                         pop     cx                                              ;restore remaining retries
                         jnc     .100                                            ;skip ahead if successful
@@ -706,7 +709,7 @@ Prep                    mov     si,czPrepMsg10                                  
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 czPrepMsg10             db      13,10,"CustomOS Boot-Diskette Preparation Program"
-                        db      13,10,"Copyright (C) 2010-2017 David J. Walling. All rights reserved."
+                        db      13,10,"Copyright (C) 2010-2018 David J. Walling. All rights reserved."
                         db      13,10
                         db      13,10,"This program overwrites the boot sector of a diskette with startup code that"
                         db      13,10,"will load the operating system into memory when the computer is restarted."
@@ -847,7 +850,7 @@ section                 dir                                                     
 ;       determining whether the CPU and other resources are sufficient to run the operating system. If all minimum
 ;       resources are present, the loader initializes protected mode tables, places the CPU into protected mode and
 ;       starts the console task. Since the loader was called either from the bootstrap or as a .com file on the boot
-;       disk, we can assume that the initial ip is 0x100 and not perform any absolute address fix-ups on our segment
+;       disk, we can assume that the initial IP is 0x100 and not perform any absolute address fix-ups on our segment
 ;       registers.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -866,7 +869,7 @@ Loader                  push    cs                                              
 ;
 ;       Now we want to wait for a keypress. We can use a keyboard interrupt function for this (INT 16h, AH=0).
 ;       However, some hypervisor BIOS implementations have been seen to implement the "wait" as simply a fast
-;       iteration of the keyboard status function call (INT 16h, AH=1), causing a CPU race condition. So, instead
+;       iteration of the keyboard status function call (INT 16h, AH=1), causing a max CPU condition. So, instead,
 ;       we will use the keyboard status call and iterate over a halt (HLT) instruction until a key is pressed.
 ;       By convention, we enable maskable interrupts with STI before issuing HLT, so as not to catch fire.
 ;

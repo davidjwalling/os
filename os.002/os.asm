@@ -650,7 +650,7 @@ section                 dir                                                     
 ;       determining whether the CPU and other resources are sufficient to run the operating system. If all minimum
 ;       resources are present, the loader initializes protected mode tables, places the CPU into protected mode and
 ;       starts the console task. Since the loader was called either from the bootstrap or as a .com file on the boot
-;       disk, we can assume that the initial ip is 0x100 and not perform any absolute address fix-ups on our segment
+;       disk, we can assume that the initial IP is 0x100 and not perform any absolute address fix-ups on our segment
 ;       registers.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -669,7 +669,7 @@ Loader                  push    cs                                              
 ;
 ;       Now we want to wait for a keypress. We can use a keyboard interrupt function for this (INT 16h, AH=0).
 ;       However, some hypervisor BIOS implementations have been seen to implement the "wait" as simply a fast
-;       iteration of the keyboard status function call (INT 16h, AH=1), causing a CPU race condition. So, instead
+;       iteration of the keyboard status function call (INT 16h, AH=1), causing a max CPU condition. So, instead,
 ;       we will use the keyboard status call and iterate over a halt (HLT) instruction until a key is pressed.
 ;       By convention, we enable maskable interrupts with STI before issuing HLT, so as not to catch fire.
 ;

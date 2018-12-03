@@ -190,958 +190,961 @@
    190                                  EBIOSFNTTYOUTPUT        equ     00Eh                                            ;video TTY output function
    191                                  EBIOSINTDISKETTE        equ     013h                                            ;diskette services interrupt
    192                                  EBIOSFNREADSECTOR       equ     002h                                            ;diskette read sector function
-   193                                  EBIOSINTKEYBOARD        equ     016h                                            ;keyboard services interrupt
-   194                                  EBIOSFNKEYSTATUS        equ     001h                                            ;keyboard status function
-   195                                  ;-----------------------------------------------------------------------------------------------------------------------
-   196                                  ;
-   197                                  ;       Standards-Based Values
-   198                                  ;
-   199                                  ;-----------------------------------------------------------------------------------------------------------------------
+   193                                  EBIOSFNWRITESECTOR      equ     003h                                            ;diskette write sector function
+   194                                  EBIOSINTKEYBOARD        equ     016h                                            ;keyboard services interrupt
+   195                                  EBIOSFNKEYSTATUS        equ     001h                                            ;keyboard status function
+   196                                  ;-----------------------------------------------------------------------------------------------------------------------
+   197                                  ;
+   198                                  ;       Standards-Based Values
+   199                                  ;
    200                                  ;-----------------------------------------------------------------------------------------------------------------------
-   201                                  ;
-   202                                  ;       ASCII                                                                   EASCII...
-   203                                  ;
-   204                                  ;-----------------------------------------------------------------------------------------------------------------------
-   205                                  EASCIIRETURN            equ     00Dh                                            ;carriage return
-   206                                  EASCIIESCAPE            equ     01Bh                                            ;escape
-   207                                  ;-----------------------------------------------------------------------------------------------------------------------
-   208                                  ;
-   209                                  ;       Operating System Values
-   210                                  ;
-   211                                  ;-----------------------------------------------------------------------------------------------------------------------
+   201                                  ;-----------------------------------------------------------------------------------------------------------------------
+   202                                  ;
+   203                                  ;       ASCII                                                                   EASCII...
+   204                                  ;
+   205                                  ;-----------------------------------------------------------------------------------------------------------------------
+   206                                  EASCIIRETURN            equ     00Dh                                            ;carriage return
+   207                                  EASCIIESCAPE            equ     01Bh                                            ;escape
+   208                                  ;-----------------------------------------------------------------------------------------------------------------------
+   209                                  ;
+   210                                  ;       Operating System Values
+   211                                  ;
    212                                  ;-----------------------------------------------------------------------------------------------------------------------
-   213                                  ;
-   214                                  ;       Boot Sector and Loader Constants                                        EBOOT...
-   215                                  ;
-   216                                  ;       Equates in this section support the boot sector and the 16-bit operating system loader, which will be
-   217                                  ;       responsible for placing the CPU into protected mode and calling the initial operating system task.
-   218                                  ;
-   219                                  ;-----------------------------------------------------------------------------------------------------------------------
-   220                                  EBOOTSTACKTOP           equ     0100h                                           ;boot sector stack top relative to DS
-   221                                  EBOOTSECTORBYTES        equ     512                                             ;bytes per sector
-   222                                  EBOOTDIRENTRIES         equ     224                                             ;directory entries
-   223                                  EBOOTDISKSECTORS        equ     2880                                            ;sectors per disk
-   224                                  EBOOTDISKBYTES          equ     (EBOOTSECTORBYTES*EBOOTDISKSECTORS)             ;bytes per disk
-   225                                  EBOOTFATBASE            equ     (EBOOTSTACKTOP+EBOOTSECTORBYTES)                ;offset of FAT I/O buffer rel to DS
-   226                                  EBOOTMAXTRIES           equ     5                                               ;max read retries
-   227                                  %ifdef BUILDBOOT
-   228                                  ;=======================================================================================================================
-   229                                  ;
-   230                                  ;       Boot Sector                                                             @disk: 000000   @mem: 007c00
-   231                                  ;
-   232                                  ;       The first sector of the disk is the boot sector. The BIOS will load the boot sector into memory and pass
-   233                                  ;       control to the code at the start of the sector. The boot sector code is responsible for loading the operating
-   234                                  ;       system into memory. The boot sector contains a disk parameter table describing the geometry and allocation
-   235                                  ;       of the disk. Following the disk parameter table is code to load the operating system kernel into memory.
-   236                                  ;
-   237                                  ;       The "cpu" directive limits emitted code to those instructions supported by the most primitive processor
-   238                                  ;       we expect to ever execute our code. The "vstart" parameter indicates addressability of symbols so as to
-   239                                  ;       emulate the DOS .COM program model. Although the BIOS is expected to load the boot sector at address 7c00,
-   240                                  ;       we do not make that assumption. The CPU starts in 16-bit addressing mode. A three-byte jump instruction is
-   241                                  ;       immediately followed by a disk parameter table.
-   242                                  ;
-   243                                  ;=======================================================================================================================
-   244                                                          cpu     8086                                            ;assume minimal CPU
-   245                                  section                 boot    vstart=0100h                                    ;emulate .COM (CS,DS,ES=PSP) addressing
-   246                                                          bits    16                                              ;16-bit code at power-up
-   247                                  %ifdef BUILDPREP
-   248 00000000 E9FD01                  Boot                    jmp     word Prep                                       ;jump to preparation code
-   249                                  %else
-   250                                  Boot                    jmp     word Boot.10                                    ;jump over parameter table
-   251                                  %endif
-   252                                  ;-----------------------------------------------------------------------------------------------------------------------
-   253                                  ;
-   254                                  ;       Disk Parameter Table
-   255                                  ;
-   256                                  ;       The disk parameter table informs the BIOS of the floppy disk architecture. Here, we use parameters for the
-   257                                  ;       3.5" 1.44MB floppy disk since this format is widely supported by virtual machine hypervisors.
-   258                                  ;
-   259                                  ;-----------------------------------------------------------------------------------------------------------------------
-   260 00000003 437573746F6D4F53                                db      "CustomOS"                                      ;eight-byte label
-   261 0000000B 0002                    cwSectorBytes           dw      EBOOTSECTORBYTES                                ;bytes per sector
-   262 0000000D 01                      cbClusterSectors        db      1                                               ;sectors per cluster
-   263 0000000E 0100                    cwReservedSectors       dw      1                                               ;reserved sectors
-   264 00000010 02                      cbFatCount              db      2                                               ;file allocation table copies
-   265 00000011 E000                    cwDirEntries            dw      EBOOTDIRENTRIES                                 ;max directory entries
-   266 00000013 400B                    cwDiskSectors           dw      EBOOTDISKSECTORS                                ;sectors per disk
-   267 00000015 F0                      cbDiskType              db      0F0h                                            ;1.44MB
-   268 00000016 0900                    cwFatSectors            dw      9                                               ;sectors per FAT copy
-   269                                  cbTrackSectors          equ     $                                               ;sectors per track (as byte)
-   270 00000018 1200                    cwTrackSectors          dw      18                                              ;sectors per track (as word)
-   271 0000001A 0200                    cwDiskSides             dw      2                                               ;sides per disk
-   272 0000001C 0000                    cwSpecialSectors        dw      0                                               ;special sectors
-   273                                  ;
-   274                                  ;       BIOS typically loads the boot sector at absolute address 7c00 and sets the stack pointer at 512 bytes past the
-   275                                  ;       end of the boot sector. But, since BIOS code varies, we don't make any assumptions as to where our boot sector
-   276                                  ;       is loaded. For example, the initial CS:IP could be 0:7c00, 700:c00, 7c0:0, etc. So, to avoid assumptions, we
-   277                                  ;       first normalize CS:IP to get the absolute segment address in BX. The comments below show the effect of this code
-   278                                  ;       given several possible starting values for CS:IP.
-   279                                  ;
-   280                                                                                                                  ;CS:IP   0:7c00 700:c00 7c0:0
-   281 0000001E E80000                  Boot.10                 call    word .20                                        ;[ESP] =   7c21     c21    21
-   282                                  .@20                    equ     $-$$                                            ;.@20 = 021h
-   283 00000021 58                      .20                     pop     ax                                              ;AX =      7c21     c21    21
-   284 00000022 83E821                                          sub     ax,.@20                                         ;AX =      7c00     c00     0
-   285 00000025 B104                                            mov     cl,4                                            ;shift count
-   286 00000027 D3E8                                            shr     ax,cl                                           ;AX =       7c0      c0     0
-   287 00000029 8CCB                                            mov     bx,cs                                           ;BX =         0     700   7c0
-   288 0000002B 01C3                                            add     bx,ax                                           ;BX =       7c0     7c0   7c0
-   289                                  ;
-   290                                  ;       Now, since we are assembling our boot code to emulate the addressing of a .COM file, we want the DS and ES
-   291                                  ;       registers to be set to where a Program Segment Prefix (PSP) would be, exactly 100h (256) bytes prior to
-   292                                  ;       the start of our code. This will correspond to our assembled data address offsets. Note that we instructed
-   293                                  ;       the assembler to produce addresses for our symbols that are offset from our code by 100h. See the "vstart"
-   294                                  ;       parameter for the "section" directive above. We also set SS to the PSP and SP to the address of our i/o
-   295                                  ;       buffer. This leaves 256 bytes of usable stack from 7b0:0 to 7b0:100.
-   296                                  ;
-   297 0000002D 83EB10                                          sub     bx,16                                           ;BX = 07b0
-   298 00000030 8EDB                                            mov     ds,bx                                           ;DS = 07b0 = psp
-   299 00000032 8EC3                                            mov     es,bx                                           ;ES = 07b0 = psp
-   300 00000034 8ED3                                            mov     ss,bx                                           ;SS = 07b0 = psp (ints disabled)
-   301 00000036 BC0001                                          mov     sp,EBOOTSTACKTOP                                ;SP = 0100       (ints enabled)
-   302                                  ;
-   303                                  ;       Our boot addressability is now set up according to the following diagram.
-   304                                  ;
-   305                                  ;       DS,ES,SS -----> 007b00  +-----------------------------------------------+ DS:0000
-   306                                  ;                               |  Boot Stack & Boot PSP (Unused)               |
-   307                                  ;                               |  256 = 100h bytes                             |
-   308                                  ;       SS:SP --------> 007c00  +-----------------------------------------------+ DS:0100  07b0:0100
-   309                                  ;                               |  Boot Sector (vstart=0100h)                   |
-   310                                  ;                               |  1 sector = 512 = 200h bytes                  |
-   311                                  ;                       007e00  +-----------------------------------------------+ DS:0300
-   312                                  ;                               |  File Allocation Table (FAT) I/O Buffer       |
-   313                                  ;                               |  9x512-byte sectors = 4,608 = 1200h bytes     |
-   314                                  ;                       009000  +-----------------------------------------------+ DS:1500  08f0:0100
-   315                                  ;                               |  Directory Sector Buffer & Kernel Load Area   |
-   316                                  ;                               |  2 sectors = 1024 = 400h bytes
-   317                                  ;                       009400  +-----------------------------------------------+ DS:1900
-   318                                  ;
-   319                                  ;       On entry, DL indicates the drive being booted from.
-   320                                  ;
-   321 00000039 8816[F801]                                      mov     [wbDrive],dl                                    ;[wbDrive] = drive being booted from
-   322                                  ;
-   323                                  ;       Compute directory i/o buffer address.
-   324                                  ;
-   325 0000003D A1[1600]                                        mov     ax,[cwFatSectors]                               ;AX = 0009 = FAT sectors
-   326 00000040 F726[0B00]                                      mul     word [cwSectorBytes]                            ;DX:AX = 0000:1200 = FAT bytes
-   327 00000044 050003                                          add     ax,EBOOTFATBASE                                 ;AX = 1500 = end of FAT buffer
-   328 00000047 A3[EC01]                                        mov     [wwDirBuffer],ax                                ;[wwDirBuffer] = 1500
-   329                                  ;
-   330                                  ;       Compute segment where os.com will be loaded.
-   331                                  ;
-   332 0000004A D3E8                                            shr     ax,cl                                           ;AX = 0150
-   333 0000004C 01D8                                            add     ax,bx                                           ;AX = 0150 + 07b0 = 0900
-   334 0000004E 83E810                                          sub     ax,16                                           ;AX = 08f0
-   335 00000051 A3[3F01]                                        mov     [wwLoadSegment],ax                              ;[wwLoadSegment] = 08f0
-   336                                  ;
-   337                                  ;       Set the video mode to 80 column, 25 row, text.
-   338                                  ;
-   339 00000054 B80300                                          mov     ax,EBIOSFNSETVMODE<<8|EBIOSMODETEXT80           ;set mode function, 80x25 text mode
-   340 00000057 CD10                                            int     EBIOSINTVIDEO                                   ;call BIOS display interrupt
-   341                                  ;
-   342                                  ;       Write a message to the console so we know we have our addressability established.
-   343                                  ;
-   344 00000059 BE[C501]                                        mov     si,czLoadMsg                                    ;loading message
-   345 0000005C E84B01                                          call    BootPrint                                       ;display loader message
-   346                                  ;
-   347                                  ;       Initialize the number of directory sectors to search.
-   348                                  ;
-   349 0000005F A1[1100]                                        mov     ax,[cwDirEntries]                               ;AX = 224 = max dir entries
-   350 00000062 A3[EE01]                                        mov     [wwEntriesLeft],ax                              ;[wwEntriesLeft] = 224
-   351                                  ;
-   352                                  ;       Compute number of directory sectors and initialize overhead count.
-   353                                  ;
-   354 00000065 89C1                                            mov     cx,ax                                           ;CX = 00e0 = 224 entries
-   355 00000067 F726[B801]                                      mul     word [cwEntryLen]                               ;DX:AX = 224 * 32 = 7168
-   356 0000006B F736[0B00]                                      div     word [cwSectorBytes]                            ;AX = 7168 / 512 = 14 = dir sectors
-   357 0000006F A3[F001]                                        mov     [wwOverhead],ax                                 ;[wwOverhead] = 000e
-   358                                  ;
-   359                                  ;       Compute directory entries per sector.
-   360                                  ;
-   361 00000072 91                                              xchg    ax,cx                                           ;DX:AX = 0:00e0, CX = 0000e
-   362 00000073 F7F1                                            div     cx                                              ;AX = 0010 = entries per dir sector
-   363 00000075 A3[F201]                                        mov     [wwSectorEntries],ax                            ;[wwSectorEntries] = 0010
-   364                                  ;
-   365                                  ;       Compute first logical directory sector and update overhead count.
-   366                                  ;
-   367 00000078 A1[1600]                                        mov     ax,[cwFatSectors]                               ;AX = 0009 = FAT sectors per copy
-   368 0000007B F626[1000]                                      mul     byte [cbFatCount]                               ;AX = 0012 = FAT sectors
-   369 0000007F 0306[0E00]                                      add     ax,[cwReservedSectors]                          ;AX = 0013 = FAT plus reserved
-   370 00000083 0306[1C00]                                      add     ax,[cwSpecialSectors]                           ;AX = 0013 = FAT + reserved + special
-   371 00000087 A3[F401]                                        mov     [wwLogicalSector],ax                            ;[wwLogicalSector] = 0013
-   372 0000008A 0106[F001]                                      add     [wwOverhead],ax                                 ;[wwOverhead] = 0021 = res+spec+FAT+dir
-   373                                  ;
-   374                                  ;       Read directory sector.
-   375                                  ;
-   376 0000008E B001                    .30                     mov     al,1                                            ;sector count
-   377 00000090 A2[F601]                                        mov     [wbReadCount],al                                ;[wbReadCount] = 01
-   378 00000093 8B1E[EC01]                                      mov     bx,[wwDirBuffer]                                ;BX = 1500
-   379 00000097 E8A700                                          call    ReadSector                                      ;read sector into es:bx
-   380                                  ;
-   381                                  ;       Setup variables to search this directory sector.
-   382                                  ;
-   383 0000009A A1[EE01]                                        mov     ax,[wwEntriesLeft]                              ;directory entries to search
-   384 0000009D 3B06[F201]                                      cmp     ax,[wwSectorEntries]                            ;need to search more sectors?
-   385 000000A1 7603                                            jna     .40                                             ;no, continue
-   386 000000A3 A1[F201]                                        mov     ax,[wwSectorEntries]                            ;yes, limit search to sector
-   387 000000A6 2906[EE01]              .40                     sub     [wwEntriesLeft],ax                              ;update entries left to searh
-   388 000000AA BE[BA01]                                        mov     si,cbKernelProgram                              ;program name
-   389 000000AD 8B3E[EC01]                                      mov     di,[wwDirBuffer]                                ;DI = 1500
-   390                                  ;
-   391                                  ;       Loop through directory sectors searching for kernel program.
-   392                                  ;
-   393 000000B1 56                      .50                     push    si                                              ;save kernel name address
-   394 000000B2 57                                              push    di                                              ;save dir i/o buffer address
-   395 000000B3 B90B00                                          mov     cx,11                                           ;length of 8+3 name
-   396 000000B6 FC                                              cld                                                     ;forward strings
-   397 000000B7 F3A6                                            repe    cmpsb                                           ;compare entry name
-   398 000000B9 5F                                              pop     di                                              ;restore dir i/o buffer address
-   399 000000BA 5E                                              pop     si                                              ;restore kernel name address
-   400 000000BB 7418                                            je      .60                                             ;exit loop if found
-   401 000000BD 033E[B801]                                      add     di,[cwEntryLen]                                 ;point to next dir entry
-   402 000000C1 48                                              dec     ax                                              ;decrement remaining entries
-   403 000000C2 75ED                                            jnz     .50                                             ;next entry
-   404                                  ;
-   405                                  ;       Repeat search if we are not at the end of the directory.
-   406                                  ;
-   407 000000C4 FF06[F401]                                      inc     word [wwLogicalSector]                          ;increment logical sector
-   408 000000C8 833E[EE01]00                                    cmp     word [wwEntriesLeft],0                          ;done with directory?
-   409 000000CD 75BF                                            jne     .30                                             ;no, get next sector
-   410 000000CF BE[E001]                                        mov     si,czNoKernel                                   ;missing kernel message
-   411 000000D2 E9C000                                          jmp     BootExit                                        ;display message and exit
-   412                                  ;
-   413                                  ;       If we find the kernel program in the directory, read the FAT.
-   414                                  ;
-   415 000000D5 A1[0E00]                .60                     mov     ax,[cwReservedSectors]                          ;AX = 0001
-   416 000000D8 A3[F401]                                        mov     [wwLogicalSector],ax                            ;start past boot sector
-   417 000000DB A1[1600]                                        mov     ax,[cwFatSectors]                               ;AX = 0009
-   418 000000DE A2[F601]                                        mov     [wbReadCount],al                                ;[wbReadCount] = 09
-   419 000000E1 BB0003                                          mov     bx,EBOOTFATBASE                                 ;BX = 0300
-   420 000000E4 E85A00                                          call    ReadSector                                      ;read FAT into buffer
-   421                                  ;
-   422                                  ;       Get the starting cluster of the kernel program and target address.
-   423                                  ;
-   424 000000E7 8B451A                                          mov     ax,[di+26]                                      ;AX = starting cluster of file
-   425 000000EA C41E[3D01]                                      les     bx,[wwLoadOffset]                               ;ES:BX = kernel load add (08f0:0100)
-   426                                  ;
-   427                                  ;       Read each program cluster into RAM.
-   428                                  ;
-   429 000000EE 50                      .70                     push    ax                                              ;save cluster nbr
-   430 000000EF 83E802                                          sub     ax,2                                            ;AX = cluster nbr base 0
-   431 000000F2 8A0E[0D00]                                      mov     cl,[cbClusterSectors]                           ;CL = sectors per cluster
-   432 000000F6 880E[F601]                                      mov     [wbReadCount],cl                                ;save sectors to read
-   433 000000FA 30ED                                            xor     ch,ch                                           ;CX = sectors per cluster
-   434 000000FC F7E1                                            mul     cx                                              ;DX:AX = logical cluster sector
-   435 000000FE 0306[F001]                                      add     ax,[wwOverhead]                                 ;AX = kernel sector nbr
-   436 00000102 A3[F401]                                        mov     [wwLogicalSector],ax                            ;save logical sector nbr
-   437 00000105 E83900                                          call    ReadSector                                      ;read sectors into ES:BX
-   438                                  ;
-   439                                  ;       Update buffer pointer for next cluster.
-   440                                  ;
-   441 00000108 A0[0D00]                                        mov     al,[cbClusterSectors]                           ;AL = sectors per cluster
-   442 0000010B 30E4                                            xor     ah,ah                                           ;AX = sectors per cluster
-   443 0000010D F726[0B00]                                      mul     word [cwSectorBytes]                            ;DX:AX = cluster bytes
-   444 00000111 01C3                                            add     bx,ax                                           ;BX = next cluster target address
-   445 00000113 58                                              pop     ax                                              ;AX = restore cluster nbr
-   446                                  ;
-   447                                  ;       Compute next cluster number.
-   448                                  ;
-   449 00000114 89C1                                            mov     cx,ax                                           ;CX = cluster nbr
-   450 00000116 89C7                                            mov     di,ax                                           ;DI = cluster nbr
-   451 00000118 D1E8                                            shr     ax,1                                            ;AX = cluster/2
-   452 0000011A 89C2                                            mov     dx,ax                                           ;DX = cluster/2
-   453 0000011C 01D0                                            add     ax,dx                                           ;AX = 2*(cluster/2)
-   454 0000011E 01D0                                            add     ax,dx                                           ;AX = 3*(cluster/2)
-   455 00000120 83E701                                          and     di,1                                            ;get low bit
-   456 00000123 01C7                                            add     di,ax                                           ;add one if cluster is odd
-   457 00000125 81C70003                                        add     di,EBOOTFATBASE                                 ;add FAT buffer address
-   458 00000129 8B05                                            mov     ax,[di]                                         ;get cluster bytes
-   459                                  ;
-   460                                  ;       Adjust cluster nbr by 4 bits if cluster is odd; test for end of chain.
-   461                                  ;
-   462 0000012B F6C101                                          test    cl,1                                            ;is cluster odd?
-   463 0000012E 7404                                            jz      .80                                             ;no, skip ahead
-   464 00000130 B104                                            mov     cl,4                                            ;shift count
-   465 00000132 D3E8                                            shr     ax,cl                                           ;shift nybble low
-   466 00000134 25FF0F                  .80                     and     ax,0FFFh                                        ;mask for 24 bits; next cluster nbr
-   467 00000137 3DFF0F                                          cmp     ax,0FFFh                                        ;end of chain?
-   468 0000013A 75B2                                            jne     .70                                             ;no, continue
-   469                                  ;
-   470                                  ;       Transfer control to the operating system program.
-   471                                  ;
-   472 0000013C EA                                              db      0EAh                                            ;jmp seg:offset
-   473 0000013D 0001                    wwLoadOffset            dw      0100h                                           ;kernel entry offset
-   474 0000013F F008                    wwLoadSegment           dw      08F0h                                           ;kernel entry segment (computed)
-   475                                  ;
-   476                                  ;       Read [wbReadCount] disk sectors from [wwLogicalSector] into ES:BX.
-   477                                  ;
-   478 00000141 A1[1800]                ReadSector              mov     ax,[cwTrackSectors]                             ;AX = sectors per track
-   479 00000144 F726[1A00]                                      mul     word [cwDiskSides]                              ;DX:AX = sectors per cylinder
-   480 00000148 89C1                                            mov     cx,ax                                           ;CX = sectors per cylinder
-   481 0000014A A1[F401]                                        mov     ax,[wwLogicalSector]                            ;DX:AX = logical sector
-   482 0000014D F7F1                                            div     cx                                              ;AX = cylinder; DX = cyl sector
-   483 0000014F A2[FB01]                                        mov     [wbTrack],al                                    ;[wbTrack] = cylinder
-   484 00000152 89D0                                            mov     ax,dx                                           ;AX = cyl sector
-   485 00000154 F636[1800]                                      div     byte [cbTrackSectors]                           ;AH = sector, AL = head
-   486 00000158 FEC4                                            inc     ah                                              ;AH = sector (1,2,3,...)
-   487 0000015A A3[F901]                                        mov     [wbHead],ax                                     ;[wbHead]= head, [wwSectorTrack]= sector
-   488                                  ;
-   489                                  ;       Try maxtries times to read sector.
-   490                                  ;
-   491 0000015D B90500                                          mov     cx,EBOOTMAXTRIES                                ;CX = 0005
-   492 00000160 53                      .10                     push    bx                                              ;save buffer address
-   493 00000161 51                                              push    cx                                              ;save retry count
-   494 00000162 8B16[F801]                                      mov     dx,[wwDriveHead]                                ;DH = head, DL = drive
-   495 00000166 8B0E[FA01]                                      mov     cx,[wwSectorTrack]                              ;CH = track, CL = sector
-   496 0000016A A1[F601]                                        mov     ax,[wwReadCountCommand]                         ;AH = fn., AL = sector count
-   497 0000016D CD13                                            int     EBIOSINTDISKETTE                                ;read sector
-   498 0000016F 59                                              pop     cx                                              ;restore retry count
-   499 00000170 5B                                              pop     bx                                              ;restore buffer address
-   500 00000171 7343                                            jnc     BootReturn                                      ;skip ahead if done
-   501 00000173 E2EB                                            loop    .10                                             ;retry
-   502                                  ;
-   503                                  ;       Handle disk error: convert to ASCII and store in error string.
-   504                                  ;
-   505 00000175 88E0                                            mov     al,ah                                           ;AL = bios error code
-   506 00000177 30E4                                            xor     ah,ah                                           ;AX = bios error code
-   507 00000179 B210                                            mov     dl,16                                           ;divisor for base 16
-   508 0000017B F6F2                                            div     dl                                              ;AL = hi order, AH = lo order
-   509 0000017D 0D3030                                          or      ax,03030h                                       ;apply ASCII zone bits
-   510 00000180 80FC3A                                          cmp     ah,03Ah                                         ;range test ASCII numeral
-   511 00000183 7203                                            jb      .20                                             ;continue if numeral
-   512 00000185 80C407                                          add     ah,7                                            ;adjust for ASCII 'A'-'F'
-   513 00000188 3C3A                    .20                     cmp     al,03Ah                                         ;range test ASCII numeral
-   514 0000018A 7203                                            jb      .30                                             ;continue if numeral
-   515 0000018C 80C407                                          add     ah,7                                            ;adjust for ASCII 'A'-'F'
-   516 0000018F A3[DD01]                .30                     mov     [wzErrorCode],ax                                ;store ASCII error code
-   517 00000192 BE[D201]                                        mov     si,czErrorMsg                                   ;error message address
-   518 00000195 E81200                  BootExit                call    BootPrint                                       ;display messge to console
-   519                                  ;
-   520                                  ;       Wait for a key press.
-   521                                  ;
-   522 00000198 B401                    .10                     mov     ah,EBIOSFNKEYSTATUS                             ;BIOS keyboard status function
-   523 0000019A CD16                                            int     EBIOSINTKEYBOARD                                ;get keyboard status
-   524 0000019C 7504                                            jnz     .20                                             ;continue if key pressed
-   525 0000019E FB                                              sti                                                     ;enable maskable interrupts
-   526 0000019F F4                                              hlt                                                     ;wait for interrupt
-   527 000001A0 EBF6                                            jmp     .10                                             ;repeat
-   528                                  ;
-   529                                  ;       Reset the system.
-   530                                  ;
-   531 000001A2 B0FE                    .20                     mov     al,EKEYBCMDRESET                                ;8042 pulse output port pin
-   532 000001A4 E664                                            out     EKEYBPORTSTAT,al                                ;drive B0 low to restart
-   533 000001A6 FB                      .30                     sti                                                     ;enable maskable interrupts
-   534 000001A7 F4                                              hlt                                                     ;stop until reset, int, nmi
-   535 000001A8 EBFC                                            jmp     .30                                             ;loop until restart kicks in
-   536                                  ;
-   537                                  ;       Display text message.
-   538                                  ;
-   539 000001AA FC                      BootPrint               cld                                                     ;forward strings
-   540 000001AB AC                      .10                     lodsb                                                   ;load next byte at DS:SI in AL
-   541 000001AC 84C0                                            test    al,al                                           ;end of string?
-   542 000001AE 7406                                            jz      BootReturn                                      ;... yes, exit our loop
-   543 000001B0 B40E                                            mov     ah,EBIOSFNTTYOUTPUT                             ;BIOS teletype function
-   544 000001B2 CD10                                            int     EBIOSINTVIDEO                                   ;call BIOS display interrupt
-   545 000001B4 EBF5                                            jmp     .10                                             ;repeat until done
-   546 000001B6 C3                      BootReturn              ret                                                     ;return
-   547                                  ;-----------------------------------------------------------------------------------------------------------------------
-   548                                  ;
-   549                                  ;       Constants
-   550                                  ;
-   551                                  ;-----------------------------------------------------------------------------------------------------------------------
-   552 000001B7 90                                              align   2
-   553 000001B8 2000                    cwEntryLen              dw      32                                              ;length of directory entry
-   554 000001BA 4F5320202020202043-     cbKernelProgram         db      "OS      COM"                                   ;kernel program name
-   554 000001C3 4F4D               
-   555 000001C5 4C6F6164696E67204F-     czLoadMsg               db      "Loading OS",13,10,0                            ;loading message
-   555 000001CE 530D0A00           
-   556 000001D2 4469736B206572726F-     czErrorMsg              db      "Disk error "                                   ;error message
-   556 000001DB 7220               
-   557 000001DD 202000                  wzErrorCode             db      020h,020h,0                                     ;error code and null terminator
-   558 000001E0 4F53206D697373696E-     czNoKernel              db      "OS missing",0                                  ;missing kernel message
-   558 000001E9 6700               
-   559                                  ;-----------------------------------------------------------------------------------------------------------------------
-   560                                  ;
-   561                                  ;       Work Areas
-   562                                  ;
-   563                                  ;-----------------------------------------------------------------------------------------------------------------------
-   564 000001EB 90                                              align   2
-   565 000001EC 0000                    wwDirBuffer             dw      0                                               ;directory i/o buffer address
-   566 000001EE 0000                    wwEntriesLeft           dw      0                                               ;directory entries to search
-   567 000001F0 0000                    wwOverhead              dw      0                                               ;overhead sectors
-   568 000001F2 0000                    wwSectorEntries         dw      0                                               ;directory entries per sector
-   569 000001F4 0000                    wwLogicalSector         dw      0                                               ;current logical sector
-   570                                  wwReadCountCommand      equ     $                                               ;read count and command
-   571 000001F6 00                      wbReadCount             db      0                                               ;sectors to read
-   572 000001F7 02                      cbReadCommand           db      EBIOSFNREADSECTOR                               ;BIOS read disk fn code
-   573                                  wwDriveHead             equ     $                                               ;drive, head (word)
-   574 000001F8 00                      wbDrive                 db      0                                               ;drive
-   575 000001F9 00                      wbHead                  db      0                                               ;head
-   576                                  wwSectorTrack           equ     $                                               ;sector, track (word)
-   577 000001FA 00                                              db      0                                               ;sector
-   578 000001FB 00                      wbTrack                 db      0                                               ;track
-   579 000001FC 00<rept>                                        times   510-($-$$) db 0h                                ;zero fill to end of sector
-   580 000001FE 55AA                                            db      055h,0AAh                                       ;end of sector signature
-   581                                  %endif
-   582                                  %ifdef BUILDPREP
-   583                                  ;=======================================================================================================================
-   584                                  ;
-   585                                  ;       Diskette Preparation Code
-   586                                  ;
-   587                                  ;       This routine writes the OS boot sector code to a formatted floppy diskette. The diskette parameter table,
-   588                                  ;       which is located in the first 30 bytes of the boot sector is first read from the diskette and overlayed onto
-   589                                  ;       the OS bootstrap code so that the diskette format parameters are preserved.
-   590                                  ;
-   591                                  ;=======================================================================================================================
-   592                                  ;
-   593                                  ;       Query the user to insert a flopppy diskette and press enter or cancel.
-   594                                  ;
-   595 00000200 BE[CA02]                Prep                    mov     si,czPrepMsg10                                  ;starting message address
-   596 00000203 E8A4FF                                          call    BootPrint                                       ;display message
-   597                                  ;
-   598                                  ;       Exit if the Escape key is pressed or loop until Enter is pressed.
-   599                                  ;
-   600 00000206 B401                    .10                     mov     ah,EBIOSFNKEYSTATUS                             ;BIOS keyboard status function
-   601 00000208 CD16                                            int     EBIOSINTKEYBOARD                                ;get keyboard status
-   602 0000020A 7504                                            jnz     .20                                             ;continue if key pressed
-   603 0000020C FB                                              sti                                                     ;enable interrupts
-   604 0000020D F4                                              hlt                                                     ;wait for interrupt
-   605 0000020E EBF6                                            jmp     .10                                             ;repeat
-   606 00000210 3C0D                    .20                     cmp     al,EASCIIRETURN                                 ;Enter key pressed?
-   607 00000212 7407                                            je      .30                                             ;yes, branch
-   608 00000214 3C1B                                            cmp     al,EASCIIESCAPE                                 ;Escape key pressed?
-   609 00000216 75EE                                            jne     .10                                             ;no, repeat
-   610 00000218 E9A900                                          jmp     .120                                            ;yes, exit program
-   611                                  ;
-   612                                  ;       Display writing-sector message and patch the JMP instruction.
-   613                                  ;
-   614 0000021B BE[6E04]                .30                     mov     si,czPrepMsg12                                  ;writing-sector message address
-   615 0000021E E889FF                                          call    BootPrint                                       ;display message
-   616 00000221 BB[0100]                                        mov     bx,Boot+1                                       ;address of JMP instruction operand
-   617 00000224 B81B00                                          mov     ax,01Bh                                         ;address past disk parameter table
-   618 00000227 8907                                            mov     [bx],ax                                         ;update the JMP instruction
-   619                                  ;
-   620                                  ;       Try to read the boot sector.
-   621                                  ;
-   622 00000229 B90500                                          mov     cx,EBOOTMAXTRIES                                ;try up to five times
-   623 0000022C 51                      .40                     push    cx                                              ;save remaining tries
-   624 0000022D BB[760A]                                        mov     bx,wcPrepInBuf                                  ;input buffer address
-   625 00000230 BA0000                                          mov     dx,0                                            ;head zero, drive zero
-   626 00000233 B90100                                          mov     cx,1                                            ;track zero, sector one
-   627 00000236 B80102                                          mov     ax,0201h                                        ;read one sector
-   628 00000239 CD13                                            int     EBIOSINTDISKETTE                                ;attempt the read
-   629 0000023B 59                                              pop     cx                                              ;restore remaining retries
-   630 0000023C 7307                                            jnc     .50                                             ;skip ahead if successful
-   631 0000023E E2EC                                            loop    .40                                             ;try again
-   632 00000240 BE[9E04]                                        mov     si,czPrepMsg20                                  ;read-error message address
-   633 00000243 EB2C                                            jmp     .70                                             ;branch to error routine
-   634                                  ;
-   635                                  ;       Copy diskette parms from input buffer to output buffer.
+   213                                  ;-----------------------------------------------------------------------------------------------------------------------
+   214                                  ;
+   215                                  ;       Boot Sector and Loader Constants                                        EBOOT...
+   216                                  ;
+   217                                  ;       Equates in this section support the boot sector and the 16-bit operating system loader, which will be
+   218                                  ;       responsible for placing the CPU into protected mode and calling the initial operating system task.
+   219                                  ;
+   220                                  ;-----------------------------------------------------------------------------------------------------------------------
+   221                                  EBOOTSTACKTOP           equ     0100h                                           ;boot sector stack top relative to DS
+   222                                  EBOOTSECTORBYTES        equ     512                                             ;bytes per sector
+   223                                  EBOOTDIRENTRIES         equ     224                                             ;directory entries
+   224                                  EBOOTDISKSECTORS        equ     2880                                            ;sectors per disk
+   225                                  EBOOTDISKBYTES          equ     (EBOOTSECTORBYTES*EBOOTDISKSECTORS)             ;bytes per disk
+   226                                  EBOOTFATBASE            equ     (EBOOTSTACKTOP+EBOOTSECTORBYTES)                ;offset of FAT I/O buffer rel to DS
+   227                                  EBOOTMAXTRIES           equ     5                                               ;max read retries
+   228                                  %ifdef BUILDBOOT
+   229                                  ;=======================================================================================================================
+   230                                  ;
+   231                                  ;       Boot Sector                                                             @disk: 000000   @mem: 007c00
+   232                                  ;
+   233                                  ;       The first sector of the disk is the boot sector. The BIOS will load the boot sector into memory and pass
+   234                                  ;       control to the code at the start of the sector. The boot sector code is responsible for loading the operating
+   235                                  ;       system into memory. The boot sector contains a disk parameter table describing the geometry and allocation
+   236                                  ;       of the disk. Following the disk parameter table is code to load the operating system kernel into memory.
+   237                                  ;
+   238                                  ;       The "cpu" directive limits emitted code to those instructions supported by the most primitive processor
+   239                                  ;       we expect to ever execute our code. The "vstart" parameter indicates addressability of symbols so as to
+   240                                  ;       emulate the DOS .COM program model. Although the BIOS is expected to load the boot sector at address 7c00,
+   241                                  ;       we do not make that assumption. The CPU starts in 16-bit addressing mode. A three-byte jump instruction is
+   242                                  ;       immediately followed by a disk parameter table.
+   243                                  ;
+   244                                  ;=======================================================================================================================
+   245                                                          cpu     8086                                            ;assume minimal CPU
+   246                                  section                 boot    vstart=0100h                                    ;emulate .COM (CS,DS,ES=PSP) addressing
+   247                                                          bits    16                                              ;16-bit code at power-up
+   248                                  %ifdef BUILDPREP
+   249 00000000 E9FD01                  Boot                    jmp     word Prep                                       ;jump to preparation code
+   250                                  %else
+   251                                  Boot                    jmp     word Boot.10                                    ;jump over parameter table
+   252                                  %endif
+   253                                  ;-----------------------------------------------------------------------------------------------------------------------
+   254                                  ;
+   255                                  ;       Disk Parameter Table
+   256                                  ;
+   257                                  ;       The disk parameter table informs the BIOS of the floppy disk architecture. Here, we use parameters for the
+   258                                  ;       3.5" 1.44MB floppy disk since this format is widely supported by virtual machine hypervisors.
+   259                                  ;
+   260                                  ;-----------------------------------------------------------------------------------------------------------------------
+   261 00000003 437573746F6D4F53                                db      "CustomOS"                                      ;eight-byte label
+   262 0000000B 0002                    cwSectorBytes           dw      EBOOTSECTORBYTES                                ;bytes per sector
+   263 0000000D 01                      cbClusterSectors        db      1                                               ;sectors per cluster
+   264 0000000E 0100                    cwReservedSectors       dw      1                                               ;reserved sectors
+   265 00000010 02                      cbFatCount              db      2                                               ;file allocation table copies
+   266 00000011 E000                    cwDirEntries            dw      EBOOTDIRENTRIES                                 ;max directory entries
+   267 00000013 400B                    cwDiskSectors           dw      EBOOTDISKSECTORS                                ;sectors per disk
+   268 00000015 F0                      cbDiskType              db      0F0h                                            ;1.44MB
+   269 00000016 0900                    cwFatSectors            dw      9                                               ;sectors per FAT copy
+   270                                  cbTrackSectors          equ     $                                               ;sectors per track (as byte)
+   271 00000018 1200                    cwTrackSectors          dw      18                                              ;sectors per track (as word)
+   272 0000001A 0200                    cwDiskSides             dw      2                                               ;sides per disk
+   273 0000001C 0000                    cwSpecialSectors        dw      0                                               ;special sectors
+   274                                  ;
+   275                                  ;       BIOS typically loads the boot sector at absolute address 7c00 and sets the stack pointer at 512 bytes past the
+   276                                  ;       end of the boot sector. But, since BIOS code varies, we don't make any assumptions as to where our boot sector
+   277                                  ;       is loaded. For example, the initial CS:IP could be 0:7c00, 700:c00, 7c0:0, etc. So, to avoid assumptions, we
+   278                                  ;       first normalize CS:IP to get the absolute segment address in BX. The comments below show the effect of this code
+   279                                  ;       given several possible starting values for CS:IP.
+   280                                  ;
+   281                                                                                                                  ;CS:IP   0:7c00 700:c00 7c0:0
+   282 0000001E E80000                  Boot.10                 call    word .20                                        ;[ESP] =   7c21     c21    21
+   283                                  .@20                    equ     $-$$                                            ;.@20 = 021h
+   284 00000021 58                      .20                     pop     ax                                              ;AX =      7c21     c21    21
+   285 00000022 83E821                                          sub     ax,.@20                                         ;AX =      7c00     c00     0
+   286 00000025 B104                                            mov     cl,4                                            ;shift count
+   287 00000027 D3E8                                            shr     ax,cl                                           ;AX =       7c0      c0     0
+   288 00000029 8CCB                                            mov     bx,cs                                           ;BX =         0     700   7c0
+   289 0000002B 01C3                                            add     bx,ax                                           ;BX =       7c0     7c0   7c0
+   290                                  ;
+   291                                  ;       Now, since we are assembling our boot code to emulate the addressing of a .COM file, we want the DS and ES
+   292                                  ;       registers to be set to where a Program Segment Prefix (PSP) would be, exactly 100h (256) bytes prior to
+   293                                  ;       the start of our code. This will correspond to our assembled data address offsets. Note that we instructed
+   294                                  ;       the assembler to produce addresses for our symbols that are offset from our code by 100h. See the "vstart"
+   295                                  ;       parameter for the "section" directive above. We also set SS to the PSP and SP to the address of our i/o
+   296                                  ;       buffer. This leaves 256 bytes of usable stack from 7b0:0 to 7b0:100.
+   297                                  ;
+   298 0000002D 83EB10                                          sub     bx,16                                           ;BX = 07b0
+   299 00000030 8EDB                                            mov     ds,bx                                           ;DS = 07b0 = psp
+   300 00000032 8EC3                                            mov     es,bx                                           ;ES = 07b0 = psp
+   301 00000034 8ED3                                            mov     ss,bx                                           ;SS = 07b0 = psp (ints disabled)
+   302 00000036 BC0001                                          mov     sp,EBOOTSTACKTOP                                ;SP = 0100       (ints enabled)
+   303                                  ;
+   304                                  ;       Our boot addressability is now set up according to the following diagram.
+   305                                  ;
+   306                                  ;       DS,ES,SS -----> 007b00  +-----------------------------------------------+ DS:0000
+   307                                  ;                               |  Boot Stack & Boot PSP (Unused)               |
+   308                                  ;                               |  256 = 100h bytes                             |
+   309                                  ;       SS:SP --------> 007c00  +-----------------------------------------------+ DS:0100  07b0:0100
+   310                                  ;                               |  Boot Sector (vstart=0100h)                   |
+   311                                  ;                               |  1 sector = 512 = 200h bytes                  |
+   312                                  ;                       007e00  +-----------------------------------------------+ DS:0300
+   313                                  ;                               |  File Allocation Table (FAT) I/O Buffer       |
+   314                                  ;                               |  9x512-byte sectors = 4,608 = 1200h bytes     |
+   315                                  ;                       009000  +-----------------------------------------------+ DS:1500  08f0:0100
+   316                                  ;                               |  Directory Sector Buffer & Kernel Load Area   |
+   317                                  ;                               |  2 sectors = 1024 = 400h bytes
+   318                                  ;                       009400  +-----------------------------------------------+ DS:1900
+   319                                  ;
+   320                                  ;       On entry, DL indicates the drive being booted from.
+   321                                  ;
+   322 00000039 8816[F801]                                      mov     [wbDrive],dl                                    ;[wbDrive] = drive being booted from
+   323                                  ;
+   324                                  ;       Compute directory i/o buffer address.
+   325                                  ;
+   326 0000003D A1[1600]                                        mov     ax,[cwFatSectors]                               ;AX = 0009 = FAT sectors
+   327 00000040 F726[0B00]                                      mul     word [cwSectorBytes]                            ;DX:AX = 0000:1200 = FAT bytes
+   328 00000044 050003                                          add     ax,EBOOTFATBASE                                 ;AX = 1500 = end of FAT buffer
+   329 00000047 A3[EC01]                                        mov     [wwDirBuffer],ax                                ;[wwDirBuffer] = 1500
+   330                                  ;
+   331                                  ;       Compute segment where os.com will be loaded.
+   332                                  ;
+   333 0000004A D3E8                                            shr     ax,cl                                           ;AX = 0150
+   334 0000004C 01D8                                            add     ax,bx                                           ;AX = 0150 + 07b0 = 0900
+   335 0000004E 83E810                                          sub     ax,16                                           ;AX = 08f0
+   336 00000051 A3[3F01]                                        mov     [wwLoadSegment],ax                              ;[wwLoadSegment] = 08f0
+   337                                  ;
+   338                                  ;       Set the video mode to 80 column, 25 row, text.
+   339                                  ;
+   340 00000054 B80300                                          mov     ax,EBIOSFNSETVMODE<<8|EBIOSMODETEXT80           ;set mode function, 80x25 text mode
+   341 00000057 CD10                                            int     EBIOSINTVIDEO                                   ;call BIOS display interrupt
+   342                                  ;
+   343                                  ;       Write a message to the console so we know we have our addressability established.
+   344                                  ;
+   345 00000059 BE[C501]                                        mov     si,czLoadMsg                                    ;loading message
+   346 0000005C E84B01                                          call    BootPrint                                       ;display loader message
+   347                                  ;
+   348                                  ;       Initialize the number of directory sectors to search.
+   349                                  ;
+   350 0000005F A1[1100]                                        mov     ax,[cwDirEntries]                               ;AX = 224 = max dir entries
+   351 00000062 A3[EE01]                                        mov     [wwEntriesLeft],ax                              ;[wwEntriesLeft] = 224
+   352                                  ;
+   353                                  ;       Compute number of directory sectors and initialize overhead count.
+   354                                  ;
+   355 00000065 89C1                                            mov     cx,ax                                           ;CX = 00e0 = 224 entries
+   356 00000067 F726[B801]                                      mul     word [cwEntryLen]                               ;DX:AX = 224 * 32 = 7168
+   357 0000006B F736[0B00]                                      div     word [cwSectorBytes]                            ;AX = 7168 / 512 = 14 = dir sectors
+   358 0000006F A3[F001]                                        mov     [wwOverhead],ax                                 ;[wwOverhead] = 000e
+   359                                  ;
+   360                                  ;       Compute directory entries per sector.
+   361                                  ;
+   362 00000072 91                                              xchg    ax,cx                                           ;DX:AX = 0:00e0, CX = 0000e
+   363 00000073 F7F1                                            div     cx                                              ;AX = 0010 = entries per dir sector
+   364 00000075 A3[F201]                                        mov     [wwSectorEntries],ax                            ;[wwSectorEntries] = 0010
+   365                                  ;
+   366                                  ;       Compute first logical directory sector and update overhead count.
+   367                                  ;
+   368 00000078 A1[1600]                                        mov     ax,[cwFatSectors]                               ;AX = 0009 = FAT sectors per copy
+   369 0000007B F626[1000]                                      mul     byte [cbFatCount]                               ;AX = 0012 = FAT sectors
+   370 0000007F 0306[0E00]                                      add     ax,[cwReservedSectors]                          ;AX = 0013 = FAT plus reserved
+   371 00000083 0306[1C00]                                      add     ax,[cwSpecialSectors]                           ;AX = 0013 = FAT + reserved + special
+   372 00000087 A3[F401]                                        mov     [wwLogicalSector],ax                            ;[wwLogicalSector] = 0013
+   373 0000008A 0106[F001]                                      add     [wwOverhead],ax                                 ;[wwOverhead] = 0021 = res+spec+FAT+dir
+   374                                  ;
+   375                                  ;       Read directory sector.
+   376                                  ;
+   377 0000008E B001                    .30                     mov     al,1                                            ;sector count
+   378 00000090 A2[F601]                                        mov     [wbReadCount],al                                ;[wbReadCount] = 01
+   379 00000093 8B1E[EC01]                                      mov     bx,[wwDirBuffer]                                ;BX = 1500
+   380 00000097 E8A700                                          call    ReadSector                                      ;read sector into es:bx
+   381                                  ;
+   382                                  ;       Setup variables to search this directory sector.
+   383                                  ;
+   384 0000009A A1[EE01]                                        mov     ax,[wwEntriesLeft]                              ;directory entries to search
+   385 0000009D 3B06[F201]                                      cmp     ax,[wwSectorEntries]                            ;need to search more sectors?
+   386 000000A1 7603                                            jna     .40                                             ;no, continue
+   387 000000A3 A1[F201]                                        mov     ax,[wwSectorEntries]                            ;yes, limit search to sector
+   388 000000A6 2906[EE01]              .40                     sub     [wwEntriesLeft],ax                              ;update entries left to searh
+   389 000000AA BE[BA01]                                        mov     si,cbKernelProgram                              ;program name
+   390 000000AD 8B3E[EC01]                                      mov     di,[wwDirBuffer]                                ;DI = 1500
+   391                                  ;
+   392                                  ;       Loop through directory sectors searching for kernel program.
+   393                                  ;
+   394 000000B1 56                      .50                     push    si                                              ;save kernel name address
+   395 000000B2 57                                              push    di                                              ;save dir i/o buffer address
+   396 000000B3 B90B00                                          mov     cx,11                                           ;length of 8+3 name
+   397 000000B6 FC                                              cld                                                     ;forward strings
+   398 000000B7 F3A6                                            repe    cmpsb                                           ;compare entry name
+   399 000000B9 5F                                              pop     di                                              ;restore dir i/o buffer address
+   400 000000BA 5E                                              pop     si                                              ;restore kernel name address
+   401 000000BB 7418                                            je      .60                                             ;exit loop if found
+   402 000000BD 033E[B801]                                      add     di,[cwEntryLen]                                 ;point to next dir entry
+   403 000000C1 48                                              dec     ax                                              ;decrement remaining entries
+   404 000000C2 75ED                                            jnz     .50                                             ;next entry
+   405                                  ;
+   406                                  ;       Repeat search if we are not at the end of the directory.
+   407                                  ;
+   408 000000C4 FF06[F401]                                      inc     word [wwLogicalSector]                          ;increment logical sector
+   409 000000C8 833E[EE01]00                                    cmp     word [wwEntriesLeft],0                          ;done with directory?
+   410 000000CD 75BF                                            jne     .30                                             ;no, get next sector
+   411 000000CF BE[E001]                                        mov     si,czNoKernel                                   ;missing kernel message
+   412 000000D2 E9C000                                          jmp     BootExit                                        ;display message and exit
+   413                                  ;
+   414                                  ;       If we find the kernel program in the directory, read the FAT.
+   415                                  ;
+   416 000000D5 A1[0E00]                .60                     mov     ax,[cwReservedSectors]                          ;AX = 0001
+   417 000000D8 A3[F401]                                        mov     [wwLogicalSector],ax                            ;start past boot sector
+   418 000000DB A1[1600]                                        mov     ax,[cwFatSectors]                               ;AX = 0009
+   419 000000DE A2[F601]                                        mov     [wbReadCount],al                                ;[wbReadCount] = 09
+   420 000000E1 BB0003                                          mov     bx,EBOOTFATBASE                                 ;BX = 0300
+   421 000000E4 E85A00                                          call    ReadSector                                      ;read FAT into buffer
+   422                                  ;
+   423                                  ;       Get the starting cluster of the kernel program and target address.
+   424                                  ;
+   425 000000E7 8B451A                                          mov     ax,[di+26]                                      ;AX = starting cluster of file
+   426 000000EA C41E[3D01]                                      les     bx,[wwLoadOffset]                               ;ES:BX = kernel load add (08f0:0100)
+   427                                  ;
+   428                                  ;       Read each program cluster into RAM.
+   429                                  ;
+   430 000000EE 50                      .70                     push    ax                                              ;save cluster nbr
+   431 000000EF 83E802                                          sub     ax,2                                            ;AX = cluster nbr base 0
+   432 000000F2 8A0E[0D00]                                      mov     cl,[cbClusterSectors]                           ;CL = sectors per cluster
+   433 000000F6 880E[F601]                                      mov     [wbReadCount],cl                                ;save sectors to read
+   434 000000FA 30ED                                            xor     ch,ch                                           ;CX = sectors per cluster
+   435 000000FC F7E1                                            mul     cx                                              ;DX:AX = logical cluster sector
+   436 000000FE 0306[F001]                                      add     ax,[wwOverhead]                                 ;AX = kernel sector nbr
+   437 00000102 A3[F401]                                        mov     [wwLogicalSector],ax                            ;save logical sector nbr
+   438 00000105 E83900                                          call    ReadSector                                      ;read sectors into ES:BX
+   439                                  ;
+   440                                  ;       Update buffer pointer for next cluster.
+   441                                  ;
+   442 00000108 A0[0D00]                                        mov     al,[cbClusterSectors]                           ;AL = sectors per cluster
+   443 0000010B 30E4                                            xor     ah,ah                                           ;AX = sectors per cluster
+   444 0000010D F726[0B00]                                      mul     word [cwSectorBytes]                            ;DX:AX = cluster bytes
+   445 00000111 01C3                                            add     bx,ax                                           ;BX = next cluster target address
+   446 00000113 58                                              pop     ax                                              ;AX = restore cluster nbr
+   447                                  ;
+   448                                  ;       Compute next cluster number.
+   449                                  ;
+   450 00000114 89C1                                            mov     cx,ax                                           ;CX = cluster nbr
+   451 00000116 89C7                                            mov     di,ax                                           ;DI = cluster nbr
+   452 00000118 D1E8                                            shr     ax,1                                            ;AX = cluster/2
+   453 0000011A 89C2                                            mov     dx,ax                                           ;DX = cluster/2
+   454 0000011C 01D0                                            add     ax,dx                                           ;AX = 2*(cluster/2)
+   455 0000011E 01D0                                            add     ax,dx                                           ;AX = 3*(cluster/2)
+   456 00000120 83E701                                          and     di,1                                            ;get low bit
+   457 00000123 01C7                                            add     di,ax                                           ;add one if cluster is odd
+   458 00000125 81C70003                                        add     di,EBOOTFATBASE                                 ;add FAT buffer address
+   459 00000129 8B05                                            mov     ax,[di]                                         ;get cluster bytes
+   460                                  ;
+   461                                  ;       Adjust cluster nbr by 4 bits if cluster is odd; test for end of chain.
+   462                                  ;
+   463 0000012B F6C101                                          test    cl,1                                            ;is cluster odd?
+   464 0000012E 7404                                            jz      .80                                             ;no, skip ahead
+   465 00000130 B104                                            mov     cl,4                                            ;shift count
+   466 00000132 D3E8                                            shr     ax,cl                                           ;shift nybble low
+   467 00000134 25FF0F                  .80                     and     ax,0FFFh                                        ;mask for 24 bits; next cluster nbr
+   468 00000137 3DFF0F                                          cmp     ax,0FFFh                                        ;end of chain?
+   469 0000013A 75B2                                            jne     .70                                             ;no, continue
+   470                                  ;
+   471                                  ;       Transfer control to the operating system program.
+   472                                  ;
+   473 0000013C EA                                              db      0EAh                                            ;jmp seg:offset
+   474 0000013D 0001                    wwLoadOffset            dw      0100h                                           ;kernel entry offset
+   475 0000013F F008                    wwLoadSegment           dw      08F0h                                           ;kernel entry segment (computed)
+   476                                  ;
+   477                                  ;       Read [wbReadCount] disk sectors from [wwLogicalSector] into ES:BX.
+   478                                  ;
+   479 00000141 A1[1800]                ReadSector              mov     ax,[cwTrackSectors]                             ;AX = sectors per track
+   480 00000144 F726[1A00]                                      mul     word [cwDiskSides]                              ;DX:AX = sectors per cylinder
+   481 00000148 89C1                                            mov     cx,ax                                           ;CX = sectors per cylinder
+   482 0000014A A1[F401]                                        mov     ax,[wwLogicalSector]                            ;DX:AX = logical sector
+   483 0000014D F7F1                                            div     cx                                              ;AX = cylinder; DX = cyl sector
+   484 0000014F A2[FB01]                                        mov     [wbTrack],al                                    ;[wbTrack] = cylinder
+   485 00000152 89D0                                            mov     ax,dx                                           ;AX = cyl sector
+   486 00000154 F636[1800]                                      div     byte [cbTrackSectors]                           ;AH = sector, AL = head
+   487 00000158 FEC4                                            inc     ah                                              ;AH = sector (1,2,3,...)
+   488 0000015A A3[F901]                                        mov     [wbHead],ax                                     ;[wbHead]= head, [wwSectorTrack]= sector
+   489                                  ;
+   490                                  ;       Try maxtries times to read sector.
+   491                                  ;
+   492 0000015D B90500                                          mov     cx,EBOOTMAXTRIES                                ;CX = 0005
+   493 00000160 53                      .10                     push    bx                                              ;save buffer address
+   494 00000161 51                                              push    cx                                              ;save retry count
+   495 00000162 8B16[F801]                                      mov     dx,[wwDriveHead]                                ;DH = head, DL = drive
+   496 00000166 8B0E[FA01]                                      mov     cx,[wwSectorTrack]                              ;CH = track, CL = sector
+   497 0000016A A1[F601]                                        mov     ax,[wwReadCountCommand]                         ;AH = fn., AL = sector count
+   498 0000016D CD13                                            int     EBIOSINTDISKETTE                                ;read sector
+   499 0000016F 59                                              pop     cx                                              ;restore retry count
+   500 00000170 5B                                              pop     bx                                              ;restore buffer address
+   501 00000171 7343                                            jnc     BootReturn                                      ;skip ahead if done
+   502 00000173 E2EB                                            loop    .10                                             ;retry
+   503                                  ;
+   504                                  ;       Handle disk error: convert to ASCII and store in error string.
+   505                                  ;
+   506 00000175 88E0                                            mov     al,ah                                           ;AL = bios error code
+   507 00000177 30E4                                            xor     ah,ah                                           ;AX = bios error code
+   508 00000179 B210                                            mov     dl,16                                           ;divisor for base 16
+   509 0000017B F6F2                                            div     dl                                              ;AL = hi order, AH = lo order
+   510 0000017D 0D3030                                          or      ax,03030h                                       ;apply ASCII zone bits
+   511 00000180 80FC3A                                          cmp     ah,03Ah                                         ;range test ASCII numeral
+   512 00000183 7203                                            jb      .20                                             ;continue if numeral
+   513 00000185 80C407                                          add     ah,7                                            ;adjust for ASCII 'A'-'F'
+   514 00000188 3C3A                    .20                     cmp     al,03Ah                                         ;range test ASCII numeral
+   515 0000018A 7203                                            jb      .30                                             ;continue if numeral
+   516 0000018C 80C407                                          add     ah,7                                            ;adjust for ASCII 'A'-'F'
+   517 0000018F A3[DD01]                .30                     mov     [wzErrorCode],ax                                ;store ASCII error code
+   518 00000192 BE[D201]                                        mov     si,czErrorMsg                                   ;error message address
+   519 00000195 E81200                  BootExit                call    BootPrint                                       ;display messge to console
+   520                                  ;
+   521                                  ;       Wait for a key press.
+   522                                  ;
+   523 00000198 B401                    .10                     mov     ah,EBIOSFNKEYSTATUS                             ;BIOS keyboard status function
+   524 0000019A CD16                                            int     EBIOSINTKEYBOARD                                ;get keyboard status
+   525 0000019C 7504                                            jnz     .20                                             ;continue if key pressed
+   526 0000019E FB                                              sti                                                     ;enable maskable interrupts
+   527 0000019F F4                                              hlt                                                     ;wait for interrupt
+   528 000001A0 EBF6                                            jmp     .10                                             ;repeat
+   529                                  ;
+   530                                  ;       Reset the system.
+   531                                  ;
+   532 000001A2 B0FE                    .20                     mov     al,EKEYBCMDRESET                                ;8042 pulse output port pin
+   533 000001A4 E664                                            out     EKEYBPORTSTAT,al                                ;drive B0 low to restart
+   534 000001A6 FB                      .30                     sti                                                     ;enable maskable interrupts
+   535 000001A7 F4                                              hlt                                                     ;stop until reset, int, nmi
+   536 000001A8 EBFC                                            jmp     .30                                             ;loop until restart kicks in
+   537                                  ;
+   538                                  ;       Display text message.
+   539                                  ;
+   540 000001AA FC                      BootPrint               cld                                                     ;forward strings
+   541 000001AB AC                      .10                     lodsb                                                   ;load next byte at DS:SI in AL
+   542 000001AC 84C0                                            test    al,al                                           ;end of string?
+   543 000001AE 7406                                            jz      BootReturn                                      ;... yes, exit our loop
+   544 000001B0 B40E                                            mov     ah,EBIOSFNTTYOUTPUT                             ;BIOS teletype function
+   545 000001B2 CD10                                            int     EBIOSINTVIDEO                                   ;call BIOS display interrupt
+   546 000001B4 EBF5                                            jmp     .10                                             ;repeat until done
+   547 000001B6 C3                      BootReturn              ret                                                     ;return
+   548                                  ;-----------------------------------------------------------------------------------------------------------------------
+   549                                  ;
+   550                                  ;       Constants
+   551                                  ;
+   552                                  ;-----------------------------------------------------------------------------------------------------------------------
+   553 000001B7 90                                              align   2
+   554 000001B8 2000                    cwEntryLen              dw      32                                              ;length of directory entry
+   555 000001BA 4F5320202020202043-     cbKernelProgram         db      "OS      COM"                                   ;kernel program name
+   555 000001C3 4F4D               
+   556 000001C5 4C6F6164696E67204F-     czLoadMsg               db      "Loading OS",13,10,0                            ;loading message
+   556 000001CE 530D0A00           
+   557 000001D2 4469736B206572726F-     czErrorMsg              db      "Disk error "                                   ;error message
+   557 000001DB 7220               
+   558 000001DD 202000                  wzErrorCode             db      020h,020h,0                                     ;error code and null terminator
+   559 000001E0 4F53206D697373696E-     czNoKernel              db      "OS missing",0                                  ;missing kernel message
+   559 000001E9 6700               
+   560                                  ;-----------------------------------------------------------------------------------------------------------------------
+   561                                  ;
+   562                                  ;       Work Areas
+   563                                  ;
+   564                                  ;-----------------------------------------------------------------------------------------------------------------------
+   565 000001EB 90                                              align   2
+   566 000001EC 0000                    wwDirBuffer             dw      0                                               ;directory i/o buffer address
+   567 000001EE 0000                    wwEntriesLeft           dw      0                                               ;directory entries to search
+   568 000001F0 0000                    wwOverhead              dw      0                                               ;overhead sectors
+   569 000001F2 0000                    wwSectorEntries         dw      0                                               ;directory entries per sector
+   570 000001F4 0000                    wwLogicalSector         dw      0                                               ;current logical sector
+   571                                  wwReadCountCommand      equ     $                                               ;read count and command
+   572 000001F6 00                      wbReadCount             db      0                                               ;sectors to read
+   573 000001F7 02                      cbReadCommand           db      EBIOSFNREADSECTOR                               ;BIOS read disk fn code
+   574                                  wwDriveHead             equ     $                                               ;drive, head (word)
+   575 000001F8 00                      wbDrive                 db      0                                               ;drive
+   576 000001F9 00                      wbHead                  db      0                                               ;head
+   577                                  wwSectorTrack           equ     $                                               ;sector, track (word)
+   578 000001FA 00                                              db      0                                               ;sector
+   579 000001FB 00                      wbTrack                 db      0                                               ;track
+   580 000001FC 00<rept>                                        times   510-($-$$) db 0h                                ;zero fill to end of sector
+   581 000001FE 55AA                                            db      055h,0AAh                                       ;end of sector signature
+   582                                  %endif
+   583                                  %ifdef BUILDPREP
+   584                                  ;=======================================================================================================================
+   585                                  ;
+   586                                  ;       Diskette Preparation Code
+   587                                  ;
+   588                                  ;       This routine writes the OS boot sector code to a formatted floppy diskette. The diskette parameter table,
+   589                                  ;       which is located in the first 30 bytes of the boot sector is first read from the diskette and overlayed onto
+   590                                  ;       the OS bootstrap code so that the diskette format parameters are preserved.
+   591                                  ;
+   592                                  ;=======================================================================================================================
+   593                                  ;
+   594                                  ;       Query the user to insert a flopppy diskette and press enter or cancel.
+   595                                  ;
+   596 00000200 BE[CC02]                Prep                    mov     si,czPrepMsg10                                  ;starting message address
+   597 00000203 E8A4FF                                          call    BootPrint                                       ;display message
+   598                                  ;
+   599                                  ;       Exit if the Escape key is pressed or loop until Enter is pressed.
+   600                                  ;
+   601 00000206 B401                    .10                     mov     ah,EBIOSFNKEYSTATUS                             ;BIOS keyboard status function
+   602 00000208 CD16                                            int     EBIOSINTKEYBOARD                                ;get keyboard status
+   603 0000020A 7504                                            jnz     .20                                             ;continue if key pressed
+   604 0000020C FB                                              sti                                                     ;enable interrupts
+   605 0000020D F4                                              hlt                                                     ;wait for interrupt
+   606 0000020E EBF6                                            jmp     .10                                             ;repeat
+   607 00000210 3C0D                    .20                     cmp     al,EASCIIRETURN                                 ;Enter key pressed?
+   608 00000212 7407                                            je      .30                                             ;yes, branch
+   609 00000214 3C1B                                            cmp     al,EASCIIESCAPE                                 ;Escape key pressed?
+   610 00000216 75EE                                            jne     .10                                             ;no, repeat
+   611 00000218 E9AB00                                          jmp     .120                                            ;yes, exit program
+   612                                  ;
+   613                                  ;       Display writing-sector message and patch the JMP instruction.
+   614                                  ;
+   615 0000021B BE[7004]                .30                     mov     si,czPrepMsg12                                  ;writing-sector message address
+   616 0000021E E889FF                                          call    BootPrint                                       ;display message
+   617 00000221 BB[0100]                                        mov     bx,Boot+1                                       ;address of JMP instruction operand
+   618 00000224 B81B00                                          mov     ax,01Bh                                         ;address past disk parameter table
+   619 00000227 8907                                            mov     [bx],ax                                         ;update the JMP instruction
+   620                                  ;
+   621                                  ;       Try to read the boot sector.
+   622                                  ;
+   623 00000229 B90500                                          mov     cx,EBOOTMAXTRIES                                ;try up to five times
+   624 0000022C 51                      .40                     push    cx                                              ;save remaining tries
+   625 0000022D BB[780A]                                        mov     bx,wcPrepInBuf                                  ;input buffer address
+   626 00000230 BA0000                                          mov     dx,0                                            ;head zero, drive zero
+   627 00000233 B90100                                          mov     cx,1                                            ;track zero, sector one
+   628 00000236 B001                                            mov     al,1                                            ;one sector
+   629 00000238 B402                                            mov     ah,EBIOSFNREADSECTOR                            ;read function
+   630 0000023A CD13                                            int     EBIOSINTDISKETTE                                ;attempt the read
+   631 0000023C 59                                              pop     cx                                              ;restore remaining retries
+   632 0000023D 7307                                            jnc     .50                                             ;skip ahead if successful
+   633 0000023F E2EB                                            loop    .40                                             ;try again
+   634 00000241 BE[A004]                                        mov     si,czPrepMsg20                                  ;read-error message address
+   635 00000244 EB2D                                            jmp     .70                                             ;branch to error routine
    636                                  ;
-   637 00000245 BE[760A]                .50                     mov     si,wcPrepInBuf                                  ;input buffer address
-   638 00000248 83C60B                                          add     si,11                                           ;skip over JMP and system ID
-   639 0000024B BF[0000]                                        mov     di,Boot                                         ;output buffer address
-   640 0000024E 83C70B                                          add     di,11                                           ;skip over JMP and system ID
-   641 00000251 B91300                                          mov     cx,19                                           ;length of diskette parameters
-   642 00000254 FC                                              cld                                                     ;forward string copies
-   643 00000255 F3A4                                            rep     movsb                                           ;copy diskette parameters
-   644                                  ;
-   645                                  ;       Try to write boot sector to diskette.
+   637                                  ;       Copy diskette parms from input buffer to output buffer.
+   638                                  ;
+   639 00000246 BE[780A]                .50                     mov     si,wcPrepInBuf                                  ;input buffer address
+   640 00000249 83C60B                                          add     si,11                                           ;skip over JMP and system ID
+   641 0000024C BF[0000]                                        mov     di,Boot                                         ;output buffer address
+   642 0000024F 83C70B                                          add     di,11                                           ;skip over JMP and system ID
+   643 00000252 B91300                                          mov     cx,19                                           ;length of diskette parameters
+   644 00000255 FC                                              cld                                                     ;forward string copies
+   645 00000256 F3A4                                            rep     movsb                                           ;copy diskette parameters
    646                                  ;
-   647 00000257 B90500                                          mov     cx,EBOOTMAXTRIES                                ;try up to five times
-   648 0000025A 51                      .60                     push    cx                                              ;save remaining tries
-   649 0000025B BB[0000]                                        mov     bx,Boot                                         ;output buffer address
-   650 0000025E BA0000                                          mov     dx,0                                            ;head zero, drive zero
-   651 00000261 B90100                                          mov     cx,1                                            ;track zero, sector one
-   652 00000264 B80103                                          mov     ax,0301h                                        ;write one sector
-   653 00000267 CD13                                            int     EBIOSINTDISKETTE                                ;attempt the write
-   654 00000269 59                                              pop     cx                                              ;restore remaining retries
-   655 0000026A 7326                                            jnc     .100                                            ;skip ahead if successful
-   656 0000026C E2EC                                            loop    .60                                             ;try again
-   657 0000026E BE[EC04]                                        mov     si,czPrepMsg30                                  ;write-error message address
-   658                                  ;
-   659                                  ;       Convert the error code to ASCII and display the error message.
-   660                                  ;
-   661 00000271 50                      .70                     push    ax                                              ;save error code
-   662 00000272 88E0                                            mov     al,ah                                           ;copy error code
-   663 00000274 B400                                            mov     ah,0                                            ;AX = error code
-   664 00000276 B210                                            mov     dl,10h                                          ;hexadecimal divisor
-   665 00000278 F6FA                                            idiv    dl                                              ;AL = hi-order, AH = lo-order
-   666 0000027A 0D3030                                          or      ax,03030h                                       ;add ASCII zone digits
-   667 0000027D 80FC3A                                          cmp     ah,03Ah                                         ;AH ASCII numeral?
-   668 00000280 7203                                            jb      .80                                             ;yes, continue
-   669 00000282 80C407                                          add     ah,7                                            ;no, make ASCII 'A'-'F'
-   670 00000285 3C3A                    .80                     cmp     al,03Ah                                         ;ASCII numeral?
-   671 00000287 7202                                            jb      .90                                             ;yes, continue
-   672 00000289 0407                                            add     al,7                                            ;no, make ASCII
-   673 0000028B 894411                  .90                     mov     [si+17],ax                                      ;put ASCII error code in message
-   674 0000028E E819FF                                          call    BootPrint                                       ;write error message
-   675 00000291 58                                              pop     ax                                              ;restore error code
-   676                                  ;
-   677                                  ;       Display the completion message.
-   678                                  ;
-   679 00000292 BE[3805]                .100                    mov     si,czPrepMsgOK                                  ;assume successful completion
-   680 00000295 88E0                                            mov     al,ah                                           ;BIOS return code
-   681 00000297 3C00                                            cmp     al,0                                            ;success?
-   682 00000299 7426                                            je      .110                                            ;yes, continue
-   683 0000029B BE[D705]                                        mov     si,czPrepMsgErr1                                ;disk parameter error message
-   684 0000029E 3C01                                            cmp     al,1                                            ;disk parameter error?
-   685 000002A0 741F                                            je      .110                                            ;yes, continue
-   686 000002A2 BE[A106]                                        mov     si,czPrepMsgErr2                                ;address mark not found message
-   687 000002A5 3C02                                            cmp     al,2                                            ;address mark not found?
-   688 000002A7 7418                                            je      .110                                            ;yes, continue
-   689 000002A9 BE[2A07]                                        mov     si,czPrepMsgErr3                                ;protected disk message
-   690 000002AC 3C03                                            cmp     al,3                                            ;protected disk?
-   691 000002AE 7411                                            je      .110                                            ;yes, continue
-   692 000002B0 BE[E407]                                        mov     si,czPrepMsgErr6                                ;diskette removed message
-   693 000002B3 3C06                                            cmp     al,6                                            ;diskette removed?
-   694 000002B5 740A                                            je      .110                                            ;yes, continue
-   695 000002B7 BE[1409]                                        mov     si,czPrepMsgErr80                               ;drive timed out message
-   696 000002BA 3C80                                            cmp     al,80H                                          ;drive timed out?
-   697 000002BC 7403                                            je      .110                                            ;yes, continue
-   698 000002BE BE[C509]                                        mov     si,czPrepMsgErrXX                               ;unknown error message
-   699 000002C1 E8E6FE                  .110                    call    BootPrint                                       ;display result message
-   700 000002C4 B8004C                  .120                    mov     ax,04C00H                                       ;terminate with zero result code
-   701 000002C7 CD21                                            int     021h                                            ;terminate DOS program
-   702 000002C9 C3                                              ret                                                     ;return (should not execute)
-   703                                  ;-----------------------------------------------------------------------------------------------------------------------
-   704                                  ;
-   705                                  ;       Diskette Preparation Messages
-   706                                  ;
-   707                                  ;-----------------------------------------------------------------------------------------------------------------------
-   708 000002CA 0D0A437573746F6D4F-     czPrepMsg10             db      13,10,"CustomOS Boot-Diskette Preparation Program"
-   708 000002D3 5320426F6F742D4469-
-   708 000002DC 736B65747465205072-
-   708 000002E5 657061726174696F6E-
-   708 000002EE 2050726F6772616D   
-   709 000002F6 0D0A436F7079726967-                             db      13,10,"Copyright (C) 2010-2017 David J. Walling. All rights reserved."
-   709 000002FF 687420284329203230-
-   709 00000308 31302D323031372044-
-   709 00000311 61766964204A2E2057-
-   709 0000031A 616C6C696E672E2041-
-   709 00000323 6C6C20726967687473-
-   709 0000032C 207265736572766564-
-   709 00000335 2E                 
-   710 00000336 0D0A                                            db      13,10
-   711 00000338 0D0A54686973207072-                             db      13,10,"This program overwrites the boot sector of a diskette with startup code that"
-   711 00000341 6F6772616D206F7665-
-   711 0000034A 727772697465732074-
-   711 00000353 686520626F6F742073-
-   711 0000035C 6563746F72206F6620-
-   711 00000365 61206469736B657474-
-   711 0000036E 652077697468207374-
-   711 00000377 617274757020636F64-
-   711 00000380 652074686174       
-   712 00000386 0D0A77696C6C206C6F-                             db      13,10,"will load the operating system into memory when the computer is restarted."
-   712 0000038F 616420746865206F70-
-   712 00000398 65726174696E672073-
-   712 000003A1 797374656D20696E74-
-   712 000003AA 6F206D656D6F727920-
-   712 000003B3 7768656E2074686520-
-   712 000003BC 636F6D707574657220-
-   712 000003C5 697320726573746172-
-   712 000003CE 7465642E           
-   713 000003D2 0D0A546F2070726F63-                             db      13,10,"To proceed, place a formatted diskette into drive A: and press the Enter key."
-   713 000003DB 6565642C20706C6163-
-   713 000003E4 65206120666F726D61-
-   713 000003ED 74746564206469736B-
-   713 000003F6 6574746520696E746F-
-   713 000003FF 20647269766520413A-
-   713 00000408 20616E642070726573-
-   713 00000411 732074686520456E74-
-   713 0000041A 6572206B65792E     
-   714 00000421 0D0A546F2065786974-                             db      13,10,"To exit this program without preparing a diskette, press the Escape key."
-   714 0000042A 20746869732070726F-
-   714 00000433 6772616D2077697468-
-   714 0000043C 6F7574207072657061-
-   714 00000445 72696E672061206469-
-   714 0000044E 736B657474652C2070-
-   714 00000457 726573732074686520-
-   714 00000460 457363617065206B65-
-   714 00000469 792E               
-   715 0000046B 0D0A00                                          db      13,10,0
-   716 0000046E 0D0A57726974696E67-     czPrepMsg12             db      13,10,"Writing the boot sector to the diskette ..."
-   716 00000477 2074686520626F6F74-
-   716 00000480 20736563746F722074-
-   716 00000489 6F2074686520646973-
-   716 00000492 6B65747465202E2E2E 
-   717 0000049B 0D0A00                                          db      13,10,0
-   718 0000049E 0D0A54686520657272-     czPrepMsg20             db      13,10,"The error-code .. was returned from the BIOS while reading from the disk."
-   718 000004A7 6F722D636F6465202E-
-   718 000004B0 2E2077617320726574-
-   718 000004B9 75726E65642066726F-
-   718 000004C2 6D207468652042494F-
-   718 000004CB 53207768696C652072-
-   718 000004D4 656164696E67206672-
-   718 000004DD 6F6D20746865206469-
-   718 000004E6 736B2E             
-   719 000004E9 0D0A00                                          db      13,10,0
-   720 000004EC 0D0A54686520657272-     czPrepMsg30             db      13,10,"The error-code .. was returned from the BIOS while writing to the disk."
-   720 000004F5 6F722D636F6465202E-
-   720 000004FE 2E2077617320726574-
-   720 00000507 75726E65642066726F-
-   720 00000510 6D207468652042494F-
-   720 00000519 53207768696C652077-
-   720 00000522 726974696E6720746F-
-   720 0000052B 20746865206469736B-
-   720 00000534 2E                 
-   721 00000535 0D0A00                                          db      13,10,0
-   722 00000538 0D0A54686520626F6F-     czPrepMsgOK             db      13,10,"The boot-sector was written to the diskette. Before booting your computer with"
-   722 00000541 742D736563746F7220-
-   722 0000054A 776173207772697474-
-   722 00000553 656E20746F20746865-
-   722 0000055C 206469736B65747465-
-   722 00000565 2E204265666F726520-
-   722 0000056E 626F6F74696E672079-
-   722 00000577 6F757220636F6D7075-
-   722 00000580 7465722077697468   
-   723 00000588 0D0A74686973206469-                             db      13,10,"this diskette, make sure that the file OS.COM is copied onto the diskette."
-   723 00000591 736B657474652C206D-
-   723 0000059A 616B65207375726520-
-   723 000005A3 746861742074686520-
-   723 000005AC 66696C65204F532E43-
-   723 000005B5 4F4D20697320636F70-
-   723 000005BE 696564206F6E746F20-
-   723 000005C7 746865206469736B65-
-   723 000005D0 7474652E           
-   724 000005D4 0D0A00                                          db      13,10,0
-   725 000005D7 0D0A2830312920496E-     czPrepMsgErr1           db      13,10,"(01) Invalid Disk Parameter"
-   725 000005E0 76616C696420446973-
-   725 000005E9 6B20506172616D6574-
-   725 000005F2 6572               
-   726 000005F4 0D0A54686973206973-                             db      13,10,"This is an internal error caused by an invalid value being passed to a system"
-   726 000005FD 20616E20696E746572-
-   726 00000606 6E616C206572726F72-
-   726 0000060F 206361757365642062-
-   726 00000618 7920616E20696E7661-
-   726 00000621 6C69642076616C7565-
-   726 0000062A 206265696E67207061-
-   726 00000633 7373656420746F2061-
-   726 0000063C 2073797374656D     
-   727 00000643 0D0A66756E6374696F-                             db      13,10,"function. The OSBOOT.COM file may be corrupt. Copy or download the file again"
-   727 0000064C 6E2E20546865204F53-
-   727 00000655 424F4F542E434F4D20-
-   727 0000065E 66696C65206D617920-
-   727 00000667 626520636F72727570-
-   727 00000670 742E20436F7079206F-
-   727 00000679 7220646F776E6C6F61-
-   727 00000682 64207468652066696C-
-   727 0000068B 6520616761696E     
-   728 00000692 0D0A616E6420726574-                             db      13,10,"and retry."
-   728 0000069B 72792E             
-   729 0000069E 0D0A00                                          db      13,10,0
-   730 000006A1 0D0A28303229204164-     czPrepMsgErr2           db      13,10,"(02) Address Mark Not Found"
-   730 000006AA 6472657373204D6172-
-   730 000006B3 6B204E6F7420466F75-
-   730 000006BC 6E64               
-   731 000006BE 0D0A54686973206572-                             db      13,10,"This error indicates a physical problem with the floppy diskette. Please retry"
-   731 000006C7 726F7220696E646963-
-   731 000006D0 617465732061207068-
-   731 000006D9 79736963616C207072-
-   731 000006E2 6F626C656D20776974-
-   731 000006EB 682074686520666C6F-
-   731 000006F4 707079206469736B65-
-   731 000006FD 7474652E20506C6561-
-   731 00000706 7365207265747279   
-   732 0000070E 0D0A7573696E672061-                             db      13,10,"using another diskette."
-   732 00000717 6E6F74686572206469-
-   732 00000720 736B657474652E     
-   733 00000727 0D0A00                                          db      13,10,0
-   734 0000072A 0D0A28303329205072-     czPrepMsgErr3           db      13,10,"(03) Protected Disk"
-   734 00000733 6F7465637465642044-
-   734 0000073C 69736B             
-   735 0000073F 0D0A54686973206572-                             db      13,10,"This error is usually caused by attempting to write to a write-protected disk."
-   735 00000748 726F72206973207573-
-   735 00000751 75616C6C7920636175-
-   735 0000075A 736564206279206174-
-   735 00000763 74656D7074696E6720-
-   735 0000076C 746F20777269746520-
-   735 00000775 746F20612077726974-
-   735 0000077E 652D70726F74656374-
-   735 00000787 6564206469736B2E   
-   736 0000078F 0D0A436865636B2074-                             db      13,10,"Check the 'write-protect' setting on the disk or retry using using another disk."
-   736 00000798 686520277772697465-
-   736 000007A1 2D70726F7465637427-
-   736 000007AA 2073657474696E6720-
-   736 000007B3 6F6E20746865206469-
-   736 000007BC 736B206F7220726574-
-   736 000007C5 7279207573696E6720-
-   736 000007CE 7573696E6720616E6F-
-   736 000007D7 74686572206469736B-
-   736 000007E0 2E                 
-   737 000007E1 0D0A00                                          db      13,10,0
-   738 000007E4 0D0A28303629204469-     czPrepMsgErr6           db      13,10,"(06) Diskette Removed"
-   738 000007ED 736B65747465205265-
-   738 000007F6 6D6F766564         
-   739 000007FB 0D0A54686973206572-                             db      13,10,"This error may indicate that the floppy diskette has been removed from the"
-   739 00000804 726F72206D61792069-
-   739 0000080D 6E6469636174652074-
-   739 00000816 686174207468652066-
-   739 0000081F 6C6F70707920646973-
-   739 00000828 6B6574746520686173-
-   739 00000831 206265656E2072656D-
-   739 0000083A 6F7665642066726F6D-
-   739 00000843 20746865           
-   740 00000847 0D0A6469736B657474-                             db      13,10,"diskette drive. On some systems, this code may also occur if the diskette is"
-   740 00000850 652064726976652E20-
-   740 00000859 4F6E20736F6D652073-
-   740 00000862 797374656D732C2074-
-   740 0000086B 68697320636F646520-
-   740 00000874 6D617920616C736F20-
-   740 0000087D 6F6363757220696620-
-   740 00000886 746865206469736B65-
-   740 0000088F 747465206973       
-   741 00000895 0D0A27777269746520-                             db      13,10,"'write protected.' Please verify that the diskette is not write-protected and"
-   741 0000089E 70726F746563746564-
-   741 000008A7 2E2720506C65617365-
-   741 000008B0 207665726966792074-
-   741 000008B9 686174207468652064-
-   741 000008C2 69736B657474652069-
-   741 000008CB 73206E6F7420777269-
-   741 000008D4 74652D70726F746563-
-   741 000008DD 74656420616E64     
-   742 000008E4 0D0A69732070726F70-                             db      13,10,"is properly inserted in the diskette drive."
-   742 000008ED 65726C7920696E7365-
-   742 000008F6 7274656420696E2074-
-   742 000008FF 6865206469736B6574-
-   742 00000908 74652064726976652E 
-   743 00000911 0D0A00                                          db      13,10,0
-   744 00000914 0D0A28383029204472-     czPrepMsgErr80          db      13,10,"(80) Drive Timed Out"
-   744 0000091D 6976652054696D6564-
-   744 00000926 204F7574           
-   745 0000092A 0D0A54686973206572-                             db      13,10,"This error usually indicates that no diskette is in the diskette drive. Please"
-   745 00000933 726F7220757375616C-
-   745 0000093C 6C7920696E64696361-
-   745 00000945 746573207468617420-
-   745 0000094E 6E6F206469736B6574-
-   745 00000957 746520697320696E20-
-   745 00000960 746865206469736B65-
-   745 00000969 747465206472697665-
-   745 00000972 2E20506C65617365   
-   746 0000097A 0D0A6D616B65207375-                             db      13,10,"make sure that the diskette is properly seated in the drive and retry."
-   746 00000983 726520746861742074-
-   746 0000098C 6865206469736B6574-
-   746 00000995 74652069732070726F-
-   746 0000099E 7065726C7920736561-
-   746 000009A7 74656420696E207468-
-   746 000009B0 652064726976652061-
-   746 000009B9 6E642072657472792E 
-   747 000009C2 0D0A00                                          db      13,10,0
-   748 000009C5 0D0A283F3F2920556E-     czPrepMsgErrXX          db      13,10,"(??) Unknown Error"
-   748 000009CE 6B6E6F776E20457272-
-   748 000009D7 6F72               
-   749 000009D9 0D0A54686520657272-                             db      13,10,"The error-code returned by the BIOS is not a recognized error. Please consult"
-   749 000009E2 6F722D636F64652072-
-   749 000009EB 657475726E65642062-
-   749 000009F4 79207468652042494F-
-   749 000009FD 53206973206E6F7420-
-   749 00000A06 61207265636F676E69-
-   749 00000A0F 7A6564206572726F72-
-   749 00000A18 2E20506C6561736520-
-   749 00000A21 636F6E73756C74     
-   750 00000A28 0D0A796F757220636F-                             db      13,10,"your computer's technical reference for a description of this error code."
-   750 00000A31 6D7075746572277320-
-   750 00000A3A 746563686E6963616C-
-   750 00000A43 207265666572656E63-
-   750 00000A4C 6520666F7220612064-
-   750 00000A55 65736372697074696F-
-   750 00000A5E 6E206F662074686973-
-   750 00000A67 206572726F7220636F-
-   750 00000A70 64652E             
-   751 00000A73 0D0A00                                          db      13,10,0
-   752                                  wcPrepInBuf             equ     $
-   753                                  %endif
-   754                                  %ifdef BUILDDISK
-   755                                  ;=======================================================================================================================
-   756                                  ;
-   757                                  ;       File Allocation Tables
-   758                                  ;
-   759                                  ;       The disk contains two copies of the File Allocation Table (FAT). On our disk, each FAT copy is 1200h bytes in
-   760                                  ;       length. Each FAT entry contains the logical number of the next cluster. The first two entries are reserved. Our
-   761                                  ;       OS.COM file here is 400h bytes in length. These 400h bytes contain familiar code that displays a message to the
-   762                                  ;       screen. Our disk parameter table defines a cluster as containing one sector and each sector having 200h bytes.
-   763                                  ;       Therefore, our FAT table must reserve only two clusters for OS.COM. The clusters used by OS.COM, then, will be
-   764                                  ;       clusters 2 and 3. The entry value for cluster 3 is set to "0fffh" to indicate that it is the last cluster in the
-   765                                  ;       chain.
-   766                                  ;
-   767                                  ;       Every three bytes encode two FAT entries as follows:
-   768                                  ;
-   769                                  ;       db      0abh,0cdh,0efh  ;even cluster: 0dabh, odd cluster: 0efch
-   770                                  ;
-   771                                  ;=======================================================================================================================
-   772                                  ;-----------------------------------------------------------------------------------------------------------------------
+   647                                  ;       Try to write boot sector to diskette.
+   648                                  ;
+   649 00000258 B90500                                          mov     cx,EBOOTMAXTRIES                                ;try up to five times
+   650 0000025B 51                      .60                     push    cx                                              ;save remaining tries
+   651 0000025C BB[0000]                                        mov     bx,Boot                                         ;output buffer address
+   652 0000025F BA0000                                          mov     dx,0                                            ;head zero, drive zero
+   653 00000262 B90100                                          mov     cx,1                                            ;track zero, sector one
+   654 00000265 B001                                            mov     al,1                                            ;one sector
+   655 00000267 B403                                            mov     ah,EBIOSFNWRITESECTOR                           ;write function
+   656 00000269 CD13                                            int     EBIOSINTDISKETTE                                ;attempt the write
+   657 0000026B 59                                              pop     cx                                              ;restore remaining retries
+   658 0000026C 7326                                            jnc     .100                                            ;skip ahead if successful
+   659 0000026E E2EB                                            loop    .60                                             ;try again
+   660 00000270 BE[EE04]                                        mov     si,czPrepMsg30                                  ;write-error message address
+   661                                  ;
+   662                                  ;       Convert the error code to ASCII and display the error message.
+   663                                  ;
+   664 00000273 50                      .70                     push    ax                                              ;save error code
+   665 00000274 88E0                                            mov     al,ah                                           ;copy error code
+   666 00000276 B400                                            mov     ah,0                                            ;AX = error code
+   667 00000278 B210                                            mov     dl,10h                                          ;hexadecimal divisor
+   668 0000027A F6FA                                            idiv    dl                                              ;AL = hi-order, AH = lo-order
+   669 0000027C 0D3030                                          or      ax,03030h                                       ;add ASCII zone digits
+   670 0000027F 80FC3A                                          cmp     ah,03Ah                                         ;AH ASCII numeral?
+   671 00000282 7203                                            jb      .80                                             ;yes, continue
+   672 00000284 80C407                                          add     ah,7                                            ;no, make ASCII 'A'-'F'
+   673 00000287 3C3A                    .80                     cmp     al,03Ah                                         ;ASCII numeral?
+   674 00000289 7202                                            jb      .90                                             ;yes, continue
+   675 0000028B 0407                                            add     al,7                                            ;no, make ASCII
+   676 0000028D 894411                  .90                     mov     [si+17],ax                                      ;put ASCII error code in message
+   677 00000290 E817FF                                          call    BootPrint                                       ;write error message
+   678 00000293 58                                              pop     ax                                              ;restore error code
+   679                                  ;
+   680                                  ;       Display the completion message.
+   681                                  ;
+   682 00000294 BE[3A05]                .100                    mov     si,czPrepMsgOK                                  ;assume successful completion
+   683 00000297 88E0                                            mov     al,ah                                           ;BIOS return code
+   684 00000299 3C00                                            cmp     al,0                                            ;success?
+   685 0000029B 7426                                            je      .110                                            ;yes, continue
+   686 0000029D BE[D905]                                        mov     si,czPrepMsgErr1                                ;disk parameter error message
+   687 000002A0 3C01                                            cmp     al,1                                            ;disk parameter error?
+   688 000002A2 741F                                            je      .110                                            ;yes, continue
+   689 000002A4 BE[A306]                                        mov     si,czPrepMsgErr2                                ;address mark not found message
+   690 000002A7 3C02                                            cmp     al,2                                            ;address mark not found?
+   691 000002A9 7418                                            je      .110                                            ;yes, continue
+   692 000002AB BE[2C07]                                        mov     si,czPrepMsgErr3                                ;protected disk message
+   693 000002AE 3C03                                            cmp     al,3                                            ;protected disk?
+   694 000002B0 7411                                            je      .110                                            ;yes, continue
+   695 000002B2 BE[E607]                                        mov     si,czPrepMsgErr6                                ;diskette removed message
+   696 000002B5 3C06                                            cmp     al,6                                            ;diskette removed?
+   697 000002B7 740A                                            je      .110                                            ;yes, continue
+   698 000002B9 BE[1609]                                        mov     si,czPrepMsgErr80                               ;drive timed out message
+   699 000002BC 3C80                                            cmp     al,80H                                          ;drive timed out?
+   700 000002BE 7403                                            je      .110                                            ;yes, continue
+   701 000002C0 BE[C709]                                        mov     si,czPrepMsgErrXX                               ;unknown error message
+   702 000002C3 E8E4FE                  .110                    call    BootPrint                                       ;display result message
+   703 000002C6 B8004C                  .120                    mov     ax,04C00H                                       ;terminate with zero result code
+   704 000002C9 CD21                                            int     021h                                            ;terminate DOS program
+   705 000002CB C3                                              ret                                                     ;return (should not execute)
+   706                                  ;-----------------------------------------------------------------------------------------------------------------------
+   707                                  ;
+   708                                  ;       Diskette Preparation Messages
+   709                                  ;
+   710                                  ;-----------------------------------------------------------------------------------------------------------------------
+   711 000002CC 0D0A437573746F6D4F-     czPrepMsg10             db      13,10,"CustomOS Boot-Diskette Preparation Program"
+   711 000002D5 5320426F6F742D4469-
+   711 000002DE 736B65747465205072-
+   711 000002E7 657061726174696F6E-
+   711 000002F0 2050726F6772616D   
+   712 000002F8 0D0A436F7079726967-                             db      13,10,"Copyright (C) 2010-2018 David J. Walling. All rights reserved."
+   712 00000301 687420284329203230-
+   712 0000030A 31302D323031382044-
+   712 00000313 61766964204A2E2057-
+   712 0000031C 616C6C696E672E2041-
+   712 00000325 6C6C20726967687473-
+   712 0000032E 207265736572766564-
+   712 00000337 2E                 
+   713 00000338 0D0A                                            db      13,10
+   714 0000033A 0D0A54686973207072-                             db      13,10,"This program overwrites the boot sector of a diskette with startup code that"
+   714 00000343 6F6772616D206F7665-
+   714 0000034C 727772697465732074-
+   714 00000355 686520626F6F742073-
+   714 0000035E 6563746F72206F6620-
+   714 00000367 61206469736B657474-
+   714 00000370 652077697468207374-
+   714 00000379 617274757020636F64-
+   714 00000382 652074686174       
+   715 00000388 0D0A77696C6C206C6F-                             db      13,10,"will load the operating system into memory when the computer is restarted."
+   715 00000391 616420746865206F70-
+   715 0000039A 65726174696E672073-
+   715 000003A3 797374656D20696E74-
+   715 000003AC 6F206D656D6F727920-
+   715 000003B5 7768656E2074686520-
+   715 000003BE 636F6D707574657220-
+   715 000003C7 697320726573746172-
+   715 000003D0 7465642E           
+   716 000003D4 0D0A546F2070726F63-                             db      13,10,"To proceed, place a formatted diskette into drive A: and press the Enter key."
+   716 000003DD 6565642C20706C6163-
+   716 000003E6 65206120666F726D61-
+   716 000003EF 74746564206469736B-
+   716 000003F8 6574746520696E746F-
+   716 00000401 20647269766520413A-
+   716 0000040A 20616E642070726573-
+   716 00000413 732074686520456E74-
+   716 0000041C 6572206B65792E     
+   717 00000423 0D0A546F2065786974-                             db      13,10,"To exit this program without preparing a diskette, press the Escape key."
+   717 0000042C 20746869732070726F-
+   717 00000435 6772616D2077697468-
+   717 0000043E 6F7574207072657061-
+   717 00000447 72696E672061206469-
+   717 00000450 736B657474652C2070-
+   717 00000459 726573732074686520-
+   717 00000462 457363617065206B65-
+   717 0000046B 792E               
+   718 0000046D 0D0A00                                          db      13,10,0
+   719 00000470 0D0A57726974696E67-     czPrepMsg12             db      13,10,"Writing the boot sector to the diskette ..."
+   719 00000479 2074686520626F6F74-
+   719 00000482 20736563746F722074-
+   719 0000048B 6F2074686520646973-
+   719 00000494 6B65747465202E2E2E 
+   720 0000049D 0D0A00                                          db      13,10,0
+   721 000004A0 0D0A54686520657272-     czPrepMsg20             db      13,10,"The error-code .. was returned from the BIOS while reading from the disk."
+   721 000004A9 6F722D636F6465202E-
+   721 000004B2 2E2077617320726574-
+   721 000004BB 75726E65642066726F-
+   721 000004C4 6D207468652042494F-
+   721 000004CD 53207768696C652072-
+   721 000004D6 656164696E67206672-
+   721 000004DF 6F6D20746865206469-
+   721 000004E8 736B2E             
+   722 000004EB 0D0A00                                          db      13,10,0
+   723 000004EE 0D0A54686520657272-     czPrepMsg30             db      13,10,"The error-code .. was returned from the BIOS while writing to the disk."
+   723 000004F7 6F722D636F6465202E-
+   723 00000500 2E2077617320726574-
+   723 00000509 75726E65642066726F-
+   723 00000512 6D207468652042494F-
+   723 0000051B 53207768696C652077-
+   723 00000524 726974696E6720746F-
+   723 0000052D 20746865206469736B-
+   723 00000536 2E                 
+   724 00000537 0D0A00                                          db      13,10,0
+   725 0000053A 0D0A54686520626F6F-     czPrepMsgOK             db      13,10,"The boot-sector was written to the diskette. Before booting your computer with"
+   725 00000543 742D736563746F7220-
+   725 0000054C 776173207772697474-
+   725 00000555 656E20746F20746865-
+   725 0000055E 206469736B65747465-
+   725 00000567 2E204265666F726520-
+   725 00000570 626F6F74696E672079-
+   725 00000579 6F757220636F6D7075-
+   725 00000582 7465722077697468   
+   726 0000058A 0D0A74686973206469-                             db      13,10,"this diskette, make sure that the file OS.COM is copied onto the diskette."
+   726 00000593 736B657474652C206D-
+   726 0000059C 616B65207375726520-
+   726 000005A5 746861742074686520-
+   726 000005AE 66696C65204F532E43-
+   726 000005B7 4F4D20697320636F70-
+   726 000005C0 696564206F6E746F20-
+   726 000005C9 746865206469736B65-
+   726 000005D2 7474652E           
+   727 000005D6 0D0A00                                          db      13,10,0
+   728 000005D9 0D0A2830312920496E-     czPrepMsgErr1           db      13,10,"(01) Invalid Disk Parameter"
+   728 000005E2 76616C696420446973-
+   728 000005EB 6B20506172616D6574-
+   728 000005F4 6572               
+   729 000005F6 0D0A54686973206973-                             db      13,10,"This is an internal error caused by an invalid value being passed to a system"
+   729 000005FF 20616E20696E746572-
+   729 00000608 6E616C206572726F72-
+   729 00000611 206361757365642062-
+   729 0000061A 7920616E20696E7661-
+   729 00000623 6C69642076616C7565-
+   729 0000062C 206265696E67207061-
+   729 00000635 7373656420746F2061-
+   729 0000063E 2073797374656D     
+   730 00000645 0D0A66756E6374696F-                             db      13,10,"function. The OSBOOT.COM file may be corrupt. Copy or download the file again"
+   730 0000064E 6E2E20546865204F53-
+   730 00000657 424F4F542E434F4D20-
+   730 00000660 66696C65206D617920-
+   730 00000669 626520636F72727570-
+   730 00000672 742E20436F7079206F-
+   730 0000067B 7220646F776E6C6F61-
+   730 00000684 64207468652066696C-
+   730 0000068D 6520616761696E     
+   731 00000694 0D0A616E6420726574-                             db      13,10,"and retry."
+   731 0000069D 72792E             
+   732 000006A0 0D0A00                                          db      13,10,0
+   733 000006A3 0D0A28303229204164-     czPrepMsgErr2           db      13,10,"(02) Address Mark Not Found"
+   733 000006AC 6472657373204D6172-
+   733 000006B5 6B204E6F7420466F75-
+   733 000006BE 6E64               
+   734 000006C0 0D0A54686973206572-                             db      13,10,"This error indicates a physical problem with the floppy diskette. Please retry"
+   734 000006C9 726F7220696E646963-
+   734 000006D2 617465732061207068-
+   734 000006DB 79736963616C207072-
+   734 000006E4 6F626C656D20776974-
+   734 000006ED 682074686520666C6F-
+   734 000006F6 707079206469736B65-
+   734 000006FF 7474652E20506C6561-
+   734 00000708 7365207265747279   
+   735 00000710 0D0A7573696E672061-                             db      13,10,"using another diskette."
+   735 00000719 6E6F74686572206469-
+   735 00000722 736B657474652E     
+   736 00000729 0D0A00                                          db      13,10,0
+   737 0000072C 0D0A28303329205072-     czPrepMsgErr3           db      13,10,"(03) Protected Disk"
+   737 00000735 6F7465637465642044-
+   737 0000073E 69736B             
+   738 00000741 0D0A54686973206572-                             db      13,10,"This error is usually caused by attempting to write to a write-protected disk."
+   738 0000074A 726F72206973207573-
+   738 00000753 75616C6C7920636175-
+   738 0000075C 736564206279206174-
+   738 00000765 74656D7074696E6720-
+   738 0000076E 746F20777269746520-
+   738 00000777 746F20612077726974-
+   738 00000780 652D70726F74656374-
+   738 00000789 6564206469736B2E   
+   739 00000791 0D0A436865636B2074-                             db      13,10,"Check the 'write-protect' setting on the disk or retry using using another disk."
+   739 0000079A 686520277772697465-
+   739 000007A3 2D70726F7465637427-
+   739 000007AC 2073657474696E6720-
+   739 000007B5 6F6E20746865206469-
+   739 000007BE 736B206F7220726574-
+   739 000007C7 7279207573696E6720-
+   739 000007D0 7573696E6720616E6F-
+   739 000007D9 74686572206469736B-
+   739 000007E2 2E                 
+   740 000007E3 0D0A00                                          db      13,10,0
+   741 000007E6 0D0A28303629204469-     czPrepMsgErr6           db      13,10,"(06) Diskette Removed"
+   741 000007EF 736B65747465205265-
+   741 000007F8 6D6F766564         
+   742 000007FD 0D0A54686973206572-                             db      13,10,"This error may indicate that the floppy diskette has been removed from the"
+   742 00000806 726F72206D61792069-
+   742 0000080F 6E6469636174652074-
+   742 00000818 686174207468652066-
+   742 00000821 6C6F70707920646973-
+   742 0000082A 6B6574746520686173-
+   742 00000833 206265656E2072656D-
+   742 0000083C 6F7665642066726F6D-
+   742 00000845 20746865           
+   743 00000849 0D0A6469736B657474-                             db      13,10,"diskette drive. On some systems, this code may also occur if the diskette is"
+   743 00000852 652064726976652E20-
+   743 0000085B 4F6E20736F6D652073-
+   743 00000864 797374656D732C2074-
+   743 0000086D 68697320636F646520-
+   743 00000876 6D617920616C736F20-
+   743 0000087F 6F6363757220696620-
+   743 00000888 746865206469736B65-
+   743 00000891 747465206973       
+   744 00000897 0D0A27777269746520-                             db      13,10,"'write protected.' Please verify that the diskette is not write-protected and"
+   744 000008A0 70726F746563746564-
+   744 000008A9 2E2720506C65617365-
+   744 000008B2 207665726966792074-
+   744 000008BB 686174207468652064-
+   744 000008C4 69736B657474652069-
+   744 000008CD 73206E6F7420777269-
+   744 000008D6 74652D70726F746563-
+   744 000008DF 74656420616E64     
+   745 000008E6 0D0A69732070726F70-                             db      13,10,"is properly inserted in the diskette drive."
+   745 000008EF 65726C7920696E7365-
+   745 000008F8 7274656420696E2074-
+   745 00000901 6865206469736B6574-
+   745 0000090A 74652064726976652E 
+   746 00000913 0D0A00                                          db      13,10,0
+   747 00000916 0D0A28383029204472-     czPrepMsgErr80          db      13,10,"(80) Drive Timed Out"
+   747 0000091F 6976652054696D6564-
+   747 00000928 204F7574           
+   748 0000092C 0D0A54686973206572-                             db      13,10,"This error usually indicates that no diskette is in the diskette drive. Please"
+   748 00000935 726F7220757375616C-
+   748 0000093E 6C7920696E64696361-
+   748 00000947 746573207468617420-
+   748 00000950 6E6F206469736B6574-
+   748 00000959 746520697320696E20-
+   748 00000962 746865206469736B65-
+   748 0000096B 747465206472697665-
+   748 00000974 2E20506C65617365   
+   749 0000097C 0D0A6D616B65207375-                             db      13,10,"make sure that the diskette is properly seated in the drive and retry."
+   749 00000985 726520746861742074-
+   749 0000098E 6865206469736B6574-
+   749 00000997 74652069732070726F-
+   749 000009A0 7065726C7920736561-
+   749 000009A9 74656420696E207468-
+   749 000009B2 652064726976652061-
+   749 000009BB 6E642072657472792E 
+   750 000009C4 0D0A00                                          db      13,10,0
+   751 000009C7 0D0A283F3F2920556E-     czPrepMsgErrXX          db      13,10,"(??) Unknown Error"
+   751 000009D0 6B6E6F776E20457272-
+   751 000009D9 6F72               
+   752 000009DB 0D0A54686520657272-                             db      13,10,"The error-code returned by the BIOS is not a recognized error. Please consult"
+   752 000009E4 6F722D636F64652072-
+   752 000009ED 657475726E65642062-
+   752 000009F6 79207468652042494F-
+   752 000009FF 53206973206E6F7420-
+   752 00000A08 61207265636F676E69-
+   752 00000A11 7A6564206572726F72-
+   752 00000A1A 2E20506C6561736520-
+   752 00000A23 636F6E73756C74     
+   753 00000A2A 0D0A796F757220636F-                             db      13,10,"your computer's technical reference for a description of this error code."
+   753 00000A33 6D7075746572277320-
+   753 00000A3C 746563686E6963616C-
+   753 00000A45 207265666572656E63-
+   753 00000A4E 6520666F7220612064-
+   753 00000A57 65736372697074696F-
+   753 00000A60 6E206F662074686973-
+   753 00000A69 206572726F7220636F-
+   753 00000A72 64652E             
+   754 00000A75 0D0A00                                          db      13,10,0
+   755                                  wcPrepInBuf             equ     $
+   756                                  %endif
+   757                                  %ifdef BUILDDISK
+   758                                  ;=======================================================================================================================
+   759                                  ;
+   760                                  ;       File Allocation Tables
+   761                                  ;
+   762                                  ;       The disk contains two copies of the File Allocation Table (FAT). On our disk, each FAT copy is 1200h bytes in
+   763                                  ;       length. Each FAT entry contains the logical number of the next cluster. The first two entries are reserved. Our
+   764                                  ;       OS.COM file here is 400h bytes in length. These 400h bytes contain familiar code that displays a message to the
+   765                                  ;       screen. Our disk parameter table defines a cluster as containing one sector and each sector having 200h bytes.
+   766                                  ;       Therefore, our FAT table must reserve only two clusters for OS.COM. The clusters used by OS.COM, then, will be
+   767                                  ;       clusters 2 and 3. The entry value for cluster 3 is set to "0fffh" to indicate that it is the last cluster in the
+   768                                  ;       chain.
+   769                                  ;
+   770                                  ;       Every three bytes encode two FAT entries as follows:
+   771                                  ;
+   772                                  ;       db      0abh,0cdh,0efh  ;even cluster: 0dabh, odd cluster: 0efch
    773                                  ;
-   774                                  ;       FAT copy 1                                                              @disk: 000200   @mem: n/a
-   775                                  ;
-   776                                  ;-----------------------------------------------------------------------------------------------------------------------
-   777                                  section                 fat1                                                    ;first copy of FAT
-   778                                                          db      0F0h,0FFh,0FFh, 003h,0F0h,0FFh
-   779                                                          times   (9*512)-($-$$) db 0                             ;zero fill to end of section
-   780                                  ;-----------------------------------------------------------------------------------------------------------------------
-   781                                  ;
-   782                                  ;       FAT copy 2                                                              @disk: 001400   @mem: n/a
-   783                                  ;
-   784                                  ;-----------------------------------------------------------------------------------------------------------------------
-   785                                  section                 fat2                                                    ;second copy of FAT
-   786                                                          db      0F0h,0FFh,0FFh, 003h,0F0h,0FFh
-   787                                                          times   (9*512)-($-$$) db 0                             ;zero fill to end of section
-   788                                  ;-----------------------------------------------------------------------------------------------------------------------
-   789                                  ;
-   790                                  ;       Diskette Directory                                                      @disk: 002600   @mem: n/a
-   791                                  ;
-   792                                  ;       The disk contains one copy of the diskette directory. Each directory entry is 32 bytes long. Our directory
-   793                                  ;       contains only one entry. Unused entries are set to all nulls. The directory immediately follows the second FAT
-   794                                  ;       copy.
-   795                                  ;
-   796                                  ;-----------------------------------------------------------------------------------------------------------------------
-   797                                  section                 dir                                                     ;diskette directory
-   798                                                          db      "OS      COM"                                   ;file name (must contain spaces)
-   799                                                          db      020h                                            ;attribute (archive bit set)
-   800                                                          times   10 db 0                                         ;unused
-   801                                                          dw      0h                                              ;time
-   802                                                          db      01000001b                                       ;mmm = 10 MOD 8 = 2; ddddd = 1
-   803                                                          db      01001001b                                       ;yyyyyyy = 2016-1980 = 36 = 24h; m/8 = 1
-   804                                                          dw      2                                               ;first cluster
-   805                                                          dd      400h                                            ;file size
-   806                                                          times   (EBOOTDIRENTRIES*32)-($-$$) db 0h               ;zero fill to end of section
-   807                                  %endif
-   808                                  %ifdef BUILDCOM
-   809                                  ;=======================================================================================================================
-   810                                  ;
-   811                                  ;       OS.COM
-   812                                  ;
-   813                                  ;       The operating system file is assembled at the start of the data area of the floppy disk image, which
-   814                                  ;       immediately follows the directory. This corresponds to logical cluster 2, even though the physical address of
-   815                                  ;       this sector on the disk varies depending on the disk type. The os.com file consists of two parts, the OS loader
-   816                                  ;       and the OS kernel. The Loader is 16-bit code that receives control directly from the boot sector code after the
-   817                                  ;       OS.COM file is loaded into memory. The kernel is 32-bit code that receives control after the Loader has
-   818                                  ;       initialized protected-mode tables and 32-bit interrupt handlers and switched the CPU into protected mode.
-   819                                  ;
-   820                                  ;       Our loader addressability is set up according to the following diagram.
-   821                                  ;
-   822                                  ;       SS -----------> 007b00  +-----------------------------------------------+ SS:0000
-   823                                  ;                               |  Boot Stack & Boot PSP (Unused)               |
-   824                                  ;                               |  256 = 100h bytes                             |
-   825                                  ;       SS:SP --------> 007c00  +-----------------------------------------------+ SS:0100  07b0:0100
-   826                                  ;                               |  Boot Sector (vstart=0100h)                   |
-   827                                  ;                               |  1 sector = 512 = 200h bytes                  |
-   828                                  ;                       007e00  +-----------------------------------------------+
-   829                                  ;                               |  File Allocation Table (FAT) I/O Buffer       |
-   830                                  ;                               |  9 x 512-byte sectors = 4,608 = 1200h bytes   |
-   831                                  ;                               |                                               |
-   832                                  ;       CS,DS,ES -----> 008f00  |  Loader PSP (Unused)                          | DS:0000
-   833                                  ;                               |                                               |
-   834                                  ;       CS:IP --------> 009000  +-----------------------------------------------+ DS:0100  08f0:0100
-   835                                  ;                               |  Loader Code                                  |
-   836                                  ;                               |  2 sectors = 1024 = 400h bytes                |
-   837                                  ;                       009400  +-----------------------------------------------+ DS:0500
-   838                                  ;
-   839                                  ;=======================================================================================================================
-   840                                  ;-----------------------------------------------------------------------------------------------------------------------
+   774                                  ;=======================================================================================================================
+   775                                  ;-----------------------------------------------------------------------------------------------------------------------
+   776                                  ;
+   777                                  ;       FAT copy 1                                                              @disk: 000200   @mem: n/a
+   778                                  ;
+   779                                  ;-----------------------------------------------------------------------------------------------------------------------
+   780                                  section                 fat1                                                    ;first copy of FAT
+   781                                                          db      0F0h,0FFh,0FFh, 003h,0F0h,0FFh
+   782                                                          times   (9*512)-($-$$) db 0                             ;zero fill to end of section
+   783                                  ;-----------------------------------------------------------------------------------------------------------------------
+   784                                  ;
+   785                                  ;       FAT copy 2                                                              @disk: 001400   @mem: n/a
+   786                                  ;
+   787                                  ;-----------------------------------------------------------------------------------------------------------------------
+   788                                  section                 fat2                                                    ;second copy of FAT
+   789                                                          db      0F0h,0FFh,0FFh, 003h,0F0h,0FFh
+   790                                                          times   (9*512)-($-$$) db 0                             ;zero fill to end of section
+   791                                  ;-----------------------------------------------------------------------------------------------------------------------
+   792                                  ;
+   793                                  ;       Diskette Directory                                                      @disk: 002600   @mem: n/a
+   794                                  ;
+   795                                  ;       The disk contains one copy of the diskette directory. Each directory entry is 32 bytes long. Our directory
+   796                                  ;       contains only one entry. Unused entries are set to all nulls. The directory immediately follows the second FAT
+   797                                  ;       copy.
+   798                                  ;
+   799                                  ;-----------------------------------------------------------------------------------------------------------------------
+   800                                  section                 dir                                                     ;diskette directory
+   801                                                          db      "OS      COM"                                   ;file name (must contain spaces)
+   802                                                          db      020h                                            ;attribute (archive bit set)
+   803                                                          times   10 db 0                                         ;unused
+   804                                                          dw      0h                                              ;time
+   805                                                          db      01000001b                                       ;mmm = 10 MOD 8 = 2; ddddd = 1
+   806                                                          db      01001001b                                       ;yyyyyyy = 2016-1980 = 36 = 24h; m/8 = 1
+   807                                                          dw      2                                               ;first cluster
+   808                                                          dd      400h                                            ;file size
+   809                                                          times   (EBOOTDIRENTRIES*32)-($-$$) db 0h               ;zero fill to end of section
+   810                                  %endif
+   811                                  %ifdef BUILDCOM
+   812                                  ;=======================================================================================================================
+   813                                  ;
+   814                                  ;       OS.COM
+   815                                  ;
+   816                                  ;       The operating system file is assembled at the start of the data area of the floppy disk image, which
+   817                                  ;       immediately follows the directory. This corresponds to logical cluster 2, even though the physical address of
+   818                                  ;       this sector on the disk varies depending on the disk type. The os.com file consists of two parts, the OS loader
+   819                                  ;       and the OS kernel. The Loader is 16-bit code that receives control directly from the boot sector code after the
+   820                                  ;       OS.COM file is loaded into memory. The kernel is 32-bit code that receives control after the Loader has
+   821                                  ;       initialized protected-mode tables and 32-bit interrupt handlers and switched the CPU into protected mode.
+   822                                  ;
+   823                                  ;       Our loader addressability is set up according to the following diagram.
+   824                                  ;
+   825                                  ;       SS -----------> 007b00  +-----------------------------------------------+ SS:0000
+   826                                  ;                               |  Boot Stack & Boot PSP (Unused)               |
+   827                                  ;                               |  256 = 100h bytes                             |
+   828                                  ;       SS:SP --------> 007c00  +-----------------------------------------------+ SS:0100  07b0:0100
+   829                                  ;                               |  Boot Sector (vstart=0100h)                   |
+   830                                  ;                               |  1 sector = 512 = 200h bytes                  |
+   831                                  ;                       007e00  +-----------------------------------------------+
+   832                                  ;                               |  File Allocation Table (FAT) I/O Buffer       |
+   833                                  ;                               |  9 x 512-byte sectors = 4,608 = 1200h bytes   |
+   834                                  ;                               |                                               |
+   835                                  ;       CS,DS,ES -----> 008f00  |  Loader PSP (Unused)                          | DS:0000
+   836                                  ;                               |                                               |
+   837                                  ;       CS:IP --------> 009000  +-----------------------------------------------+ DS:0100  08f0:0100
+   838                                  ;                               |  Loader Code                                  |
+   839                                  ;                               |  2 sectors = 1024 = 400h bytes                |
+   840                                  ;                       009400  +-----------------------------------------------+ DS:0500
    841                                  ;
-   842                                  ;       OS Loader                                                               @disk: 004200   @mem: 009000
-   843                                  ;
-   844                                  ;       This code is the operating system loader. It resides on the boot disk at the start of the data area, following
-   845                                  ;       the directory. The loader occupies several clusters that are mapped in the file allocation tables above.
-   846                                  ;       The loader executes 16-bit instructions in real mode. It performs several initialization functions such as
-   847                                  ;       determining whether the CPU and other resources are sufficient to run the operating system. If all minimum
-   848                                  ;       resources are present, the loader initializes protected mode tables, places the CPU into protected mode and
-   849                                  ;       starts the console task. Since the loader was called either from the bootstrap or as a .com file on the boot
-   850                                  ;       disk, we can assume that the initial ip is 0x100 and not perform any absolute address fix-ups on our segment
-   851                                  ;       registers.
-   852                                  ;
-   853                                  ;-----------------------------------------------------------------------------------------------------------------------
-   854                                                          cpu     8086                                            ;assume minimal CPU
-   855                                  section                 loader  vstart=0100h                                    ;use .COM compatible addressing
-   856                                                          bits    16                                              ;this is 16-bit code
-   857                                  Loader                  push    cs                                              ;use the code segment
-   858                                                          pop     ds                                              ;...as our data segment
-   859                                                          push    cs                                              ;use the code segment
-   860                                                          pop     es                                              ;...as our extra segment
-   861                                  ;
-   862                                  ;       Write a message to the console so we know we have our addressability established.
-   863                                  ;
-   864                                                          mov     si,czStartingMsg                                ;starting message
-   865                                                          call    PutTTYString                                    ;display loader message
+   842                                  ;=======================================================================================================================
+   843                                  ;-----------------------------------------------------------------------------------------------------------------------
+   844                                  ;
+   845                                  ;       OS Loader                                                               @disk: 004200   @mem: 009000
+   846                                  ;
+   847                                  ;       This code is the operating system loader. It resides on the boot disk at the start of the data area, following
+   848                                  ;       the directory. The loader occupies several clusters that are mapped in the file allocation tables above.
+   849                                  ;       The loader executes 16-bit instructions in real mode. It performs several initialization functions such as
+   850                                  ;       determining whether the CPU and other resources are sufficient to run the operating system. If all minimum
+   851                                  ;       resources are present, the loader initializes protected mode tables, places the CPU into protected mode and
+   852                                  ;       starts the console task. Since the loader was called either from the bootstrap or as a .com file on the boot
+   853                                  ;       disk, we can assume that the initial IP is 0x100 and not perform any absolute address fix-ups on our segment
+   854                                  ;       registers.
+   855                                  ;
+   856                                  ;-----------------------------------------------------------------------------------------------------------------------
+   857                                                          cpu     8086                                            ;assume minimal CPU
+   858                                  section                 loader  vstart=0100h                                    ;use .COM compatible addressing
+   859                                                          bits    16                                              ;this is 16-bit code
+   860                                  Loader                  push    cs                                              ;use the code segment
+   861                                                          pop     ds                                              ;...as our data segment
+   862                                                          push    cs                                              ;use the code segment
+   863                                                          pop     es                                              ;...as our extra segment
+   864                                  ;
+   865                                  ;       Write a message to the console so we know we have our addressability established.
    866                                  ;
-   867                                  ;       Now we want to wait for a keypress. We can use a keyboard interrupt function for this (INT 16h, AH=0).
-   868                                  ;       However, some hypervisor BIOS implementations have been seen to implement the "wait" as simply a fast
-   869                                  ;       iteration of the keyboard status function call (INT 16h, AH=1), causing a CPU race condition. So, instead
-   870                                  ;       we will use the keyboard status call and iterate over a halt (HLT) instruction until a key is pressed.
-   871                                  ;       By convention, we enable maskable interrupts with STI before issuing HLT, so as not to catch fire.
-   872                                  ;
-   873                                  .30                     mov     ah,EBIOSFNKEYSTATUS                             ;keyboard status function
-   874                                                          int     EBIOSINTKEYBOARD                                ;call BIOS keyboard interrupt
-   875                                                          jnz     .40                                             ;exit if key pressed
-   876                                                          sti                                                     ;enable maskable interrupts
-   877                                                          hlt                                                     ;wait for interrupt
-   878                                                          jmp     .30                                             ;repeat until keypress
-   879                                  ;
-   880                                  ;       Now that a key has been pressed, we signal the system to restart by driving the B0 line on the 8042
-   881                                  ;       keyboard controller low (OUT 64h,0feh). The restart may take some microseconds to kick in, so we issue
-   882                                  ;       HLT until the system resets.
-   883                                  ;
-   884                                  .40                     mov     al,EKEYBCMDRESET                                ;8042 pulse output port pin
-   885                                                          out     EKEYBPORTSTAT,al                                ;drive B0 low to restart
-   886                                  .50                     sti                                                     ;enable maskable interrupts
-   887                                                          hlt                                                     ;stop until reset, int, nmi
-   888                                                          jmp     .50                                             ;loop until restart kicks in
-   889                                  ;-----------------------------------------------------------------------------------------------------------------------
-   890                                  ;
-   891                                  ;       Routine:        PutTTYString
-   892                                  ;
-   893                                  ;       Description:    This routine sends a NUL-terminated string of characters to the TTY output device. We use the
-   894                                  ;                       TTY output function of the BIOS video interrupt, passing the address of the string in DS:SI
-   895                                  ;                       and the BIOS teletype function code in AH. After a return from the BIOS interrupt, we repeat
-   896                                  ;                       for the next string character until a NUL is found. Note that we clear the direction flag (DF)
-   897                                  ;                       with CLD before the first LODSB. The direction flag is not guaranteed to be preseved between
-   898                                  ;                       calls within the OS. However, the "int" instruction does store the EFLAGS register on the
-   899                                  ;                       stack and restores it on return. Therefore, clearing the direction flag before subsequent calls
-   900                                  ;                       to LODSB is not needed.
-   901                                  ;
-   902                                  ;       In:             DS:SI   address of string
-   903                                  ;
-   904                                  ;       Out:            DF      0
-   905                                  ;                       ZF      1
-   906                                  ;                       AL      0
-   907                                  ;
-   908                                  ;-----------------------------------------------------------------------------------------------------------------------
-   909                                  PutTTYString            cld                                                     ;forward strings
-   910                                  .10                     lodsb                                                   ;load next byte at DS:SI in AL
-   911                                                          test    al,al                                           ;end of string?
-   912                                                          jz      .20                                             ;... yes, exit our loop
-   913                                                          mov     ah,EBIOSFNTTYOUTPUT                             ;BIOS teletype function
-   914                                                          int     EBIOSINTVIDEO                                   ;call BIOS display interrupt
-   915                                                          jmp     .10                                             ;repeat until done
-   916                                  .20                     ret                                                     ;return
-   917                                  ;-----------------------------------------------------------------------------------------------------------------------
-   918                                  ;
-   919                                  ;       Loader Data
-   920                                  ;
-   921                                  ;       Our only "data" is the string displayed when system starts. It ends with ASCII carriage-return (13) and line-
-   922                                  ;       feed (10) values. The remainder of the boot sector is filled with NUL. The boot sector finally ends with the
-   923                                  ;       required two-byte signature checked by the BIOS. Note that recent versions of NASM will issue a warning if
-   924                                  ;       the calculated address for the end-of-sector signature produces a negative value for "1024-($-$$)". This will
-   925                                  ;       indicate if we have added too much data and exceeded the length of the sector. Note also that since we are at
-   926                                  ;       the end of a "file" (os.com) and not the boot sector, there is no end-of-sector marker (0x55 0xaa) here.
-   927                                  ;
-   928                                  ;-----------------------------------------------------------------------------------------------------------------------
-   929                                  czStartingMsg           db      "Starting OS",13,10,0                           ;starting message
-   930                                                          times   1024-($-$$) db 0h                               ;zero fill to end of sector
-   931                                  %endif
-   932                                  %ifdef BUILDDISK
-   933                                  ;-----------------------------------------------------------------------------------------------------------------------
-   934                                  ;
-   935                                  ;       Free Disk Space                                                         @disk: 004600   @mem:  n/a
-   936                                  ;
-   937                                  ;       Following the convention introduced by DOS, we use the value 'F6' to indicate unused floppy disk storage.
-   938                                  ;
-   939                                  ;-----------------------------------------------------------------------------------------------------------------------
-   940                                  section                 unused                                                  ;unused disk space
-   941                                                          times   EBOOTDISKBYTES-04600h db 0F6h                   ;fill to end of disk image
-   942                                  %endif
-   943                                  ;=======================================================================================================================
-   944                                  ;
-   945                                  ;       End of Program Code
-   946                                  ;
-   947                                  ;=======================================================================================================================
+   867                                                          mov     si,czStartingMsg                                ;starting message
+   868                                                          call    PutTTYString                                    ;display loader message
+   869                                  ;
+   870                                  ;       Now we want to wait for a keypress. We can use a keyboard interrupt function for this (INT 16h, AH=0).
+   871                                  ;       However, some hypervisor BIOS implementations have been seen to implement the "wait" as simply a fast
+   872                                  ;       iteration of the keyboard status function call (INT 16h, AH=1), causing a max CPU condition. So, instead,
+   873                                  ;       we will use the keyboard status call and iterate over a halt (HLT) instruction until a key is pressed.
+   874                                  ;       By convention, we enable maskable interrupts with STI before issuing HLT, so as not to catch fire.
+   875                                  ;
+   876                                  .30                     mov     ah,EBIOSFNKEYSTATUS                             ;keyboard status function
+   877                                                          int     EBIOSINTKEYBOARD                                ;call BIOS keyboard interrupt
+   878                                                          jnz     .40                                             ;exit if key pressed
+   879                                                          sti                                                     ;enable maskable interrupts
+   880                                                          hlt                                                     ;wait for interrupt
+   881                                                          jmp     .30                                             ;repeat until keypress
+   882                                  ;
+   883                                  ;       Now that a key has been pressed, we signal the system to restart by driving the B0 line on the 8042
+   884                                  ;       keyboard controller low (OUT 64h,0feh). The restart may take some microseconds to kick in, so we issue
+   885                                  ;       HLT until the system resets.
+   886                                  ;
+   887                                  .40                     mov     al,EKEYBCMDRESET                                ;8042 pulse output port pin
+   888                                                          out     EKEYBPORTSTAT,al                                ;drive B0 low to restart
+   889                                  .50                     sti                                                     ;enable maskable interrupts
+   890                                                          hlt                                                     ;stop until reset, int, nmi
+   891                                                          jmp     .50                                             ;loop until restart kicks in
+   892                                  ;-----------------------------------------------------------------------------------------------------------------------
+   893                                  ;
+   894                                  ;       Routine:        PutTTYString
+   895                                  ;
+   896                                  ;       Description:    This routine sends a NUL-terminated string of characters to the TTY output device. We use the
+   897                                  ;                       TTY output function of the BIOS video interrupt, passing the address of the string in DS:SI
+   898                                  ;                       and the BIOS teletype function code in AH. After a return from the BIOS interrupt, we repeat
+   899                                  ;                       for the next string character until a NUL is found. Note that we clear the direction flag (DF)
+   900                                  ;                       with CLD before the first LODSB. The direction flag is not guaranteed to be preseved between
+   901                                  ;                       calls within the OS. However, the "int" instruction does store the EFLAGS register on the
+   902                                  ;                       stack and restores it on return. Therefore, clearing the direction flag before subsequent calls
+   903                                  ;                       to LODSB is not needed.
+   904                                  ;
+   905                                  ;       In:             DS:SI   address of string
+   906                                  ;
+   907                                  ;       Out:            DF      0
+   908                                  ;                       ZF      1
+   909                                  ;                       AL      0
+   910                                  ;
+   911                                  ;-----------------------------------------------------------------------------------------------------------------------
+   912                                  PutTTYString            cld                                                     ;forward strings
+   913                                  .10                     lodsb                                                   ;load next byte at DS:SI in AL
+   914                                                          test    al,al                                           ;end of string?
+   915                                                          jz      .20                                             ;... yes, exit our loop
+   916                                                          mov     ah,EBIOSFNTTYOUTPUT                             ;BIOS teletype function
+   917                                                          int     EBIOSINTVIDEO                                   ;call BIOS display interrupt
+   918                                                          jmp     .10                                             ;repeat until done
+   919                                  .20                     ret                                                     ;return
+   920                                  ;-----------------------------------------------------------------------------------------------------------------------
+   921                                  ;
+   922                                  ;       Loader Data
+   923                                  ;
+   924                                  ;       Our only "data" is the string displayed when system starts. It ends with ASCII carriage-return (13) and line-
+   925                                  ;       feed (10) values. The remainder of the boot sector is filled with NUL. The boot sector finally ends with the
+   926                                  ;       required two-byte signature checked by the BIOS. Note that recent versions of NASM will issue a warning if
+   927                                  ;       the calculated address for the end-of-sector signature produces a negative value for "1024-($-$$)". This will
+   928                                  ;       indicate if we have added too much data and exceeded the length of the sector. Note also that since we are at
+   929                                  ;       the end of a "file" (os.com) and not the boot sector, there is no end-of-sector marker (0x55 0xaa) here.
+   930                                  ;
+   931                                  ;-----------------------------------------------------------------------------------------------------------------------
+   932                                  czStartingMsg           db      "Starting OS",13,10,0                           ;starting message
+   933                                                          times   1024-($-$$) db 0h                               ;zero fill to end of sector
+   934                                  %endif
+   935                                  %ifdef BUILDDISK
+   936                                  ;-----------------------------------------------------------------------------------------------------------------------
+   937                                  ;
+   938                                  ;       Free Disk Space                                                         @disk: 004600   @mem:  n/a
+   939                                  ;
+   940                                  ;       Following the convention introduced by DOS, we use the value 'F6' to indicate unused floppy disk storage.
+   941                                  ;
+   942                                  ;-----------------------------------------------------------------------------------------------------------------------
+   943                                  section                 unused                                                  ;unused disk space
+   944                                                          times   EBOOTDISKBYTES-04600h db 0F6h                   ;fill to end of disk image
+   945                                  %endif
+   946                                  ;=======================================================================================================================
+   947                                  ;
+   948                                  ;       End of Program Code
+   949                                  ;
+   950                                  ;=======================================================================================================================
