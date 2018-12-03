@@ -11,7 +11,7 @@ protocol implementations in the form of a rudimentary operating system for i386-
 
 CustomOS is intended as a learning resource, although all code is intended to be fully-functional.
 
-## Progressive Sub-Projects
+## Projects
 
 CustomOS is provided as a progressive series of sub-projects that incrementally introduce and demonstrate concepts.
 Additional sub-projects may be added from time to time as the project progresses.
@@ -28,14 +28,14 @@ Part 2.			Interrupts, Messages and Commands
 	os.005		Add keyboard interrupt handler to display characters and shift status in information area.
 	os.006		Add a message queue handler to send keyboard messages to a task.
 	os.007		Add support for "clear", "cls", "ver", "version" and "exit" commands.
-	os.008		Add "int6" command to demonstrate CPU interrupt handling.
+	os.008		Add an "int6" command to demonstrate CPU interrupt handling.
 
 Part 3.			Memory, Clock and Task
 
 	os.009		Add support for "mem" and "memory" commands to display memory across the lower 4GB of address space.
 	os.010		Add simple memory allocation and deallocation routines and "malloc" and "free" test routines.
-	os.011		Add support for Real-Time Clock (RTC) access, memory size, and "date" and "time" commands.
-	os.012		Add a second "background" task and IRQ0-driven task switching.
+	os.011		Add Real-Time Clock (RTC) port and ROM memory size access, and "date" and "time" commands.
+	os.012		Add a second task and IRQ0-driven task switching.
 
 Part 4.			Network Adapter
 
@@ -45,7 +45,7 @@ Part 4.			Network Adapter
 
 Local compilation of the source code requires NASM (the Netwide Assembler) or a compatible assembler.
 
-	2017-06-30	Recommended version of NASM is 2.13.01.
+	2018-07-04	Recommended version of NASM is 2.13.03.
 
 Compilation on Windows:
 
@@ -104,7 +104,6 @@ Network Support:
 
 	David J. Walling		Email:		david@davidjwalling.com
 					Twitter:	@davidjwalling
-					The Interwebs:	www.davidjwalling.com
 
 ## License
 

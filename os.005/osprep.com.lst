@@ -1407,7 +1407,7 @@
   1207                                  ;       determining whether the CPU and other resources are sufficient to run the operating system. If all minimum
   1208                                  ;       resources are present, the loader initializes protected mode tables, places the CPU into protected mode and
   1209                                  ;       starts the console task. Since the loader was called either from the bootstrap or as a .com file on the boot
-  1210                                  ;       disk, we can assume that the initial ip is 0x100 and not perform any absolute address fix-ups on our segment
+  1210                                  ;       disk, we can assume that the initial IP is 0x100 and not perform any absolute address fix-ups on our segment
   1211                                  ;       registers.
   1212                                  ;
   1213                                  ;-----------------------------------------------------------------------------------------------------------------------
