@@ -312,6 +312,7 @@ EBIOSMODETEXT80         equ     003h                                            
 EBIOSFNTTYOUTPUT        equ     00Eh                                            ;video TTY output function
 EBIOSINTDISKETTE        equ     013h                                            ;diskette services interrupt
 EBIOSFNREADSECTOR       equ     002h                                            ;diskette read sector function
+EBIOSFNWRITESECTOR      equ     003h                                            ;diskette write sector function
 EBIOSINTMISC            equ     015h                                            ;miscellaneous services interrupt
 EBIOSFNINITPROTMODE     equ     089h                                            ;initialize protected mode fn
 EBIOSINTKEYBOARD        equ     016h                                            ;keyboard services interrupt
@@ -961,7 +962,8 @@ Prep                    mov     si,czPrepMsg10                                  
                         mov     bx,wcPrepInBuf                                  ;input buffer address
                         mov     dx,0                                            ;head zero, drive zero
                         mov     cx,1                                            ;track zero, sector one
-                        mov     ax,0201h                                        ;read one sector
+                        mov     al,1                                            ;one sector
+                        mov     ah,EBIOSFNREADSECTOR                            ;read function
                         int     EBIOSINTDISKETTE                                ;attempt the read
                         pop     cx                                              ;restore remaining retries
                         jnc     .50                                             ;skip ahead if successful
@@ -986,7 +988,8 @@ Prep                    mov     si,czPrepMsg10                                  
                         mov     bx,Boot                                         ;output buffer address
                         mov     dx,0                                            ;head zero, drive zero
                         mov     cx,1                                            ;track zero, sector one
-                        mov     ax,0301h                                        ;write one sector
+                        mov     al,1                                            ;one sector
+                        mov     ah,EBIOSFNWRITESECTOR                           ;write function
                         int     EBIOSINTDISKETTE                                ;attempt the write
                         pop     cx                                              ;restore remaining retries
                         jnc     .100                                            ;skip ahead if successful
@@ -1043,7 +1046,7 @@ Prep                    mov     si,czPrepMsg10                                  
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 czPrepMsg10             db      13,10,"CustomOS Boot-Diskette Preparation Program"
-                        db      13,10,"Copyright (C) 2010-2017 David J. Walling. All rights reserved."
+                        db      13,10,"Copyright (C) 2010-2018 David J. Walling. All rights reserved."
                         db      13,10
                         db      13,10,"This program overwrites the boot sector of a diskette with startup code that"
                         db      13,10,"will load the operating system into memory when the computer is restarted."
@@ -1295,7 +1298,7 @@ LoaderExit              call    PutTTYString                                    
 ;
 ;       Now we want to wait for a keypress. We can use a keyboard interrupt function for this (INT 16h, AH=0).
 ;       However, some hypervisor BIOS implementations have been seen to implement the "wait" as simply a fast
-;       iteration of the keyboard status function call (INT 16h, AH=1), causing a CPU race condition. So, instead
+;       iteration of the keyboard status function call (INT 16h, AH=1), causing a max CPU condition. So, instead,
 ;       we will use the keyboard status call and iterate over a halt (HLT) instruction until a key is pressed.
 ;       By convention, we enable maskable interrupts with STI before issuing HLT, so as not to catch fire.
 ;
@@ -1896,7 +1899,7 @@ czIntReserved           db      "Reserved",0
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  clocktick                                       ;clock tick interrupt
-                        push    eax                                             ;save modified regs
+                        push    eax                                             ;save non-volatile regs
                         push    edx                                             ;
                         push    ds                                              ;
 ;
