@@ -27,7 +27,7 @@ Part 2.			Interrupts, Messages and Commands
 
 	os.005		Add keyboard interrupt handler to display characters and shift status in information area.
 	os.006		Add a message queue handler to send keyboard messages to a task.
-	os.007		Add support for "clear", "cls", "ver", "version" and "exit" commands.
+	os.007		Add support for "clear", "cls", "ver", "version", "shutdown", "quit" and "exit" commands.
 	os.008		Add an "int6" command to demonstrate CPU interrupt handling.
 
 Part 3.			Memory, Clock and Task
