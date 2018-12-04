@@ -273,12 +273,12 @@
    273                                  ;       The Motorola MC 146818 was the original real-time clock in PCs.
    274                                  ;
    275                                  ;-----------------------------------------------------------------------------------------------------------------------
-   276                                  ERTCREGPORT             equ     70h                                             ;register select port
-   277                                  ERTCDATAPORT            equ     71h                                             ;data port
-   278                                  ERTCBASERAMLO           equ     15h                                             ;base RAM low
-   279                                  ERTCBASERAMHI           equ     16H                                             ;base RAM high
-   280                                  ERTCEXTRAMLO            equ     17H                                             ;extended RAM low
-   281                                  ERTCEXTRAMHI            equ     18H                                             ;extended RAM high
+   276                                  ERTCREGPORT             equ     070h                                            ;register select port
+   277                                  ERTCDATAPORT            equ     071h                                            ;data port
+   278                                  ERTCBASERAMLO           equ     015h                                            ;base RAM low
+   279                                  ERTCBASERAMHI           equ     016h                                            ;base RAM high
+   280                                  ERTCEXTRAMLO            equ     017h                                            ;extended RAM low
+   281                                  ERTCEXTRAMHI            equ     018h                                            ;extended RAM high
    282                                  ;-----------------------------------------------------------------------------------------------------------------------
    283                                  ;
    284                                  ;       x86 Descriptor Access Codes                                             EX86ACC...
@@ -4248,802 +4248,797 @@
   4244                                                          mov     al,ERTCBASERAMLO                                ;base RAM low register
   4245                                                          out     ERTCREGPORT,al                                  ;select base RAM low register
   4246                                                          in      al,ERTCDATAPORT                                 ;read base RAM low (KB)
-  4247                                                          ;shl    eax,10                                          ;kilobytes to bytes
-  4248                                                          ret                                                     ;return to caller
-  4249                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4250                                  ;
-  4251                                  ;       Routine:        GetExtendedMemSize
-  4252                                  ;
-  4253                                  ;       Description:    Return the amount of extended RAM as reported by the CMOS.
-  4254                                  ;
-  4255                                  ;       Output:         EAX     extended RAM size in bytes
-  4256                                  ;
-  4257                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4258                                  GetExtendedMemSize      xor     eax,eax                                         ;zero register
-  4259                                                          mov     al,ERTCEXTRAMHI                                 ;extended RAM high register
-  4260                                                          mov     al,31h
-  4261                                                          out     ERTCREGPORT,al                                  ;select extended RAM high register
-  4262                                                          in      al,ERTCDATAPORT                                 ;read extended RAM high (KB)
-  4263                                                          mov     ah,al                                           ;save extended RAM high
-  4264                                                          mov     al,ERTCEXTRAMLO                                 ;extended RAM low register
-  4265                                                          mov     al,30h
-  4266                                                          out     ERTCREGPORT,al                                  ;select extended RAM low register
-  4267                                                          in      al,ERTCDATAPORT                                 ;read extended RAM low (KB)
-  4268                                                          ;shl    eax,10                                          ;kilobytes to bytes
-  4269                                                          ret                                                     ;return to caller
-  4270                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4247                                                          ret                                                     ;return to caller
+  4248                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4249                                  ;
+  4250                                  ;       Routine:        GetExtendedMemSize
+  4251                                  ;
+  4252                                  ;       Description:    Return the amount of extended RAM as reported by the CMOS.
+  4253                                  ;
+  4254                                  ;       Output:         EAX     extended RAM size in bytes
+  4255                                  ;
+  4256                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4257                                  GetExtendedMemSize      xor     eax,eax                                         ;zero register
+  4258                                                          mov     al,ERTCEXTRAMHI                                 ;extended RAM high register
+  4259                                                          out     ERTCREGPORT,al                                  ;select extended RAM high register
+  4260                                                          in      al,ERTCDATAPORT                                 ;read extended RAM high (KB)
+  4261                                                          mov     ah,al                                           ;save extended RAM high
+  4262                                                          mov     al,ERTCEXTRAMLO                                 ;extended RAM low register
+  4263                                                          out     ERTCREGPORT,al                                  ;select extended RAM low register
+  4264                                                          in      al,ERTCDATAPORT                                 ;read extended RAM low (KB)
+  4265                                                          ret                                                     ;return to caller
+  4266                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4267                                  ;
+  4268                                  ;       Routine:        GetROMMemSize
+  4269                                  ;
+  4270                                  ;       Description:    Return the amount of RAM as reported by the BIOS during power-up.
   4271                                  ;
-  4272                                  ;       Routine:        GetROMMemSize
+  4272                                  ;       Output:         EAX     RAM size in bytes
   4273                                  ;
-  4274                                  ;       Description:    Return the amount of RAM as reported by the BIOS during power-up.
-  4275                                  ;
-  4276                                  ;       Output:         EAX     RAM size in bytes
-  4277                                  ;
+  4274                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4275                                  GetROMMemSize           xor     eax,eax                                         ;zero register
+  4276                                                          mov     ax,[wwROMMemSize]                               ;memory size (KB) as returned by INT 12h
+  4277                                                          ret                                                     ;return
   4278                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4279                                  GetROMMemSize           xor     eax,eax                                         ;zero register
-  4280                                                          mov     ax,[wwROMMemSize]                               ;memory size (KB) as returned by INT 12h
-  4281                                                          ;shl    eax,10                                          ;memory size in bytes
-  4282                                                          ret                                                     ;return
-  4283                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4284                                  ;
-  4285                                  ;       Routine:        PlaceCursor
-  4286                                  ;
-  4287                                  ;       Description:    This routine positions the cursor on the console.
-  4288                                  ;
-  4289                                  ;       In:             DS      OS data selector
-  4290                                  ;
-  4291                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4292                                  PlaceCursor             push    ecx                                             ;save non-volatile regs
-  4293                                                          mov     al,[wbConsoleRow]                               ;AL = row
-  4294                                                          mov     ah,ECONCOLS                                     ;AH = cols/row
-  4295                                                          mul     ah                                              ;row offset
-  4296                                                          add     al,[wbConsoleColumn]                            ;add column
-  4297                                                          adc     ah,0                                            ;add overflow
-  4298                                                          mov     ecx,eax                                         ;screen offset
-  4299                                                          mov     dl,ECRTPORTLO                                   ;crt controller port lo
-  4300                                                          mov     dh,ECRTPORTHI                                   ;crt controller port hi
-  4301                                                          mov     al,ECRTCURLOCHI                                 ;crt cursor loc reg hi
-  4302                                                          out     dx,al                                           ;select register
-  4303                                                          inc     edx                                             ;data port
-  4304                                                          mov     al,ch                                           ;hi-order cursor loc
-  4305                                                          out     dx,al                                           ;store hi-order loc
-  4306                                                          dec     edx                                             ;register select port
-  4307                                                          mov     al,ECRTCURLOCLO                                 ;crt cursor loc reg lo
-  4308                                                          out     dx,al                                           ;select register
-  4309                                                          inc     edx                                             ;data port
-  4310                                                          mov     al,cl                                           ;lo-order cursor loc
-  4311                                                          out     dx,al                                           ;store lo-order loc
-  4312                                                          pop     ecx                                             ;restore non-volatile regs
-  4313                                                          ret                                                     ;return
-  4314                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4315                                  ;
-  4316                                  ;       Routine:        PutPrimaryEndOfInt
-  4317                                  ;
-  4318                                  ;       Description:    This routine sends a non-specific end-of-interrupt signal to the primary PIC.
-  4319                                  ;
+  4279                                  ;
+  4280                                  ;       Routine:        PlaceCursor
+  4281                                  ;
+  4282                                  ;       Description:    This routine positions the cursor on the console.
+  4283                                  ;
+  4284                                  ;       In:             DS      OS data selector
+  4285                                  ;
+  4286                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4287                                  PlaceCursor             push    ecx                                             ;save non-volatile regs
+  4288                                                          mov     al,[wbConsoleRow]                               ;AL = row
+  4289                                                          mov     ah,ECONCOLS                                     ;AH = cols/row
+  4290                                                          mul     ah                                              ;row offset
+  4291                                                          add     al,[wbConsoleColumn]                            ;add column
+  4292                                                          adc     ah,0                                            ;add overflow
+  4293                                                          mov     ecx,eax                                         ;screen offset
+  4294                                                          mov     dl,ECRTPORTLO                                   ;crt controller port lo
+  4295                                                          mov     dh,ECRTPORTHI                                   ;crt controller port hi
+  4296                                                          mov     al,ECRTCURLOCHI                                 ;crt cursor loc reg hi
+  4297                                                          out     dx,al                                           ;select register
+  4298                                                          inc     edx                                             ;data port
+  4299                                                          mov     al,ch                                           ;hi-order cursor loc
+  4300                                                          out     dx,al                                           ;store hi-order loc
+  4301                                                          dec     edx                                             ;register select port
+  4302                                                          mov     al,ECRTCURLOCLO                                 ;crt cursor loc reg lo
+  4303                                                          out     dx,al                                           ;select register
+  4304                                                          inc     edx                                             ;data port
+  4305                                                          mov     al,cl                                           ;lo-order cursor loc
+  4306                                                          out     dx,al                                           ;store lo-order loc
+  4307                                                          pop     ecx                                             ;restore non-volatile regs
+  4308                                                          ret                                                     ;return
+  4309                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4310                                  ;
+  4311                                  ;       Routine:        PutPrimaryEndOfInt
+  4312                                  ;
+  4313                                  ;       Description:    This routine sends a non-specific end-of-interrupt signal to the primary PIC.
+  4314                                  ;
+  4315                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4316                                  PutPrimaryEndOfInt      sti                                                     ;enable maskable interrupts
+  4317                                                          mov     al,EPICEOI                                      ;non-specific end-of-interrupt
+  4318                                                          out     EPICPORTPRI,al                                  ;send EOI to primary PIC
+  4319                                                          ret                                                     ;return
   4320                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4321                                  PutPrimaryEndOfInt      sti                                                     ;enable maskable interrupts
-  4322                                                          mov     al,EPICEOI                                      ;non-specific end-of-interrupt
-  4323                                                          out     EPICPORTPRI,al                                  ;send EOI to primary PIC
-  4324                                                          ret                                                     ;return
-  4325                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4326                                  ;
-  4327                                  ;       Routine:        PutSecondaryEndOfInt
-  4328                                  ;
-  4329                                  ;       Description:    This routine sends a non-specific end-of-interrupt signal to the secondary PIC.
-  4330                                  ;
+  4321                                  ;
+  4322                                  ;       Routine:        PutSecondaryEndOfInt
+  4323                                  ;
+  4324                                  ;       Description:    This routine sends a non-specific end-of-interrupt signal to the secondary PIC.
+  4325                                  ;
+  4326                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4327                                  PutSecondaryEndOfInt    sti                                                     ;enable maskable interrupts
+  4328                                                          mov     al,EPICEOI                                      ;non-specific end-of-interrupt
+  4329                                                          out     EPICPORTSEC,al                                  ;send EOI to secondary PIC
+  4330                                                          ret                                                     ;return
   4331                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4332                                  PutSecondaryEndOfInt    sti                                                     ;enable maskable interrupts
-  4333                                                          mov     al,EPICEOI                                      ;non-specific end-of-interrupt
-  4334                                                          out     EPICPORTSEC,al                                  ;send EOI to secondary PIC
-  4335                                                          ret                                                     ;return
-  4336                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4337                                  ;
-  4338                                  ;       Routine:        ResetSystem
-  4339                                  ;
-  4340                                  ;       Description:    This routine restarts the system using the 8042 controller.
-  4341                                  ;
-  4342                                  ;       Out:            N/A     This routine does not return.
-  4343                                  ;
-  4344                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4345                                  ResetSystem             mov     ecx,001fffffh                                   ;delay to clear ints
-  4346                                                          loop    $                                               ;clear interrupts
-  4347                                                          mov     al,EKEYBCMDRESET                                ;mask out bit zero
-  4348                                                          out     EKEYBPORTSTAT,al                                ;drive bit zero low
-  4349                                  .10                     sti                                                     ;enable maskable interrupts
-  4350                                                          hlt                                                     ;halt until interrupt
-  4351                                                          jmp     .10                                             ;repeat until reset kicks in
-  4352                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4353                                  ;
-  4354                                  ;       Routine:        SetKeyboardLamps
-  4355                                  ;
-  4356                                  ;       Description:    This routine sends the set/reset mode indicators command to the keyboard device.
-  4357                                  ;
-  4358                                  ;       In:             BH      00000CNS (C:Caps Lock,N:Num Lock,S:Scroll Lock)
-  4359                                  ;
-  4360                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4361                                  SetKeyboardLamps        call    WaitForKeyInBuffer                              ;wait for input buffer ready
-  4362                                                          mov     al,EKEYBCMDLAMPS                                ;set/reset lamps command
-  4363                                                          out     EKEYBPORTDATA,al                                ;send command to 8042
+  4332                                  ;
+  4333                                  ;       Routine:        ResetSystem
+  4334                                  ;
+  4335                                  ;       Description:    This routine restarts the system using the 8042 controller.
+  4336                                  ;
+  4337                                  ;       Out:            N/A     This routine does not return.
+  4338                                  ;
+  4339                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4340                                  ResetSystem             mov     ecx,001fffffh                                   ;delay to clear ints
+  4341                                                          loop    $                                               ;clear interrupts
+  4342                                                          mov     al,EKEYBCMDRESET                                ;mask out bit zero
+  4343                                                          out     EKEYBPORTSTAT,al                                ;drive bit zero low
+  4344                                  .10                     sti                                                     ;enable maskable interrupts
+  4345                                                          hlt                                                     ;halt until interrupt
+  4346                                                          jmp     .10                                             ;repeat until reset kicks in
+  4347                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4348                                  ;
+  4349                                  ;       Routine:        SetKeyboardLamps
+  4350                                  ;
+  4351                                  ;       Description:    This routine sends the set/reset mode indicators command to the keyboard device.
+  4352                                  ;
+  4353                                  ;       In:             BH      00000CNS (C:Caps Lock,N:Num Lock,S:Scroll Lock)
+  4354                                  ;
+  4355                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4356                                  SetKeyboardLamps        call    WaitForKeyInBuffer                              ;wait for input buffer ready
+  4357                                                          mov     al,EKEYBCMDLAMPS                                ;set/reset lamps command
+  4358                                                          out     EKEYBPORTDATA,al                                ;send command to 8042
+  4359                                                          call    WaitForKeyOutBuffer                             ;wait for 8042 result
+  4360                                                          in      al,EKEYBPORTDATA                                ;read 8042 'ACK' (0fah)
+  4361                                                          call    WaitForKeyInBuffer                              ;wait for input buffer ready
+  4362                                                          mov     al,bh                                           ;set/reset lamps value
+  4363                                                          out     EKEYBPORTDATA,al                                ;send lamps value
   4364                                                          call    WaitForKeyOutBuffer                             ;wait for 8042 result
   4365                                                          in      al,EKEYBPORTDATA                                ;read 8042 'ACK' (0fah)
-  4366                                                          call    WaitForKeyInBuffer                              ;wait for input buffer ready
-  4367                                                          mov     al,bh                                           ;set/reset lamps value
-  4368                                                          out     EKEYBPORTDATA,al                                ;send lamps value
-  4369                                                          call    WaitForKeyOutBuffer                             ;wait for 8042 result
-  4370                                                          in      al,EKEYBPORTDATA                                ;read 8042 'ACK' (0fah)
-  4371                                                          ret                                                     ;return
-  4372                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4373                                  ;
-  4374                                  ;       Routine:        WaitForKeyInBuffer
+  4366                                                          ret                                                     ;return
+  4367                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4368                                  ;
+  4369                                  ;       Routine:        WaitForKeyInBuffer
+  4370                                  ;
+  4371                                  ;       Description:    This routine waits for keyboard input buffer to be ready for input.
+  4372                                  ;
+  4373                                  ;       Out:            ZF      1 = Input buffer ready
+  4374                                  ;                               0 = Input buffer not ready after timeout
   4375                                  ;
-  4376                                  ;       Description:    This routine waits for keyboard input buffer to be ready for input.
-  4377                                  ;
-  4378                                  ;       Out:            ZF      1 = Input buffer ready
-  4379                                  ;                               0 = Input buffer not ready after timeout
-  4380                                  ;
-  4381                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4382                                  WaitForKeyInBuffer      push    ecx                                             ;save non-volatile regs
-  4383                                                          mov     ecx,EKEYBWAITLOOP                               ;keyboard controller timeout
-  4384                                  .10                     in      al,EKEYBPORTSTAT                                ;keyboard status byte
-  4385                                                          test    al,EKEYBBITIN                                   ;is input buffer still full?
-  4386                                                          loopnz  .10                                             ;yes, repeat till timeout
-  4387                                                          pop     ecx                                             ;restore non-volatile regs
-  4388                                                          ret                                                     ;return
-  4389                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4390                                  ;
-  4391                                  ;       Routine:        WaitForKeyOutBuffer
+  4376                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4377                                  WaitForKeyInBuffer      push    ecx                                             ;save non-volatile regs
+  4378                                                          mov     ecx,EKEYBWAITLOOP                               ;keyboard controller timeout
+  4379                                  .10                     in      al,EKEYBPORTSTAT                                ;keyboard status byte
+  4380                                                          test    al,EKEYBBITIN                                   ;is input buffer still full?
+  4381                                                          loopnz  .10                                             ;yes, repeat till timeout
+  4382                                                          pop     ecx                                             ;restore non-volatile regs
+  4383                                                          ret                                                     ;return
+  4384                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4385                                  ;
+  4386                                  ;       Routine:        WaitForKeyOutBuffer
+  4387                                  ;
+  4388                                  ;       Description:    This routine waits for keyboard output buffer to have data to read.
+  4389                                  ;
+  4390                                  ;       Out:            ZF      1 = Output buffer has data from controller
+  4391                                  ;                               0 = Output buffer empty after timeout
   4392                                  ;
-  4393                                  ;       Description:    This routine waits for keyboard output buffer to have data to read.
-  4394                                  ;
-  4395                                  ;       Out:            ZF      1 = Output buffer has data from controller
-  4396                                  ;                               0 = Output buffer empty after timeout
-  4397                                  ;
-  4398                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4399                                  WaitForKeyOutBuffer     push    ecx                                             ;save non-volatile regs
-  4400                                                          mov     ecx,EKEYBWAITLOOP                               ;keyboard controller timeout
-  4401                                  .10                     in      al,EKEYBPORTSTAT                                ;keyboard status byte
-  4402                                                          test    al,EKEYBBITOUT                                  ;output buffer status bit
-  4403                                                          loopz   .10                                             ;loop until output buffer bit
-  4404                                                          pop     ecx                                             ;restore non-volatile regs
-  4405                                                          ret                                                     ;return
-  4406                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4407                                  ;
-  4408                                  ;       End of the Kernel Function Library
-  4409                                  ;
-  4410                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4411                                                          times   8192-($-$$) db 0h                               ;zero fill to end of section
-  4412                                  ;=======================================================================================================================
-  4413                                  ;
-  4414                                  ;       Console Task
-  4415                                  ;
-  4416                                  ;       The only task defined in the kernel is the console task. This task consists of code, data, stack, and task state
-  4417                                  ;       segments and a local descriptor table. The console task accepts and echos user keyboard input to the console
-  4418                                  ;       screen and responds to user commands.
+  4393                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4394                                  WaitForKeyOutBuffer     push    ecx                                             ;save non-volatile regs
+  4395                                                          mov     ecx,EKEYBWAITLOOP                               ;keyboard controller timeout
+  4396                                  .10                     in      al,EKEYBPORTSTAT                                ;keyboard status byte
+  4397                                                          test    al,EKEYBBITOUT                                  ;output buffer status bit
+  4398                                                          loopz   .10                                             ;loop until output buffer bit
+  4399                                                          pop     ecx                                             ;restore non-volatile regs
+  4400                                                          ret                                                     ;return
+  4401                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4402                                  ;
+  4403                                  ;       End of the Kernel Function Library
+  4404                                  ;
+  4405                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4406                                                          times   8192-($-$$) db 0h                               ;zero fill to end of section
+  4407                                  ;=======================================================================================================================
+  4408                                  ;
+  4409                                  ;       Console Task
+  4410                                  ;
+  4411                                  ;       The only task defined in the kernel is the console task. This task consists of code, data, stack, and task state
+  4412                                  ;       segments and a local descriptor table. The console task accepts and echos user keyboard input to the console
+  4413                                  ;       screen and responds to user commands.
+  4414                                  ;
+  4415                                  ;=======================================================================================================================
+  4416                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4417                                  ;
+  4418                                  ;       Console Stack                                                           @disk: 007600   @mem:  004000
   4419                                  ;
-  4420                                  ;=======================================================================================================================
-  4421                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4422                                  ;
-  4423                                  ;       Console Stack                                                           @disk: 007600   @mem:  004000
-  4424                                  ;
-  4425                                  ;       This is the stack for the console task. It supports 448 nested calls.
+  4420                                  ;       This is the stack for the console task. It supports 448 nested calls.
+  4421                                  ;
+  4422                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4423                                  section                 constack                                                ;console task stack
+  4424                                                          times   1792-($-$$) db 0h                               ;zero fill to end of section
+  4425                                  ;-----------------------------------------------------------------------------------------------------------------------
   4426                                  ;
-  4427                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4428                                  section                 constack                                                ;console task stack
-  4429                                                          times   1792-($-$$) db 0h                               ;zero fill to end of section
-  4430                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4431                                  ;
-  4432                                  ;       Console Local Descriptor Table                                          @disk: 007d00   @mem:  004700
-  4433                                  ;
-  4434                                  ;       This is the LDT for the console task. It defines the stack, code, data and queue segments as well as data
-  4435                                  ;       aliases for the TSS LDT. Data aliases allow inspection and altering of the TSS and LDT. This LDT can hold up to
-  4436                                  ;       16 descriptors. Six are initially defined.
-  4437                                  ;
-  4438                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4439                                  section                 conldt                                                  ;console local descriptors
-  4440                                                          dq      004093004780007Fh                               ;04 TSS alias
-  4441                                                          dq      004093004700007Fh                               ;0c LDT alias
-  4442                                                          dq      00409300400006FFh                               ;14 stack
-  4443                                                          dq      00CF93000000FFFFh                               ;1c data
-  4444                                                          dq      00409B0050000FFFh                               ;24 code
-  4445                                                          dq      00409300480007FFh                               ;2c message queue
-  4446                                                          times   128-($-$$) db 0h                                ;zero fill to end of section
-  4447                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4427                                  ;       Console Local Descriptor Table                                          @disk: 007d00   @mem:  004700
+  4428                                  ;
+  4429                                  ;       This is the LDT for the console task. It defines the stack, code, data and queue segments as well as data
+  4430                                  ;       aliases for the TSS LDT. Data aliases allow inspection and altering of the TSS and LDT. This LDT can hold up to
+  4431                                  ;       16 descriptors. Six are initially defined.
+  4432                                  ;
+  4433                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4434                                  section                 conldt                                                  ;console local descriptors
+  4435                                                          dq      004093004780007Fh                               ;04 TSS alias
+  4436                                                          dq      004093004700007Fh                               ;0c LDT alias
+  4437                                                          dq      00409300400006FFh                               ;14 stack
+  4438                                                          dq      00CF93000000FFFFh                               ;1c data
+  4439                                                          dq      00409B0050000FFFh                               ;24 code
+  4440                                                          dq      00409300480007FFh                               ;2c message queue
+  4441                                                          times   128-($-$$) db 0h                                ;zero fill to end of section
+  4442                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4443                                  ;
+  4444                                  ;       Console Task State Segment                                              @disk: 007d80   @mem:  004780
+  4445                                  ;
+  4446                                  ;       This is the TSS for the console task. All rings share the same stack. DS and ES are set to the console data
+  4447                                  ;       segment. CS to console code.
   4448                                  ;
-  4449                                  ;       Console Task State Segment                                              @disk: 007d80   @mem:  004780
-  4450                                  ;
-  4451                                  ;       This is the TSS for the console task. All rings share the same stack. DS and ES are set to the console data
-  4452                                  ;       segment. CS to console code.
-  4453                                  ;
-  4454                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4455                                  section                 contss                                                  ;console task state segment
-  4456                                                          dd      0                                               ;00 back-link tss
-  4457                                                          dd      0700h                                           ;04 esp ring 0
-  4458                                                          dd      0014h                                           ;08 ss ring 0
-  4459                                                          dd      0700h                                           ;0c esp ring 1
-  4460                                                          dd      0014h                                           ;10 es ring 1
-  4461                                                          dd      0700h                                           ;14 esp ring 2
-  4462                                                          dd      0014h                                           ;18 ss ring 2
-  4463                                                          dd      0                                               ;1c cr ring 3
-  4464                                                          dd      0                                               ;20 eip
-  4465                                                          dd      0200h                                           ;24 eflags
-  4466                                                          dd      0                                               ;28 eax
-  4467                                                          dd      0                                               ;2c ecx
-  4468                                                          dd      0                                               ;30 edx
-  4469                                                          dd      0                                               ;34 ebx
-  4470                                                          dd      0700h                                           ;38 esp ring 3
-  4471                                                          dd      0                                               ;3c ebp
-  4472                                                          dd      0                                               ;40 esi
-  4473                                                          dd      0                                               ;44 edi
-  4474                                                          dd      001Ch                                           ;48 es
-  4475                                                          dd      0024h                                           ;4c cs
-  4476                                                          dd      0014h                                           ;50 ss ring 3
-  4477                                                          dd      001Ch                                           ;54 ds
-  4478                                                          dd      0                                               ;58 fs
-  4479                                                          dd      0                                               ;5c gs
-  4480                                                          dd      EGDTCONSOLELDT                                  ;60 ldt selector in gdt
-  4481                                                          times   128-($-$$) db 0h                                ;zero fill to end of section
-  4482                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4483                                  ;
-  4484                                  ;       Console Message Queue                                                   @disk: 007e00   @mem: 004800
+  4449                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4450                                  section                 contss                                                  ;console task state segment
+  4451                                                          dd      0                                               ;00 back-link tss
+  4452                                                          dd      0700h                                           ;04 esp ring 0
+  4453                                                          dd      0014h                                           ;08 ss ring 0
+  4454                                                          dd      0700h                                           ;0c esp ring 1
+  4455                                                          dd      0014h                                           ;10 es ring 1
+  4456                                                          dd      0700h                                           ;14 esp ring 2
+  4457                                                          dd      0014h                                           ;18 ss ring 2
+  4458                                                          dd      0                                               ;1c cr ring 3
+  4459                                                          dd      0                                               ;20 eip
+  4460                                                          dd      0200h                                           ;24 eflags
+  4461                                                          dd      0                                               ;28 eax
+  4462                                                          dd      0                                               ;2c ecx
+  4463                                                          dd      0                                               ;30 edx
+  4464                                                          dd      0                                               ;34 ebx
+  4465                                                          dd      0700h                                           ;38 esp ring 3
+  4466                                                          dd      0                                               ;3c ebp
+  4467                                                          dd      0                                               ;40 esi
+  4468                                                          dd      0                                               ;44 edi
+  4469                                                          dd      001Ch                                           ;48 es
+  4470                                                          dd      0024h                                           ;4c cs
+  4471                                                          dd      0014h                                           ;50 ss ring 3
+  4472                                                          dd      001Ch                                           ;54 ds
+  4473                                                          dd      0                                               ;58 fs
+  4474                                                          dd      0                                               ;5c gs
+  4475                                                          dd      EGDTCONSOLELDT                                  ;60 ldt selector in gdt
+  4476                                                          times   128-($-$$) db 0h                                ;zero fill to end of section
+  4477                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4478                                  ;
+  4479                                  ;       Console Message Queue                                                   @disk: 007e00   @mem: 004800
+  4480                                  ;
+  4481                                  ;       The console message queue is 2048 bytes of memory organized as a queue of 510 double words (4 bytes each) and
+  4482                                  ;       two double word values that act as indices. The queue is a FIFO that is fed by the keyboard hardware interrupt
+  4483                                  ;       handler and consumed by a service routine called from a task. Each queue entry defines an input (keystroke)
+  4484                                  ;       event.
   4485                                  ;
-  4486                                  ;       The console message queue is 2048 bytes of memory organized as a queue of 510 double words (4 bytes each) and
-  4487                                  ;       two double word values that act as indices. The queue is a FIFO that is fed by the keyboard hardware interrupt
-  4488                                  ;       handler and consumed by a service routine called from a task. Each queue entry defines an input (keystroke)
-  4489                                  ;       event.
-  4490                                  ;
+  4486                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4487                                  section                 conmque                                                 ;console message queue
+  4488                                                          dd      8                                               ;head pointer
+  4489                                                          dd      8                                               ;tail pointer
+  4490                                                          times   510 dd 0                                        ;queue elements
   4491                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4492                                  section                 conmque                                                 ;console message queue
-  4493                                                          dd      8                                               ;head pointer
-  4494                                                          dd      8                                               ;tail pointer
-  4495                                                          times   510 dd 0                                        ;queue elements
-  4496                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4497                                  ;
-  4498                                  ;       Console Code                                                            @disk: 008600   @mem: 005000
-  4499                                  ;
-  4500                                  ;       This is the code for the console task. The task is defined in the GDT in two descriptors, the Local Descriptor
-  4501                                  ;       Table (LDT) at 0050h and the Task State Segment (TSS) at 0058h. Jumping to or calling a TSS selector causes a
-  4502                                  ;       task switch, giving control to the code for the task at the CS:IP defined in the TSS for the current ring level.
-  4503                                  ;       The initial CS:IP in the Console TSS is 24h:0, where 24h is a selector in the LDT. This selector points to the
-  4504                                  ;       concode section, loaded into memory 5000h by the Loader. The console task is dedicated to accepting user key-
-  4505                                  ;       board input, echoing to the console screen and responding to user commands.
-  4506                                  ;
-  4507                                  ;       When control reaches this section, our addressability is set up according to the following diagram.
-  4508                                  ;
-  4509                                  ;       DS,ES --------> 000000  +-----------------------------------------------+ DS,ES:0000
-  4510                                  ;                               |  Real Mode Interrupt Vectors                  |
-  4511                                  ;                       000400  +-----------------------------------------------+ DS,ES:0400
-  4512                                  ;                               |  Reserved BIOS Memory Area                    |
-  4513                                  ;                       000800  +-----------------------------------------------+ DS,ES:0800
-  4514                                  ;                               |  Shared Kernel Memory Area                    |
-  4515                                  ;                       001000  +-----------------------------------------------+               <-- GDTR
-  4516                                  ;                               |  Global Descriptor Table (GDT)                |
-  4517                                  ;                       001800  +-----------------------------------------------+               <-- IDTR
-  4518                                  ;                               |  Interrupt Descriptor Table (IDT)             |
-  4519                                  ;                       002000  +-----------------------------------------------+
-  4520                                  ;                               |  Interrupt Handlers                           |
-  4521                                  ;                               |  Kernel Function Library                      |
-  4522                                  ;       SS -----------> 004000  +===============================================+ SS:0000
-  4523                                  ;                               |  Console Task Stack Area                      |
-  4524                                  ;       SS:SP --------> 004700  +-----------------------------------------------+ SS:0700       <-- LDTR = GDT.SEL 0050h
-  4525                                  ;                               |  Console Task Local Descriptor Table (LDT)    |
-  4526                                  ;                       004780  +-----------------------------------------------+               <-- TR  = GDT.SEL 0058h
-  4527                                  ;                               |  Console Task Task State Segment (TSS)        |
-  4528                                  ;                       004800  +-----------------------------------------------+
-  4529                                  ;                               |  Console Task Message Queue                   |
-  4530                                  ;       CS,CS:IP -----> 005000  +-----------------------------------------------+ CS:0000
-  4531                                  ;                               |  Console Task Code                            |
-  4532                                  ;                               |  Console Task Constants                       |
-  4533                                  ;                       006000  +===============================================+
-  4534                                  ;
-  4535                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4536                                  section                 concode vstart=05000h                                   ;labels relative to 5000h
-  4537                                  ConCode                 call    ConInitializeData                               ;initialize console variables
-  4538                                  
-  4539                                                          clearConsoleScreen                                      ;clear the console screen
-  4540                                                          putConsoleString czTitle                                ;display startup message
-  4541                                                          putConsoleString czROMMem                               ;ROM memory label
-  4542                                                          putConsoleString wzROMMemSize                           ;ROM memory amount
-  4543                                                          putConsoleString czKB                                   ;Kilobytes
-  4544                                                          putConsoleString czNewLine                              ;new line
-  4545                                                          putConsoleString czBaseMem                              ;base memory label
-  4546                                                          putConsoleString wzBaseMemSize                          ;base memory size
-  4547                                                          putConsoleString czKB                                   ;Kilobytes
-  4548                                                          putConsoleString czNewLine                              ;new line
-  4549                                                          putConsoleString czExtendedMem                          ;extended memory label
-  4550                                                          putConsoleString wzExtendedMemSize                      ;extended memory size
-  4551                                                          putConsoleString czKB                                   ;Kilobytes
-  4552                                                          putConsoleString czNewLine                              ;new line
-  4553                                  .10                     putConsoleString czPrompt                               ;display input prompt
-  4554                                                          placeCursor                                             ;set CRT cursor location
-  4555                                                          getConsoleString wzConsoleInBuffer,79,1,13              ;accept keyboard input
-  4556                                                          putConsoleString czNewLine                              ;newline
-  4557                                  
-  4558                                                          mov     edx,wzConsoleInBuffer                           ;console input buffer
-  4559                                                          mov     ebx,wzConsoleToken                              ;token buffer
-  4560                                                          call    ConTakeToken                                    ;handle console input
-  4561                                                          mov     edx,wzConsoleToken                              ;token buffer
-  4562                                                          call    ConDetermineCommand                             ;determine command number
-  4563                                                          cmp     eax,ECONJMPTBLCNT                               ;valid command number?
-  4564                                                          jb      .20                                             ;yes, branch
-  4565                                  
-  4566                                                          putConsoleString czUnknownCommand                       ;display error message
-  4567                                  
+  4492                                  ;
+  4493                                  ;       Console Code                                                            @disk: 008600   @mem: 005000
+  4494                                  ;
+  4495                                  ;       This is the code for the console task. The task is defined in the GDT in two descriptors, the Local Descriptor
+  4496                                  ;       Table (LDT) at 0050h and the Task State Segment (TSS) at 0058h. Jumping to or calling a TSS selector causes a
+  4497                                  ;       task switch, giving control to the code for the task at the CS:IP defined in the TSS for the current ring level.
+  4498                                  ;       The initial CS:IP in the Console TSS is 24h:0, where 24h is a selector in the LDT. This selector points to the
+  4499                                  ;       concode section, loaded into memory 5000h by the Loader. The console task is dedicated to accepting user key-
+  4500                                  ;       board input, echoing to the console screen and responding to user commands.
+  4501                                  ;
+  4502                                  ;       When control reaches this section, our addressability is set up according to the following diagram.
+  4503                                  ;
+  4504                                  ;       DS,ES --------> 000000  +-----------------------------------------------+ DS,ES:0000
+  4505                                  ;                               |  Real Mode Interrupt Vectors                  |
+  4506                                  ;                       000400  +-----------------------------------------------+ DS,ES:0400
+  4507                                  ;                               |  Reserved BIOS Memory Area                    |
+  4508                                  ;                       000800  +-----------------------------------------------+ DS,ES:0800
+  4509                                  ;                               |  Shared Kernel Memory Area                    |
+  4510                                  ;                       001000  +-----------------------------------------------+               <-- GDTR
+  4511                                  ;                               |  Global Descriptor Table (GDT)                |
+  4512                                  ;                       001800  +-----------------------------------------------+               <-- IDTR
+  4513                                  ;                               |  Interrupt Descriptor Table (IDT)             |
+  4514                                  ;                       002000  +-----------------------------------------------+
+  4515                                  ;                               |  Interrupt Handlers                           |
+  4516                                  ;                               |  Kernel Function Library                      |
+  4517                                  ;       SS -----------> 004000  +===============================================+ SS:0000
+  4518                                  ;                               |  Console Task Stack Area                      |
+  4519                                  ;       SS:SP --------> 004700  +-----------------------------------------------+ SS:0700       <-- LDTR = GDT.SEL 0050h
+  4520                                  ;                               |  Console Task Local Descriptor Table (LDT)    |
+  4521                                  ;                       004780  +-----------------------------------------------+               <-- TR  = GDT.SEL 0058h
+  4522                                  ;                               |  Console Task Task State Segment (TSS)        |
+  4523                                  ;                       004800  +-----------------------------------------------+
+  4524                                  ;                               |  Console Task Message Queue                   |
+  4525                                  ;       CS,CS:IP -----> 005000  +-----------------------------------------------+ CS:0000
+  4526                                  ;                               |  Console Task Code                            |
+  4527                                  ;                               |  Console Task Constants                       |
+  4528                                  ;                       006000  +===============================================+
+  4529                                  ;
+  4530                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4531                                  section                 concode vstart=05000h                                   ;labels relative to 5000h
+  4532                                  ConCode                 call    ConInitializeData                               ;initialize console variables
+  4533                                  
+  4534                                                          clearConsoleScreen                                      ;clear the console screen
+  4535                                                          putConsoleString czTitle                                ;display startup message
+  4536                                                          putConsoleString czROMMem                               ;ROM memory label
+  4537                                                          putConsoleString wzROMMemSize                           ;ROM memory amount
+  4538                                                          putConsoleString czKB                                   ;Kilobytes
+  4539                                                          putConsoleString czNewLine                              ;new line
+  4540                                                          putConsoleString czBaseMem                              ;base memory label
+  4541                                                          putConsoleString wzBaseMemSize                          ;base memory size
+  4542                                                          putConsoleString czKB                                   ;Kilobytes
+  4543                                                          putConsoleString czNewLine                              ;new line
+  4544                                                          putConsoleString czExtendedMem                          ;extended memory label
+  4545                                                          putConsoleString wzExtendedMemSize                      ;extended memory size
+  4546                                                          putConsoleString czKB                                   ;Kilobytes
+  4547                                                          putConsoleString czNewLine                              ;new line
+  4548                                  .10                     putConsoleString czPrompt                               ;display input prompt
+  4549                                                          placeCursor                                             ;set CRT cursor location
+  4550                                                          getConsoleString wzConsoleInBuffer,79,1,13              ;accept keyboard input
+  4551                                                          putConsoleString czNewLine                              ;newline
+  4552                                  
+  4553                                                          mov     edx,wzConsoleInBuffer                           ;console input buffer
+  4554                                                          mov     ebx,wzConsoleToken                              ;token buffer
+  4555                                                          call    ConTakeToken                                    ;handle console input
+  4556                                                          mov     edx,wzConsoleToken                              ;token buffer
+  4557                                                          call    ConDetermineCommand                             ;determine command number
+  4558                                                          cmp     eax,ECONJMPTBLCNT                               ;valid command number?
+  4559                                                          jb      .20                                             ;yes, branch
+  4560                                  
+  4561                                                          putConsoleString czUnknownCommand                       ;display error message
+  4562                                  
+  4563                                                          jmp     .10                                             ;next command
+  4564                                  .20                     shl     eax,2                                           ;index into jump table
+  4565                                                          mov     edx,tConJmpTbl                                  ;jump table base address
+  4566                                                          mov     eax,[edx+eax]                                   ;command handler routine address
+  4567                                                          call    eax                                             ;call command handler
   4568                                                          jmp     .10                                             ;next command
-  4569                                  .20                     shl     eax,2                                           ;index into jump table
-  4570                                                          mov     edx,tConJmpTbl                                  ;jump table base address
-  4571                                                          mov     eax,[edx+eax]                                   ;command handler routine address
-  4572                                                          call    eax                                             ;call command handler
-  4573                                                          jmp     .10                                             ;next command
-  4574                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4575                                  ;
-  4576                                  ;       Routine:        ConInitializeData
-  4577                                  ;
-  4578                                  ;       Description:    This routine initializes console task variables.
+  4569                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4570                                  ;
+  4571                                  ;       Routine:        ConInitializeData
+  4572                                  ;
+  4573                                  ;       Description:    This routine initializes console task variables.
+  4574                                  ;
+  4575                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4576                                  ConInitializeData       push    ecx                                             ;save non-volatile regs
+  4577                                                          push    edi                                             ;
+  4578                                                          push    es                                              ;
   4579                                  ;
-  4580                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4581                                  ConInitializeData       push    ecx                                             ;save non-volatile regs
-  4582                                                          push    edi                                             ;
-  4583                                                          push    es                                              ;
-  4584                                  ;
-  4585                                  ;       Initialize console work areas.
-  4586                                  ;
-  4587                                                          push    EGDTOSDATA                                      ;load OS data selector ...
-  4588                                                          pop     es                                              ;... into extra segment register
-  4589                                                          mov     edi,ECONDATA                                    ;OS console data address
-  4590                                                          xor     al,al                                           ;initialization value
-  4591                                                          mov     ecx,ECONDATALEN                                 ;size of OS console data
-  4592                                                          cld                                                     ;forward strings
-  4593                                                          rep     stosb                                           ;initialize data
+  4580                                  ;       Initialize console work areas.
+  4581                                  ;
+  4582                                                          push    EGDTOSDATA                                      ;load OS data selector ...
+  4583                                                          pop     es                                              ;... into extra segment register
+  4584                                                          mov     edi,ECONDATA                                    ;OS console data address
+  4585                                                          xor     al,al                                           ;initialization value
+  4586                                                          mov     ecx,ECONDATALEN                                 ;size of OS console data
+  4587                                                          cld                                                     ;forward strings
+  4588                                                          rep     stosb                                           ;initialize data
+  4589                                  ;
+  4590                                  ;       Initialize heap size
+  4591                                  ;
+  4592                                                          mov     eax,EKRNHEAPSIZE                                ;heap size
+  4593                                                          mov     [wdConsoleHeapSize],eax                         ;set heap size
   4594                                  ;
-  4595                                  ;       Initialize heap size
+  4595                                  ;       Initialize MEMROOT structure
   4596                                  ;
-  4597                                                          mov     eax,EKRNHEAPSIZE                                ;heap size
-  4598                                                          mov     [wdConsoleHeapSize],eax                         ;set heap size
-  4599                                  ;
-  4600                                  ;       Initialize MEMROOT structure
-  4601                                  ;
-  4602                                                          mov     edi,wsConsoleMemRoot                            ;memory root structure address
-  4603                                                          mov     eax,EKRNHEAPBASE                                ;base address of heap storage
-  4604                                                          xor     ecx,ecx                                         ;zero register
-  4605                                                          mov     cl,4                                            ;count
-  4606                                                          rep     stosd                                           ;store first/last contig and free addrs
-  4607                                                          xor     eax,eax                                         ;zero register
-  4608                                                          stosd                                                   ;zero first task block
-  4609                                                          stosd                                                   ;zero last task block
-  4610                                  ;
-  4611                                  ;       Initialize MEMBLOCK structure at EMEMBASE
-  4612                                  ;
-  4613                                                          mov     edi,EKRNHEAPBASE                                ;memory block structure address
-  4614                                                          mov     eax,EMEMFREECODE                                ;free memory signature
-  4615                                                          stosd                                                   ;store signature
-  4616                                                          mov     eax,EKRNHEAPSIZE                                ;heap size
-  4617                                                          stosd                                                   ;store block size
-  4618                                                          xor     ecx,ecx                                         ;zero register
-  4619                                                          mov     cl,6                                            ;count
-  4620                                                          xor     eax,eax                                         ;zero register
-  4621                                                          rep     stosd                                           ;zero owner, reserved, pointers
-  4622                                  ;
-  4623                                  ;       Read memory sizes from ROM
-  4624                                  ;
-  4625                                                          getROMMemSize                                           ;get ROM memory size
-  4626                                                          mov     [wdROMMemSize],eax                              ;bytes reported by ROM
-  4627                                                          mov     ecx,eax                                         ;integer param
-  4628                                                          mov     edx,wzROMMemSize                                ;output buffer param
-  4629                                                          mov     bh,3                                            ;no leading zeros; thousands grouping
-  4630                                                          unsignedToDecimalString                                 ;build ASCIIZ decimal string
-  4631                                                          getBaseMemSize                                          ;get base RAM count from CMOS
-  4632                                                          mov     [wdBaseMemSize],eax                             ;save base RAM count
-  4633                                                          mov     ecx,eax                                         ;integer param
-  4634                                                          mov     edx,wzBaseMemSize                               ;output buffer param
-  4635                                                          mov     bh,3                                            ;no leading zeros; thousands grouping
-  4636                                                          unsignedToDecimalString                                 ;build ASCIIZ decimal string
-  4637                                                          getExtendedMemSize                                      ;get extended RAM count from CMOS
-  4638                                                          mov     [wdExtendedMemSize],eax                         ;save base RAM count
-  4639                                                          mov     ecx,eax                                         ;integer param
-  4640                                                          mov     edx,wzExtendedMemSize                           ;output buffer param
-  4641                                                          mov     bh,3                                            ;no leading zeros; thousands grouping
-  4642                                                          unsignedToDecimalString                                 ;build ASCIIZ decimal string
-  4643                                  ;
-  4644                                  ;       Restore and return.
-  4645                                  ;
-  4646                                                          pop     es                                              ;restore non-volatile regs
-  4647                                                          pop     edi                                             ;
-  4648                                                          pop     ecx                                             ;
-  4649                                                          ret                                                     ;return
-  4650                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4651                                  ;
-  4652                                  ;       Routine:        ConTakeToken
+  4597                                                          mov     edi,wsConsoleMemRoot                            ;memory root structure address
+  4598                                                          mov     eax,EKRNHEAPBASE                                ;base address of heap storage
+  4599                                                          xor     ecx,ecx                                         ;zero register
+  4600                                                          mov     cl,4                                            ;count
+  4601                                                          rep     stosd                                           ;store first/last contig and free addrs
+  4602                                                          xor     eax,eax                                         ;zero register
+  4603                                                          stosd                                                   ;zero first task block
+  4604                                                          stosd                                                   ;zero last task block
+  4605                                  ;
+  4606                                  ;       Initialize MEMBLOCK structure at EMEMBASE
+  4607                                  ;
+  4608                                                          mov     edi,EKRNHEAPBASE                                ;memory block structure address
+  4609                                                          mov     eax,EMEMFREECODE                                ;free memory signature
+  4610                                                          stosd                                                   ;store signature
+  4611                                                          mov     eax,EKRNHEAPSIZE                                ;heap size
+  4612                                                          stosd                                                   ;store block size
+  4613                                                          xor     ecx,ecx                                         ;zero register
+  4614                                                          mov     cl,6                                            ;count
+  4615                                                          xor     eax,eax                                         ;zero register
+  4616                                                          rep     stosd                                           ;zero owner, reserved, pointers
+  4617                                  ;
+  4618                                  ;       Read memory sizes from ROM
+  4619                                  ;
+  4620                                                          getROMMemSize                                           ;get ROM memory size
+  4621                                                          mov     [wdROMMemSize],eax                              ;bytes reported by ROM
+  4622                                                          mov     ecx,eax                                         ;integer param
+  4623                                                          mov     edx,wzROMMemSize                                ;output buffer param
+  4624                                                          mov     bh,3                                            ;no leading zeros; thousands grouping
+  4625                                                          unsignedToDecimalString                                 ;build ASCIIZ decimal string
+  4626                                                          getBaseMemSize                                          ;get base RAM count from CMOS
+  4627                                                          mov     [wdBaseMemSize],eax                             ;save base RAM count
+  4628                                                          mov     ecx,eax                                         ;integer param
+  4629                                                          mov     edx,wzBaseMemSize                               ;output buffer param
+  4630                                                          mov     bh,3                                            ;no leading zeros; thousands grouping
+  4631                                                          unsignedToDecimalString                                 ;build ASCIIZ decimal string
+  4632                                                          getExtendedMemSize                                      ;get extended RAM count from CMOS
+  4633                                                          mov     [wdExtendedMemSize],eax                         ;save base RAM count
+  4634                                                          mov     ecx,eax                                         ;integer param
+  4635                                                          mov     edx,wzExtendedMemSize                           ;output buffer param
+  4636                                                          mov     bh,3                                            ;no leading zeros; thousands grouping
+  4637                                                          unsignedToDecimalString                                 ;build ASCIIZ decimal string
+  4638                                  ;
+  4639                                  ;       Restore and return.
+  4640                                  ;
+  4641                                                          pop     es                                              ;restore non-volatile regs
+  4642                                                          pop     edi                                             ;
+  4643                                                          pop     ecx                                             ;
+  4644                                                          ret                                                     ;return
+  4645                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4646                                  ;
+  4647                                  ;       Routine:        ConTakeToken
+  4648                                  ;
+  4649                                  ;       Description:    This routine extracts the next token from the given source buffer.
+  4650                                  ;
+  4651                                  ;       In:             DS:EDX  source buffer address
+  4652                                  ;                       DS:EBX  target buffer address
   4653                                  ;
-  4654                                  ;       Description:    This routine extracts the next token from the given source buffer.
-  4655                                  ;
-  4656                                  ;       In:             DS:EDX  source buffer address
-  4657                                  ;                       DS:EBX  target buffer address
+  4654                                  ;       Out:            DS:EDX  source buffer address
+  4655                                  ;                       DS:EBX  target buffer address
+  4656                                  ;
+  4657                                  ;       Command Form:   Line    = *3( *SP 1*ALNUM )
   4658                                  ;
-  4659                                  ;       Out:            DS:EDX  source buffer address
-  4660                                  ;                       DS:EBX  target buffer address
-  4661                                  ;
-  4662                                  ;       Command Form:   Line    = *3( *SP 1*ALNUM )
-  4663                                  ;
-  4664                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4665                                  ConTakeToken            push    esi                                             ;save non-volatile regs
-  4666                                                          push    edi                                             ;
-  4667                                                          push    es                                              ;
-  4668                                                          push    ds                                              ;load data segment selector ...
-  4669                                                          pop     es                                              ;... into extra segment reg
-  4670                                                          mov     esi,edx                                         ;source buffer address
-  4671                                                          mov     edi,ebx                                         ;target buffer address
-  4672                                                          mov     byte [edi],0                                    ;null-terminate target buffer
-  4673                                                          cld                                                     ;forward strings
-  4674                                  .10                     lodsb                                                   ;load byte
-  4675                                                          cmp     al,EASCIISPACE                                  ;space?
-  4676                                                          je      .10                                             ;yes, continue
-  4677                                                          test    al,al                                           ;end of line?
-  4678                                                          jz      .40                                             ;yes, branch
-  4679                                  .20                     stosb                                                   ;store byte
-  4680                                                          lodsb                                                   ;load byte
-  4681                                                          test    al,al                                           ;end of line?
-  4682                                                          jz      .40                                             ;no, continue
-  4683                                                          cmp     al,EASCIISPACE                                  ;space?
-  4684                                                          jne     .20                                             ;no, continue
-  4685                                  .30                     lodsb                                                   ;load byte
-  4686                                                          cmp     al,EASCIISPACE                                  ;space?
-  4687                                                          je      .30                                             ;yes, continue
-  4688                                                          dec     esi                                             ;pre-position
-  4689                                  .40                     mov     byte [edi],0                                    ;terminate buffer
-  4690                                                          mov     edi,edx                                         ;source buffer address
-  4691                                  .50                     lodsb                                                   ;remaining byte
-  4692                                                          stosb                                                   ;move to front of buffer
-  4693                                                          test    al,al                                           ;end of line?
-  4694                                                          jnz     .50                                             ;no, continue
-  4695                                                          pop     es                                              ;restore non-volatile regs
-  4696                                                          pop     edi                                             ;
-  4697                                                          pop     esi                                             ;
-  4698                                                          ret                                                     ;return
-  4699                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4700                                  ;
-  4701                                  ;       Routine:        ConDetermineCommand
-  4702                                  ;
-  4703                                  ;       Description:    This routine determines the command number for the command at DS:EDX.
+  4659                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4660                                  ConTakeToken            push    esi                                             ;save non-volatile regs
+  4661                                                          push    edi                                             ;
+  4662                                                          push    es                                              ;
+  4663                                                          push    ds                                              ;load data segment selector ...
+  4664                                                          pop     es                                              ;... into extra segment reg
+  4665                                                          mov     esi,edx                                         ;source buffer address
+  4666                                                          mov     edi,ebx                                         ;target buffer address
+  4667                                                          mov     byte [edi],0                                    ;null-terminate target buffer
+  4668                                                          cld                                                     ;forward strings
+  4669                                  .10                     lodsb                                                   ;load byte
+  4670                                                          cmp     al,EASCIISPACE                                  ;space?
+  4671                                                          je      .10                                             ;yes, continue
+  4672                                                          test    al,al                                           ;end of line?
+  4673                                                          jz      .40                                             ;yes, branch
+  4674                                  .20                     stosb                                                   ;store byte
+  4675                                                          lodsb                                                   ;load byte
+  4676                                                          test    al,al                                           ;end of line?
+  4677                                                          jz      .40                                             ;no, continue
+  4678                                                          cmp     al,EASCIISPACE                                  ;space?
+  4679                                                          jne     .20                                             ;no, continue
+  4680                                  .30                     lodsb                                                   ;load byte
+  4681                                                          cmp     al,EASCIISPACE                                  ;space?
+  4682                                                          je      .30                                             ;yes, continue
+  4683                                                          dec     esi                                             ;pre-position
+  4684                                  .40                     mov     byte [edi],0                                    ;terminate buffer
+  4685                                                          mov     edi,edx                                         ;source buffer address
+  4686                                  .50                     lodsb                                                   ;remaining byte
+  4687                                                          stosb                                                   ;move to front of buffer
+  4688                                                          test    al,al                                           ;end of line?
+  4689                                                          jnz     .50                                             ;no, continue
+  4690                                                          pop     es                                              ;restore non-volatile regs
+  4691                                                          pop     edi                                             ;
+  4692                                                          pop     esi                                             ;
+  4693                                                          ret                                                     ;return
+  4694                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4695                                  ;
+  4696                                  ;       Routine:        ConDetermineCommand
+  4697                                  ;
+  4698                                  ;       Description:    This routine determines the command number for the command at DS:EDX.
+  4699                                  ;
+  4700                                  ;       input:          DS:EDX  command address
+  4701                                  ;
+  4702                                  ;       output:         EAX     >=0     = command nbr
+  4703                                  ;                               0       = unknown command
   4704                                  ;
-  4705                                  ;       input:          DS:EDX  command address
-  4706                                  ;
-  4707                                  ;       output:         EAX     >=0     = command nbr
-  4708                                  ;                               0       = unknown command
-  4709                                  ;
-  4710                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4711                                  ConDetermineCommand     push    ebx                                             ;save non-volatile regs
-  4712                                                          push    ecx                                             ;
-  4713                                                          push    esi                                             ;
-  4714                                                          push    edi                                             ;
-  4715                                  
-  4716                                                          upperCaseString                                         ;upper-case string at EDX
-  4717                                  
-  4718                                                          mov     esi,tConCmdTbl                                  ;commands table
-  4719                                                          xor     edi,edi                                         ;intialize command number
-  4720                                                          cld                                                     ;forward strings
-  4721                                  .10                     lodsb                                                   ;command length
-  4722                                                          movzx   ecx,al                                          ;command length
-  4723                                                          jecxz   .20                                             ;branch if end of table
-  4724                                                          mov     ebx,esi                                         ;table entry address
-  4725                                                          add     esi,ecx                                         ;next table entry address
-  4726                                  
-  4727                                                          compareMemory                                           ;compare byte arrays at EDX, EBX
-  4728                                  
-  4729                                                          jecxz   .20                                             ;branch if equal
-  4730                                                          inc     edi                                             ;increment command nbr
-  4731                                                          jmp     .10                                             ;repeat
-  4732                                  .20                     mov     eax,edi                                         ;command number
-  4733                                                          pop     edi                                             ;restore non-volatile regs
-  4734                                                          pop     esi                                             ;
-  4735                                                          pop     ecx                                             ;
-  4736                                                          pop     ebx                                             ;
-  4737                                                          ret                                                     ;return
-  4738                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4739                                  ;
-  4740                                  ;       Routine:        ConClear
-  4741                                  ;
-  4742                                  ;       Description:    This routine handles the CLEAR command and its CLS alias.
+  4705                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4706                                  ConDetermineCommand     push    ebx                                             ;save non-volatile regs
+  4707                                                          push    ecx                                             ;
+  4708                                                          push    esi                                             ;
+  4709                                                          push    edi                                             ;
+  4710                                  
+  4711                                                          upperCaseString                                         ;upper-case string at EDX
+  4712                                  
+  4713                                                          mov     esi,tConCmdTbl                                  ;commands table
+  4714                                                          xor     edi,edi                                         ;intialize command number
+  4715                                                          cld                                                     ;forward strings
+  4716                                  .10                     lodsb                                                   ;command length
+  4717                                                          movzx   ecx,al                                          ;command length
+  4718                                                          jecxz   .20                                             ;branch if end of table
+  4719                                                          mov     ebx,esi                                         ;table entry address
+  4720                                                          add     esi,ecx                                         ;next table entry address
+  4721                                  
+  4722                                                          compareMemory                                           ;compare byte arrays at EDX, EBX
+  4723                                  
+  4724                                                          jecxz   .20                                             ;branch if equal
+  4725                                                          inc     edi                                             ;increment command nbr
+  4726                                                          jmp     .10                                             ;repeat
+  4727                                  .20                     mov     eax,edi                                         ;command number
+  4728                                                          pop     edi                                             ;restore non-volatile regs
+  4729                                                          pop     esi                                             ;
+  4730                                                          pop     ecx                                             ;
+  4731                                                          pop     ebx                                             ;
+  4732                                                          ret                                                     ;return
+  4733                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4734                                  ;
+  4735                                  ;       Routine:        ConClear
+  4736                                  ;
+  4737                                  ;       Description:    This routine handles the CLEAR command and its CLS alias.
+  4738                                  ;
+  4739                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4740                                  ConClear                clearConsoleScreen                                      ;clear console screen
+  4741                                                          ret                                                     ;return
+  4742                                  ;-----------------------------------------------------------------------------------------------------------------------
   4743                                  ;
-  4744                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4745                                  ConClear                clearConsoleScreen                                      ;clear console screen
-  4746                                                          ret                                                     ;return
-  4747                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4748                                  ;
-  4749                                  ;       Routine:        ConExit
-  4750                                  ;
-  4751                                  ;       Description:    This routine handles the EXIT command and its SHUTDOWN and QUIT aliases.
+  4744                                  ;       Routine:        ConExit
+  4745                                  ;
+  4746                                  ;       Description:    This routine handles the EXIT command and its SHUTDOWN and QUIT aliases.
+  4747                                  ;
+  4748                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4749                                  ConExit                 resetSystem                                             ;issue system reset
+  4750                                                          ret                                                     ;return
+  4751                                  ;-----------------------------------------------------------------------------------------------------------------------
   4752                                  ;
-  4753                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4754                                  ConExit                 resetSystem                                             ;issue system reset
-  4755                                                          ret                                                     ;return
-  4756                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4757                                  ;
-  4758                                  ;       Routine:        ConFree
-  4759                                  ;
-  4760                                  ;       Description:    This routine handles the FREE command.
-  4761                                  ;
-  4762                                  ;       Input:          wzConsoleInBuffer contains parameter(s)
-  4763                                  ;
-  4764                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4765                                  ConFree                 push    ebx                                             ;save non-volatile regs
-  4766                                                          push    ecx                                             ;
-  4767                                                          push    esi                                             ;
-  4768                                                          push    edi                                             ;
-  4769                                  ;
-  4770                                  ;       Get address parameter
-  4771                                  ;
-  4772                                                          mov     edx,wzConsoleInBuffer                           ;console input buffer address (param)
-  4773                                                          mov     ebx,wzConsoleToken                              ;console command token address
-  4774                                                          call    ConTakeToken                                    ;take first param as token
-  4775                                  ;
-  4776                                  ;       Convert input parameter from hexadecimal string to binary
-  4777                                  ;
-  4778                                                          cmp     byte [wzConsoleToken],0                         ;token found?
-  4779                                                          je      .10                                             ;no, branch
-  4780                                                          mov     edx,wzConsoleToken                              ;first param as token address
-  4781                                  
-  4782                                                          hexadecimalToUnsigned                                   ;convert string token to unsigned
-  4783                                  
-  4784                                                          test    eax,eax                                         ;valid parameter?
-  4785                                                          jz      .10                                             ;no, branch
-  4786                                  ;
-  4787                                  ;       Free memory block
+  4753                                  ;       Routine:        ConFree
+  4754                                  ;
+  4755                                  ;       Description:    This routine handles the FREE command.
+  4756                                  ;
+  4757                                  ;       Input:          wzConsoleInBuffer contains parameter(s)
+  4758                                  ;
+  4759                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4760                                  ConFree                 push    ebx                                             ;save non-volatile regs
+  4761                                                          push    ecx                                             ;
+  4762                                                          push    esi                                             ;
+  4763                                                          push    edi                                             ;
+  4764                                  ;
+  4765                                  ;       Get address parameter
+  4766                                  ;
+  4767                                                          mov     edx,wzConsoleInBuffer                           ;console input buffer address (param)
+  4768                                                          mov     ebx,wzConsoleToken                              ;console command token address
+  4769                                                          call    ConTakeToken                                    ;take first param as token
+  4770                                  ;
+  4771                                  ;       Convert input parameter from hexadecimal string to binary
+  4772                                  ;
+  4773                                                          cmp     byte [wzConsoleToken],0                         ;token found?
+  4774                                                          je      .10                                             ;no, branch
+  4775                                                          mov     edx,wzConsoleToken                              ;first param as token address
+  4776                                  
+  4777                                                          hexadecimalToUnsigned                                   ;convert string token to unsigned
+  4778                                  
+  4779                                                          test    eax,eax                                         ;valid parameter?
+  4780                                                          jz      .10                                             ;no, branch
+  4781                                  ;
+  4782                                  ;       Free memory block
+  4783                                  ;
+  4784                                                          freeMemory eax                                          ;free memory
+  4785                                  
+  4786                                                          cmp     eax,-1                                          ;memory freed?
+  4787                                                          je      .10                                             ;no, branch
   4788                                  ;
-  4789                                                          freeMemory eax                                          ;free memory
-  4790                                  
-  4791                                                          cmp     eax,-1                                          ;memory freed?
-  4792                                                          je      .10                                             ;no, branch
-  4793                                  ;
-  4794                                  ;       Indicate memory freed
-  4795                                  ;
-  4796                                                          putConsoleString czOK                                   ;indicate success
-  4797                                  ;
-  4798                                  ;       Restore and return
-  4799                                  ;
-  4800                                  .10                     pop     edi                                             ;restore non-volatile regs
-  4801                                                          pop     esi                                             ;
-  4802                                                          pop     ecx                                             ;
-  4803                                                          pop     ebx                                             ;
-  4804                                                          ret                                                     ;return
-  4805                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4806                                  ;
-  4807                                  ;       Routine:        ConInt6
-  4808                                  ;
-  4809                                  ;       Description:    This routine issues an interrupt 6 to exercise the interrupt handler.
+  4789                                  ;       Indicate memory freed
+  4790                                  ;
+  4791                                                          putConsoleString czOK                                   ;indicate success
+  4792                                  ;
+  4793                                  ;       Restore and return
+  4794                                  ;
+  4795                                  .10                     pop     edi                                             ;restore non-volatile regs
+  4796                                                          pop     esi                                             ;
+  4797                                                          pop     ecx                                             ;
+  4798                                                          pop     ebx                                             ;
+  4799                                                          ret                                                     ;return
+  4800                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4801                                  ;
+  4802                                  ;       Routine:        ConInt6
+  4803                                  ;
+  4804                                  ;       Description:    This routine issues an interrupt 6 to exercise the interrupt handler.
+  4805                                  ;
+  4806                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4807                                  ConInt6                 ud2                                                     ;raise bad opcode exception
+  4808                                                          ret                                                     ;return (not executed)
+  4809                                  ;-----------------------------------------------------------------------------------------------------------------------
   4810                                  ;
-  4811                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4812                                  ConInt6                 ud2                                                     ;raise bad opcode exception
-  4813                                                          ret                                                     ;return (not executed)
-  4814                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4815                                  ;
-  4816                                  ;       Routine:        ConMalloc
-  4817                                  ;
-  4818                                  ;       Description:    This routine handles the MALLOC command.
-  4819                                  ;
-  4820                                  ;       Input:          wzConsoleInBuffer contains parameter(s)
-  4821                                  ;
-  4822                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4823                                  ConMalloc               push    ebx                                             ;save non-volatile regs
-  4824                                                          push    ecx                                             ;
-  4825                                                          push    esi                                             ;
-  4826                                                          push    edi                                             ;
-  4827                                  ;
-  4828                                  ;       Get size parameter
-  4829                                  ;
-  4830                                                          mov     edx,wzConsoleInBuffer                           ;console input buffer address (params)
-  4831                                                          mov     ebx,wzConsoleToken                              ;console command token address
-  4832                                                          call    ConTakeToken                                    ;take first param as token
-  4833                                  ;
-  4834                                  ;       Convert input parameter from decimal string to binary
-  4835                                  ;
-  4836                                                          cmp     byte [wzConsoleToken],0                         ;token found?
-  4837                                                          je      .10                                             ;no, branch
-  4838                                                          mov     edx,wzConsoleToken                              ;first param as token address
-  4839                                  
-  4840                                                          decimalToUnsigned                                       ;convert string token to unsigned
-  4841                                  
-  4842                                                          test    eax,eax                                         ;valid parameter?
-  4843                                                          jz      .10                                             ;no, branch
-  4844                                  ;
-  4845                                  ;       Allocate memory block
+  4811                                  ;       Routine:        ConMalloc
+  4812                                  ;
+  4813                                  ;       Description:    This routine handles the MALLOC command.
+  4814                                  ;
+  4815                                  ;       Input:          wzConsoleInBuffer contains parameter(s)
+  4816                                  ;
+  4817                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4818                                  ConMalloc               push    ebx                                             ;save non-volatile regs
+  4819                                                          push    ecx                                             ;
+  4820                                                          push    esi                                             ;
+  4821                                                          push    edi                                             ;
+  4822                                  ;
+  4823                                  ;       Get size parameter
+  4824                                  ;
+  4825                                                          mov     edx,wzConsoleInBuffer                           ;console input buffer address (params)
+  4826                                                          mov     ebx,wzConsoleToken                              ;console command token address
+  4827                                                          call    ConTakeToken                                    ;take first param as token
+  4828                                  ;
+  4829                                  ;       Convert input parameter from decimal string to binary
+  4830                                  ;
+  4831                                                          cmp     byte [wzConsoleToken],0                         ;token found?
+  4832                                                          je      .10                                             ;no, branch
+  4833                                                          mov     edx,wzConsoleToken                              ;first param as token address
+  4834                                  
+  4835                                                          decimalToUnsigned                                       ;convert string token to unsigned
+  4836                                  
+  4837                                                          test    eax,eax                                         ;valid parameter?
+  4838                                                          jz      .10                                             ;no, branch
+  4839                                  ;
+  4840                                  ;       Allocate memory block
+  4841                                  ;
+  4842                                                          allocateMemory eax                                      ;allocate memory
+  4843                                  
+  4844                                                          test    eax,eax                                         ;memory allocated?
+  4845                                                          jz      .10                                             ;no, branch
   4846                                  ;
-  4847                                                          allocateMemory eax                                      ;allocate memory
-  4848                                  
-  4849                                                          test    eax,eax                                         ;memory allocated?
-  4850                                                          jz      .10                                             ;no, branch
-  4851                                  ;
-  4852                                  ;       Report allocated memory block address
-  4853                                  ;
-  4854                                                          mov     edx,wzConsoleOutBuffer                          ;output buffer address
-  4855                                                          mov     ecx,eax                                         ;memory address
-  4856                                  
-  4857                                                          unsignedToHexadecimal                                   ;convert memory address to hex
-  4858                                                          putConsoleString wzConsoleOutBuffer                     ;display memory address
-  4859                                                          putConsoleString czNewLine                              ;display new line
-  4860                                  
-  4861                                  .10                     pop     edi                                             ;restore non-volatile regs
-  4862                                                          pop     esi                                             ;
-  4863                                                          pop     ecx                                             ;
-  4864                                                          pop     ebx                                             ;
-  4865                                                          ret                                                     ;return
-  4866                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4867                                  ;
-  4868                                  ;       Routine:        ConMem
-  4869                                  ;
-  4870                                  ;       Description:    This routine handles the MEMORY command and its MEM alias.
-  4871                                  ;
-  4872                                  ;       Input:          wzConsoleInBuffer contains parameter(s)
+  4847                                  ;       Report allocated memory block address
+  4848                                  ;
+  4849                                                          mov     edx,wzConsoleOutBuffer                          ;output buffer address
+  4850                                                          mov     ecx,eax                                         ;memory address
+  4851                                  
+  4852                                                          unsignedToHexadecimal                                   ;convert memory address to hex
+  4853                                                          putConsoleString wzConsoleOutBuffer                     ;display memory address
+  4854                                                          putConsoleString czNewLine                              ;display new line
+  4855                                  
+  4856                                  .10                     pop     edi                                             ;restore non-volatile regs
+  4857                                                          pop     esi                                             ;
+  4858                                                          pop     ecx                                             ;
+  4859                                                          pop     ebx                                             ;
+  4860                                                          ret                                                     ;return
+  4861                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4862                                  ;
+  4863                                  ;       Routine:        ConMem
+  4864                                  ;
+  4865                                  ;       Description:    This routine handles the MEMORY command and its MEM alias.
+  4866                                  ;
+  4867                                  ;       Input:          wzConsoleInBuffer contains parameter(s)
+  4868                                  ;
+  4869                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4870                                  ConMem                  push    ebx                                             ;save non-volatile regs
+  4871                                                          push    esi                                             ;
+  4872                                                          push    edi                                             ;
   4873                                  ;
-  4874                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4875                                  ConMem                  push    ebx                                             ;save non-volatile regs
-  4876                                                          push    esi                                             ;
-  4877                                                          push    edi                                             ;
-  4878                                  ;
-  4879                                  ;                       update the source address if a parameter is given
-  4880                                  ;
-  4881                                                          mov     edx,wzConsoleInBuffer                           ;console input buffer address (params)
-  4882                                                          mov     ebx,wzConsoleToken                              ;console command token address
-  4883                                                          call    ConTakeToken                                    ;take first param as token
-  4884                                                          cmp     byte [wzConsoleToken],0                         ;token found?
-  4885                                                          je      .10                                             ;no, branch
-  4886                                                          mov     edx,wzConsoleToken                              ;first param as token address
-  4887                                  
-  4888                                                          hexadecimalToUnsigned                                   ;convert string token to unsigned
-  4889                                  
-  4890                                                          mov     [wdConsoleMemBase],eax                          ;save console memory address
-  4891                                  ;
-  4892                                  ;                       setup source address and row count
-  4893                                  ;
-  4894                                  .10                     mov     esi,[wdConsoleMemBase]                          ;source memory address
-  4895                                                          xor     ecx,ecx                                         ;zero register
-  4896                                                          mov     cl,16                                           ;row count
-  4897                                  ;
-  4898                                  ;                       start the row with the source address in hexadecimal
-  4899                                  ;
-  4900                                  .20                     push    ecx                                             ;save remaining rows
-  4901                                                          mov     edi,wzConsoleOutBuffer                          ;output buffer address
-  4902                                                          mov     edx,edi                                         ;output buffer address
-  4903                                                          mov     ecx,esi                                         ;console memory address
-  4904                                  
-  4905                                                          unsignedToHexadecimal                                   ;convert unsigned address to hex string
-  4906                                  
-  4907                                                          add     edi,8                                           ;end of memory addr hexnum
-  4908                                                          mov     al,' '                                          ;ascii space
-  4909                                                          stosb                                                   ;store delimiter
-  4910                                  ;
-  4911                                  ;                       output 16 ASCII hexadecimal byte values for the row
-  4912                                  ;
-  4913                                                          xor     ecx,ecx                                         ;zero register
-  4914                                                          mov     cl,16                                           ;loop count
-  4915                                  .30                     push    ecx                                             ;save loop count
-  4916                                                          lodsb                                                   ;memory byte
-  4917                                                          mov     ah,al                                           ;memory byte
-  4918                                                          shr     al,4                                            ;high-order in bits 3-0
-  4919                                                          or      al,30h                                          ;apply ascii numeric zone
-  4920                                                          cmp     al,3ah                                          ;numeric range?
-  4921                                                          jb      .40                                             ;yes, skip ahead
-  4922                                                          add     al,7                                            ;adjust ascii for 'A'-'F'
-  4923                                  .40                     stosb                                                   ;store ascii hexadecimal of high-order
-  4924                                                          mov     al,ah                                           ;low-order in bits 3-0
-  4925                                                          and     al,0fh                                          ;mask out high-order bits
-  4926                                                          or      al,30h                                          ;apply ascii numeric zone
-  4927                                                          cmp     al,3ah                                          ;numeric range?
-  4928                                                          jb      .50                                             ;yes, skip ahead
-  4929                                                          add     al,7                                            ;adjust ascii for 'A'-'F'
-  4930                                  .50                     stosb                                                   ;store ascii hexadecimal of low-order
-  4931                                                          mov     al,' '                                          ;ascii space
-  4932                                                          stosb                                                   ;store ascii space delimiter
-  4933                                                          pop     ecx                                             ;loop count
-  4934                                                          loop    .30                                             ;next
-  4935                                  ;
-  4936                                  ;                       output printable ASCII character section for the row
-  4937                                  ;
-  4938                                                          sub     esi,16                                          ;reset source pointer
-  4939                                                          mov     cl,16                                           ;loop count
-  4940                                  .60                     lodsb                                                   ;source byte
-  4941                                                          cmp     al,32                                           ;printable? (low-range test)
-  4942                                                          jb      .70                                             ;no, skip ahead
-  4943                                                          cmp     al,128                                          ;printable? (high-range test)
-  4944                                                          jb      .80                                             ;yes, skip ahead
-  4945                                  .70                     mov     al,' '                                          ;display space instead of printable
-  4946                                  .80                     stosb                                                   ;store printable ascii byte
-  4947                                                          loop    .60                                             ;next source byte
-  4948                                                          xor     al,al                                           ;nul-terminator
-  4949                                                          stosb                                                   ;terminate output line
+  4874                                  ;                       update the source address if a parameter is given
+  4875                                  ;
+  4876                                                          mov     edx,wzConsoleInBuffer                           ;console input buffer address (params)
+  4877                                                          mov     ebx,wzConsoleToken                              ;console command token address
+  4878                                                          call    ConTakeToken                                    ;take first param as token
+  4879                                                          cmp     byte [wzConsoleToken],0                         ;token found?
+  4880                                                          je      .10                                             ;no, branch
+  4881                                                          mov     edx,wzConsoleToken                              ;first param as token address
+  4882                                  
+  4883                                                          hexadecimalToUnsigned                                   ;convert string token to unsigned
+  4884                                  
+  4885                                                          mov     [wdConsoleMemBase],eax                          ;save console memory address
+  4886                                  ;
+  4887                                  ;                       setup source address and row count
+  4888                                  ;
+  4889                                  .10                     mov     esi,[wdConsoleMemBase]                          ;source memory address
+  4890                                                          xor     ecx,ecx                                         ;zero register
+  4891                                                          mov     cl,16                                           ;row count
+  4892                                  ;
+  4893                                  ;                       start the row with the source address in hexadecimal
+  4894                                  ;
+  4895                                  .20                     push    ecx                                             ;save remaining rows
+  4896                                                          mov     edi,wzConsoleOutBuffer                          ;output buffer address
+  4897                                                          mov     edx,edi                                         ;output buffer address
+  4898                                                          mov     ecx,esi                                         ;console memory address
+  4899                                  
+  4900                                                          unsignedToHexadecimal                                   ;convert unsigned address to hex string
+  4901                                  
+  4902                                                          add     edi,8                                           ;end of memory addr hexnum
+  4903                                                          mov     al,' '                                          ;ascii space
+  4904                                                          stosb                                                   ;store delimiter
+  4905                                  ;
+  4906                                  ;                       output 16 ASCII hexadecimal byte values for the row
+  4907                                  ;
+  4908                                                          xor     ecx,ecx                                         ;zero register
+  4909                                                          mov     cl,16                                           ;loop count
+  4910                                  .30                     push    ecx                                             ;save loop count
+  4911                                                          lodsb                                                   ;memory byte
+  4912                                                          mov     ah,al                                           ;memory byte
+  4913                                                          shr     al,4                                            ;high-order in bits 3-0
+  4914                                                          or      al,30h                                          ;apply ascii numeric zone
+  4915                                                          cmp     al,3ah                                          ;numeric range?
+  4916                                                          jb      .40                                             ;yes, skip ahead
+  4917                                                          add     al,7                                            ;adjust ascii for 'A'-'F'
+  4918                                  .40                     stosb                                                   ;store ascii hexadecimal of high-order
+  4919                                                          mov     al,ah                                           ;low-order in bits 3-0
+  4920                                                          and     al,0fh                                          ;mask out high-order bits
+  4921                                                          or      al,30h                                          ;apply ascii numeric zone
+  4922                                                          cmp     al,3ah                                          ;numeric range?
+  4923                                                          jb      .50                                             ;yes, skip ahead
+  4924                                                          add     al,7                                            ;adjust ascii for 'A'-'F'
+  4925                                  .50                     stosb                                                   ;store ascii hexadecimal of low-order
+  4926                                                          mov     al,' '                                          ;ascii space
+  4927                                                          stosb                                                   ;store ascii space delimiter
+  4928                                                          pop     ecx                                             ;loop count
+  4929                                                          loop    .30                                             ;next
+  4930                                  ;
+  4931                                  ;                       output printable ASCII character section for the row
+  4932                                  ;
+  4933                                                          sub     esi,16                                          ;reset source pointer
+  4934                                                          mov     cl,16                                           ;loop count
+  4935                                  .60                     lodsb                                                   ;source byte
+  4936                                                          cmp     al,32                                           ;printable? (low-range test)
+  4937                                                          jb      .70                                             ;no, skip ahead
+  4938                                                          cmp     al,128                                          ;printable? (high-range test)
+  4939                                                          jb      .80                                             ;yes, skip ahead
+  4940                                  .70                     mov     al,' '                                          ;display space instead of printable
+  4941                                  .80                     stosb                                                   ;store printable ascii byte
+  4942                                                          loop    .60                                             ;next source byte
+  4943                                                          xor     al,al                                           ;nul-terminator
+  4944                                                          stosb                                                   ;terminate output line
+  4945                                  ;
+  4946                                  ;                       display constructed output buffer and newline
+  4947                                  ;
+  4948                                                          putConsoleString wzConsoleOutBuffer                     ;display constructed output
+  4949                                                          putConsoleString czNewLine                              ;display new line
   4950                                  ;
-  4951                                  ;                       display constructed output buffer and newline
+  4951                                  ;                       repeat until all lines displayed and preserve source address
   4952                                  ;
-  4953                                                          putConsoleString wzConsoleOutBuffer                     ;display constructed output
-  4954                                                          putConsoleString czNewLine                              ;display new line
-  4955                                  ;
-  4956                                  ;                       repeat until all lines displayed and preserve source address
-  4957                                  ;
-  4958                                                          pop     ecx                                             ;remaining rows
-  4959                                                          loop    .20                                             ;next row
-  4960                                                          mov     [wdConsoleMemBase],esi                          ;update console memory address
-  4961                                                          pop     edi                                             ;restore regs
-  4962                                                          pop     esi                                             ;
-  4963                                                          pop     ebx                                             ;
-  4964                                                          ret                                                     ;return
-  4965                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4966                                  ;
-  4967                                  ;       Routine:        ConVersion
-  4968                                  ;
-  4969                                  ;       Description:    This routine handles the VERSION command and its alias, VER.
+  4953                                                          pop     ecx                                             ;remaining rows
+  4954                                                          loop    .20                                             ;next row
+  4955                                                          mov     [wdConsoleMemBase],esi                          ;update console memory address
+  4956                                                          pop     edi                                             ;restore regs
+  4957                                                          pop     esi                                             ;
+  4958                                                          pop     ebx                                             ;
+  4959                                                          ret                                                     ;return
+  4960                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4961                                  ;
+  4962                                  ;       Routine:        ConVersion
+  4963                                  ;
+  4964                                  ;       Description:    This routine handles the VERSION command and its alias, VER.
+  4965                                  ;
+  4966                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4967                                  ConVersion              putConsoleString czTitle                                ;display version message
+  4968                                                          ret                                                     ;return
+  4969                                  ;-----------------------------------------------------------------------------------------------------------------------
   4970                                  ;
-  4971                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4972                                  ConVersion              putConsoleString czTitle                                ;display version message
-  4973                                                          ret                                                     ;return
-  4974                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4975                                  ;
-  4976                                  ;       Tables
-  4977                                  ;
-  4978                                  ;-----------------------------------------------------------------------------------------------------------------------
-  4979                                                                                                                  ;---------------------------------------
-  4980                                                                                                                  ;  Command Jump Table
-  4981                                                                                                                  ;---------------------------------------
-  4982                                  tConJmpTbl              equ     $                                               ;command jump table
-  4983                                                          dd      ConExit         - ConCode                       ;shutdown command routine offset
-  4984                                                          dd      ConVersion      - ConCode                       ;version command routine offset
-  4985                                                          dd      ConMalloc       - ConCode                       ;malloc command routine offset
-  4986                                                          dd      ConMem          - ConCode                       ;memory command routine offset
-  4987                                                          dd      ConClear        - ConCode                       ;clear command routine offset
-  4988                                                          dd      ConExit         - ConCode                       ;exit command routine offset
-  4989                                                          dd      ConFree         - ConCode                       ;free command routine offset
-  4990                                                          dd      ConInt6         - ConCode                       ;int6 command routine offset
-  4991                                                          dd      ConExit         - ConCode                       ;quit command routine offset
-  4992                                                          dd      ConClear        - ConCode                       ;cls command routine offset
-  4993                                                          dd      ConMem          - ConCode                       ;mem command routine offset
-  4994                                                          dd      ConVersion      - ConCode                       ;ver command routine offset
-  4995                                  ECONJMPTBLL             equ     ($-tConJmpTbl)                                  ;table length
-  4996                                  ECONJMPTBLCNT           equ     ECONJMPTBLL/4                                   ;table entries
-  4997                                                                                                                  ;---------------------------------------
-  4998                                                                                                                  ;  Command Name Table
-  4999                                                                                                                  ;---------------------------------------
-  5000                                  tConCmdTbl              equ     $                                               ;command name table
-  5001                                                          db      9,"SHUTDOWN",0                                  ;shutdown command
-  5002                                                          db      8,"VERSION",0                                   ;version command
-  5003                                                          db      7,"MALLOC",0                                    ;malloc command
-  5004                                                          db      7,"MEMORY",0                                    ;memory command
-  5005                                                          db      6,"CLEAR",0                                     ;clear command
-  5006                                                          db      5,"EXIT",0                                      ;exit command
-  5007                                                          db      5,"FREE",0                                      ;free command
-  5008                                                          db      5,"INT6",0                                      ;int6 command
-  5009                                                          db      5,"QUIT",0                                      ;quit command
-  5010                                                          db      4,"CLS",0                                       ;cls command
-  5011                                                          db      4,"MEM",0                                       ;mem command
-  5012                                                          db      4,"VER",0                                       ;ver command
-  5013                                                          db      0                                               ;end of table
-  5014                                  ;-----------------------------------------------------------------------------------------------------------------------
-  5015                                  ;
-  5016                                  ;       Constants
-  5017                                  ;
-  5018                                  ;-----------------------------------------------------------------------------------------------------------------------
-  5019                                  czBaseMem               db      "Base memory: ",0                               ;base memory from BIOS
-  5020                                  czExtendedMem           db      "Extended memory: ",0                           ;extended memory from BIOS
-  5021                                  czKB                    db      "KB",0                                          ;Kilobytes
-  5022                                  czNewLine               db      13,10,0                                         ;new line string
-  5023                                  czOK                    db      "ok",13,10,0                                    ;ok string
-  5024                                  czPrompt                db      ":",0                                           ;prompt string
-  5025                                  czROMMem                db      "Base memory below EBDA (Int 12h): ",0          ;memory reported by ROM
-  5026                                  czTitle                 db      "Custom Operating System 1.0",13,10,0           ;version string
-  5027                                  czUnknownCommand        db      "Unknown command",13,10,0                       ;unknown command response string
-  5028                                                          times   4096-($-$$) db 0h                               ;zero fill to end of section
-  5029                                  %endif
-  5030                                  %ifdef BUILDDISK
-  5031                                  ;-----------------------------------------------------------------------------------------------------------------------
-  5032                                  ;
-  5033                                  ;       Free Disk Space                                                         @disk: 009600   @mem:  n/a
-  5034                                  ;
-  5035                                  ;       Following the convention introduced by DOS, we use the value 'F6' to indicate unused floppy disk storage.
-  5036                                  ;
-  5037                                  ;-----------------------------------------------------------------------------------------------------------------------
-  5038                                  section                 unused                                                  ;unused disk space
-  5039                                                          times   EBOOTDISKBYTES-09600h db 0F6h                   ;fill to end of disk image
-  5040                                  %endif
-  5041                                  ;=======================================================================================================================
-  5042                                  ;
-  5043                                  ;       End of Program Code
-  5044                                  ;
-  5045                                  ;=======================================================================================================================
+  4971                                  ;       Tables
+  4972                                  ;
+  4973                                  ;-----------------------------------------------------------------------------------------------------------------------
+  4974                                                                                                                  ;---------------------------------------
+  4975                                                                                                                  ;  Command Jump Table
+  4976                                                                                                                  ;---------------------------------------
+  4977                                  tConJmpTbl              equ     $                                               ;command jump table
+  4978                                                          dd      ConExit         - ConCode                       ;shutdown command routine offset
+  4979                                                          dd      ConVersion      - ConCode                       ;version command routine offset
+  4980                                                          dd      ConMalloc       - ConCode                       ;malloc command routine offset
+  4981                                                          dd      ConMem          - ConCode                       ;memory command routine offset
+  4982                                                          dd      ConClear        - ConCode                       ;clear command routine offset
+  4983                                                          dd      ConExit         - ConCode                       ;exit command routine offset
+  4984                                                          dd      ConFree         - ConCode                       ;free command routine offset
+  4985                                                          dd      ConInt6         - ConCode                       ;int6 command routine offset
+  4986                                                          dd      ConExit         - ConCode                       ;quit command routine offset
+  4987                                                          dd      ConClear        - ConCode                       ;cls command routine offset
+  4988                                                          dd      ConMem          - ConCode                       ;mem command routine offset
+  4989                                                          dd      ConVersion      - ConCode                       ;ver command routine offset
+  4990                                  ECONJMPTBLL             equ     ($-tConJmpTbl)                                  ;table length
+  4991                                  ECONJMPTBLCNT           equ     ECONJMPTBLL/4                                   ;table entries
+  4992                                                                                                                  ;---------------------------------------
+  4993                                                                                                                  ;  Command Name Table
+  4994                                                                                                                  ;---------------------------------------
+  4995                                  tConCmdTbl              equ     $                                               ;command name table
+  4996                                                          db      9,"SHUTDOWN",0                                  ;shutdown command
+  4997                                                          db      8,"VERSION",0                                   ;version command
+  4998                                                          db      7,"MALLOC",0                                    ;malloc command
+  4999                                                          db      7,"MEMORY",0                                    ;memory command
+  5000                                                          db      6,"CLEAR",0                                     ;clear command
+  5001                                                          db      5,"EXIT",0                                      ;exit command
+  5002                                                          db      5,"FREE",0                                      ;free command
+  5003                                                          db      5,"INT6",0                                      ;int6 command
+  5004                                                          db      5,"QUIT",0                                      ;quit command
+  5005                                                          db      4,"CLS",0                                       ;cls command
+  5006                                                          db      4,"MEM",0                                       ;mem command
+  5007                                                          db      4,"VER",0                                       ;ver command
+  5008                                                          db      0                                               ;end of table
+  5009                                  ;-----------------------------------------------------------------------------------------------------------------------
+  5010                                  ;
+  5011                                  ;       Constants
+  5012                                  ;
+  5013                                  ;-----------------------------------------------------------------------------------------------------------------------
+  5014                                  czBaseMem               db      "Base memory: ",0                               ;base memory from BIOS
+  5015                                  czExtendedMem           db      "Extended memory: ",0                           ;extended memory from BIOS
+  5016                                  czKB                    db      "KB",0                                          ;Kilobytes
+  5017                                  czNewLine               db      13,10,0                                         ;new line string
+  5018                                  czOK                    db      "ok",13,10,0                                    ;ok string
+  5019                                  czPrompt                db      ":",0                                           ;prompt string
+  5020                                  czROMMem                db      "Base memory below EBDA (Int 12h): ",0          ;memory reported by ROM
+  5021                                  czTitle                 db      "Custom Operating System 1.0",13,10,0           ;version string
+  5022                                  czUnknownCommand        db      "Unknown command",13,10,0                       ;unknown command response string
+  5023                                                          times   4096-($-$$) db 0h                               ;zero fill to end of section
+  5024                                  %endif
+  5025                                  %ifdef BUILDDISK
+  5026                                  ;-----------------------------------------------------------------------------------------------------------------------
+  5027                                  ;
+  5028                                  ;       Free Disk Space                                                         @disk: 009600   @mem:  n/a
+  5029                                  ;
+  5030                                  ;       Following the convention introduced by DOS, we use the value 'F6' to indicate unused floppy disk storage.
+  5031                                  ;
+  5032                                  ;-----------------------------------------------------------------------------------------------------------------------
+  5033                                  section                 unused                                                  ;unused disk space
+  5034                                                          times   EBOOTDISKBYTES-09600h db 0F6h                   ;fill to end of disk image
+  5035                                  %endif
+  5036                                  ;=======================================================================================================================
+  5037                                  ;
+  5038                                  ;       End of Program Code
+  5039                                  ;
+  5040                                  ;=======================================================================================================================

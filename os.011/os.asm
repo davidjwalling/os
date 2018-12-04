@@ -273,12 +273,12 @@ EX86DESCLEN             equ     8                                               
 ;       The Motorola MC 146818 was the original real-time clock in PCs.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-ERTCREGPORT             equ     70h                                             ;register select port
-ERTCDATAPORT            equ     71h                                             ;data port
-ERTCBASERAMLO           equ     15h                                             ;base RAM low
-ERTCBASERAMHI           equ     16H                                             ;base RAM high
-ERTCEXTRAMLO            equ     17H                                             ;extended RAM low
-ERTCEXTRAMHI            equ     18H                                             ;extended RAM high
+ERTCREGPORT             equ     070h                                            ;register select port
+ERTCDATAPORT            equ     071h                                            ;data port
+ERTCBASERAMLO           equ     015h                                            ;base RAM low
+ERTCBASERAMHI           equ     016h                                            ;base RAM high
+ERTCEXTRAMLO            equ     017h                                            ;extended RAM low
+ERTCEXTRAMHI            equ     018h                                            ;extended RAM high
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       x86 Descriptor Access Codes                                             EX86ACC...
@@ -4244,7 +4244,6 @@ GetBaseMemSize          xor     eax,eax                                         
                         mov     al,ERTCBASERAMLO                                ;base RAM low register
                         out     ERTCREGPORT,al                                  ;select base RAM low register
                         in      al,ERTCDATAPORT                                 ;read base RAM low (KB)
-                        ;shl    eax,10                                          ;kilobytes to bytes
                         ret                                                     ;return to caller
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -4257,15 +4256,12 @@ GetBaseMemSize          xor     eax,eax                                         
 ;-----------------------------------------------------------------------------------------------------------------------
 GetExtendedMemSize      xor     eax,eax                                         ;zero register
                         mov     al,ERTCEXTRAMHI                                 ;extended RAM high register
-                        mov     al,31h
                         out     ERTCREGPORT,al                                  ;select extended RAM high register
                         in      al,ERTCDATAPORT                                 ;read extended RAM high (KB)
                         mov     ah,al                                           ;save extended RAM high
                         mov     al,ERTCEXTRAMLO                                 ;extended RAM low register
-                        mov     al,30h
                         out     ERTCREGPORT,al                                  ;select extended RAM low register
                         in      al,ERTCDATAPORT                                 ;read extended RAM low (KB)
-                        ;shl    eax,10                                          ;kilobytes to bytes
                         ret                                                     ;return to caller
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -4278,7 +4274,6 @@ GetExtendedMemSize      xor     eax,eax                                         
 ;-----------------------------------------------------------------------------------------------------------------------
 GetROMMemSize           xor     eax,eax                                         ;zero register
                         mov     ax,[wwROMMemSize]                               ;memory size (KB) as returned by INT 12h
-                        ;shl    eax,10                                          ;memory size in bytes
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
