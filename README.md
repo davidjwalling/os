@@ -30,16 +30,26 @@ Part 2.			Interrupts, Messages and Commands
 	os.007		Add support for "clear", "cls", "ver", "version", "shutdown", "quit" and "exit" commands.
 	os.008		Add an "int6" command to demonstrate CPU interrupt handling.
 
-Part 3.			Memory, Clock and Task
+Part 3.			Memory and Clock
 
 	os.009		Add support for "mem" and "memory" commands to display memory across the lower 4GB of address space.
 	os.010		Add simple memory allocation and deallocation routines and "malloc" and "free" test routines.
-	os.011		Add Real-Time Clock (RTC) port and ROM memory size access, and "date" and "time" commands.
-	os.012		Add a second task and IRQ0-driven task switching.
+	os.011		Add memory-size reporting from BIOS and Real-Time Clock (RTC) chip.
+	os.012		Add "date", "time" and related commands with RTC chip support.
 
 Part 4.			Network Adapter
 
 	os.013		Add logic to probe PCI devices and display using the "pciprobe" or "lspci" commands.
+	os.014		Add code to initialize and reset discovered PCI network adapter.
+	os.015		Add code to send an Ethernet frame.
+	os.016		Add code to receive an Ethernet frame.
+
+Part 5.			Tasks
+
+	os.017		Add a second task manually and IRQ0-driven task switching.
+	os.018		Add support to load a task from disk.
+	os.019		Add commands to start, stop and list tasks.
+	os.020		Add code to configure tasks to run on start-up.
 
 ## Compilation
 
