@@ -600,22 +600,22 @@
    600                                  ECONDATA                equ     ($)
    601 00000800 <res 00000004>          wdConsoleMemBase        resd    1                                               ;console memory address
    602 00000804 <res 00000004>          wdConsoleHeapSize       resd    1                                               ;kernel heap size
-   603 00000808 <res 00000018>          wsConsoleMemRoot        resb    EMEMROOTLEN                                     ;kernel base memory map
-   604 00000820 <res 00000001>          wbConsoleColumn         resb    1                                               ;console column
-   605 00000821 <res 00000001>          wbConsoleRow            resb    1                                               ;console row
-   606 00000822 <res 00000001>          wbConsoleShift          resb    1                                               ;console shift flags
-   607 00000823 <res 00000001>          wbConsoleLock           resb    1                                               ;console lock flags
-   608 00000824 <res 00000001>          wbConsoleStatus         resb    1                                               ;controller status
-   609 00000825 <res 00000001>          wbConsoleScan0          resb    1                                               ;scan code
-   610 00000826 <res 00000001>          wbConsoleScan1          resb    1                                               ;scan code
-   611 00000827 <res 00000001>          wbConsoleScan2          resb    1                                               ;scan code
-   612 00000828 <res 00000001>          wbConsoleScan3          resb    1                                               ;scan code
-   613 00000829 <res 00000001>          wbConsoleScan4          resb    1                                               ;scan code
-   614 0000082A <res 00000001>          wbConsoleScan5          resb    1                                               ;scan code
-   615 0000082B <res 00000001>          wbConsoleChar           resb    1                                               ;ASCII code
-   616 0000082C <res 00000050>          wzConsoleInBuffer       resb    80                                              ;command input buffer
-   617 0000087C <res 00000050>          wzConsoleToken          resb    80                                              ;token buffer
-   618 000008CC <res 00000050>          wzConsoleOutBuffer      resb    80                                              ;response output buffer
+   603 00000808 <res 00000001>          wbConsoleColumn         resb    1                                               ;console column
+   604 00000809 <res 00000001>          wbConsoleRow            resb    1                                               ;console row
+   605 0000080A <res 00000001>          wbConsoleShift          resb    1                                               ;console shift flags
+   606 0000080B <res 00000001>          wbConsoleLock           resb    1                                               ;console lock flags
+   607 0000080C <res 00000001>          wbConsoleStatus         resb    1                                               ;controller status
+   608 0000080D <res 00000001>          wbConsoleScan0          resb    1                                               ;scan code
+   609 0000080E <res 00000001>          wbConsoleScan1          resb    1                                               ;scan code
+   610 0000080F <res 00000001>          wbConsoleScan2          resb    1                                               ;scan code
+   611 00000810 <res 00000001>          wbConsoleScan3          resb    1                                               ;scan code
+   612 00000811 <res 00000001>          wbConsoleScan4          resb    1                                               ;scan code
+   613 00000812 <res 00000001>          wbConsoleScan5          resb    1                                               ;scan code
+   614 00000813 <res 00000001>          wbConsoleChar           resb    1                                               ;ASCII code
+   615 00000814 <res 00000050>          wzConsoleInBuffer       resb    80                                              ;command input buffer
+   616 00000864 <res 00000050>          wzConsoleToken          resb    80                                              ;token buffer
+   617 000008B4 <res 00000050>          wzConsoleOutBuffer      resb    80                                              ;response output buffer
+   618 00000904 <res 00000018>          wsConsoleMemRoot        resb    EMEMROOTLEN                                     ;kernel base memory map
    619                                  ECONDATALEN             equ     ($-ECONDATA)                                    ;size of console data area
    620                                  ;-----------------------------------------------------------------------------------------------------------------------
    621                                  ;
@@ -2568,23 +2568,23 @@
   2396 00000586 6A18                                            push    EGDTOSDATA                                      ;load OS data selector ...
   2397 00000588 1F                                              pop     ds                                              ;... into data segment register
   2398 00000589 30C0                                            xor     al,al                                           ;zero
-  2399 0000058B A225080000                                      mov     [wbConsoleScan0],al                             ;clear scan code 0
-  2400 00000590 A226080000                                      mov     [wbConsoleScan1],al                             ;clear scan code 1
-  2401 00000595 A227080000                                      mov     [wbConsoleScan2],al                             ;clear scan code 2
-  2402 0000059A A228080000                                      mov     [wbConsoleScan3],al                             ;clear scan code 3
-  2403 0000059F A229080000                                      mov     [wbConsoleScan4],al                             ;clear scan code 4
-  2404 000005A4 A22A080000                                      mov     [wbConsoleScan5],al                             ;clear scan code 5
+  2399 0000058B A20D080000                                      mov     [wbConsoleScan0],al                             ;clear scan code 0
+  2400 00000590 A20E080000                                      mov     [wbConsoleScan1],al                             ;clear scan code 1
+  2401 00000595 A20F080000                                      mov     [wbConsoleScan2],al                             ;clear scan code 2
+  2402 0000059A A210080000                                      mov     [wbConsoleScan3],al                             ;clear scan code 3
+  2403 0000059F A211080000                                      mov     [wbConsoleScan4],al                             ;clear scan code 4
+  2404 000005A4 A212080000                                      mov     [wbConsoleScan5],al                             ;clear scan code 5
   2405 000005A9 B020                                            mov     al,' '                                          ;space
-  2406 000005AB A22B080000                                      mov     [wbConsoleChar],al                              ;set character to space
+  2406 000005AB A213080000                                      mov     [wbConsoleChar],al                              ;set character to space
   2407 000005B0 B080                                            mov     al,EKEYFTIMEOUT                                 ;controller timeout flag
   2408 000005B2 F6D0                                            not     al                                              ;controller timeout mask
-  2409 000005B4 200524080000                                    and     [wbConsoleStatus],al                            ;clear controller timeout flag
-  2410 000005BA 8A1D22080000                                    mov     bl,[wbConsoleShift]                             ;shift flags
-  2411 000005C0 8A3D23080000                                    mov     bh,[wbConsoleLock]                              ;lock flags
+  2409 000005B4 20050C080000                                    and     [wbConsoleStatus],al                            ;clear controller timeout flag
+  2410 000005BA 8A1D0A080000                                    mov     bl,[wbConsoleShift]                             ;shift flags
+  2411 000005C0 8A3D0B080000                                    mov     bh,[wbConsoleLock]                              ;lock flags
   2412 000005C6 E8750A0000                                      call    WaitForKeyOutBuffer                             ;controller timeout?
   2413 000005CB 0F84F3010000                                    jz      irq1.140                                        ;yes, skip ahead
   2414 000005D1 E460                                            in      al,EKEYBPORTDATA                                ;read scan code 0
-  2415 000005D3 A225080000                                      mov     [wbConsoleScan0],al                             ;save scan code 0
+  2415 000005D3 A20D080000                                      mov     [wbConsoleScan0],al                             ;save scan code 0
   2416 000005D8 88C4                                            mov     ah,al                                           ;copy scan code 0
   2417 000005DA B002                                            mov     al,EKEYFSHIFTLEFT                               ;left shift flag
   2418 000005DC 80FC2A                                          cmp     ah,EKEYBSHIFTLDOWN                              ;left shift key down code?
@@ -2620,7 +2620,7 @@
   2448 00000654 E8E7090000                                      call    WaitForKeyOutBuffer                             ;controller timeout?
   2449 00000659 0F8465010000                                    jz      irq1.140                                        ;yes, skip ahead
   2450 0000065F E460                                            in      al,EKEYBPORTDATA                                ;read scan code 1
-  2451 00000661 A226080000                                      mov     [wbConsoleScan1],al                             ;save scan code 1
+  2451 00000661 A20E080000                                      mov     [wbConsoleScan1],al                             ;save scan code 1
   2452 00000666 88C4                                            mov     ah,al                                           ;copy scan code 1
   2453 00000668 B008                                            mov     al,EKEYFCTRLRIGHT                               ;right control flag
   2454 0000066A 80FC1D                                          cmp     ah,EKEYBCTRLDOWN                                ;control key down code?
@@ -2643,11 +2643,11 @@
   2471 0000069C E89F090000              irq1.10                 call    WaitForKeyOutBuffer                             ;controller timeout?
   2472 000006A1 0F841D010000                                    jz      irq1.140                                        ;yes, skip ahead
   2473 000006A7 E460                                            in      al,EKEYBPORTDATA                                ;read scan code 2
-  2474 000006A9 A227080000                                      mov     [wbConsoleScan2],al                             ;save scan code 2
+  2474 000006A9 A20F080000                                      mov     [wbConsoleScan2],al                             ;save scan code 2
   2475 000006AE E88D090000                                      call    WaitForKeyOutBuffer                             ;controller timeout?
   2476 000006B3 0F840B010000                                    jz      irq1.140                                        ;yes, skip ahead
   2477 000006B9 E460                                            in      al,EKEYBPORTDATA                                ;read scan code 3
-  2478 000006BB A228080000                                      mov     [wbConsoleScan3],al                             ;read scan code 3
+  2478 000006BB A210080000                                      mov     [wbConsoleScan3],al                             ;read scan code 3
   2479 000006C0 E907010000              irq1.20                 jmp     irq1.150                                        ;finish keyboard handling
   2480 000006C5 08C3                    irq1.30                 or      bl,al                                           ;set shift flag
   2481 000006C7 EB0D                                            jmp     irq1.60                                         ;skip ahead
@@ -2656,8 +2656,8 @@
   2484 000006CD EB07                                            jmp     irq1.60                                         ;skip ahead
   2485 000006CF 30C7                    irq1.50                 xor     bh,al                                           ;toggle lock flag
   2486 000006D1 E83B090000                                      call    SetKeyboardLamps                                ;update keyboard lamps
-  2487 000006D6 881D22080000            irq1.60                 mov     [wbConsoleShift],bl                             ;save shift flags
-  2488 000006DC 883D23080000                                    mov     [wbConsoleLock],bh                              ;save lock flags
+  2487 000006D6 881D0A080000            irq1.60                 mov     [wbConsoleShift],bl                             ;save shift flags
+  2488 000006DC 883D0B080000                                    mov     [wbConsoleLock],bh                              ;save lock flags
   2489 000006E2 E8C0060000                                      call    PutConsoleOIAShift                              ;update OIA indicators
   2490 000006E7 E9E0000000                                      jmp     irq1.150                                        ;finish keyboard handling
   2491 000006EC 80FCE1                  irq1.70                 cmp     ah,EKEYBCODEEXT1                                ;extended scan code 1?
@@ -2665,26 +2665,26 @@
   2493 000006F1 E84A090000                                      call    WaitForKeyOutBuffer                             ;controller timeout?
   2494 000006F6 0F84C8000000                                    jz      irq1.140                                        ;yes, skip ahead
   2495 000006FC E460                                            in      al,EKEYBPORTDATA                                ;read scan code 1
-  2496 000006FE A226080000                                      mov     [wbConsoleScan1],al                             ;save scan code 1
+  2496 000006FE A20E080000                                      mov     [wbConsoleScan1],al                             ;save scan code 1
   2497 00000703 88C4                                            mov     ah,al                                           ;copy scan code 1
   2498 00000705 80FC1D                                          cmp     ah,EKEYBPAUSEDOWN                               ;pause key down code?
   2499 00000708 0F85BE000000                                    jne     irq1.150                                        ;no, finish keyboard handling
   2500 0000070E E82D090000                                      call    WaitForKeyOutBuffer                             ;controller timeout?
   2501 00000713 0F84AB000000                                    jz      irq1.140                                        ;yes, skip ahead
   2502 00000719 E460                                            in      al,EKEYBPORTDATA                                ;read scan code 2
-  2503 0000071B A227080000                                      mov     [wbConsoleScan2],al                             ;save scan code 2
+  2503 0000071B A20F080000                                      mov     [wbConsoleScan2],al                             ;save scan code 2
   2504 00000720 E81B090000                                      call    WaitForKeyOutBuffer                             ;controller timeout?
   2505 00000725 0F8499000000                                    jz      irq1.140                                        ;yes, skip ahead
   2506 0000072B E460                                            in      al,EKEYBPORTDATA                                ;read scan code 3
-  2507 0000072D A228080000                                      mov     [wbConsoleScan3],al                             ;save scan code 3
+  2507 0000072D A210080000                                      mov     [wbConsoleScan3],al                             ;save scan code 3
   2508 00000732 E809090000                                      call    WaitForKeyOutBuffer                             ;controller timeout?
   2509 00000737 0F8487000000                                    jz      irq1.140                                        ;yes, skip ahead
   2510 0000073D E460                                            in      al,EKEYBPORTDATA                                ;read scan code 4
-  2511 0000073F A229080000                                      mov     [wbConsoleScan4],al                             ;save scan code 4
+  2511 0000073F A211080000                                      mov     [wbConsoleScan4],al                             ;save scan code 4
   2512 00000744 E8F7080000                                      call    WaitForKeyOutBuffer                             ;controller timeout?
   2513 00000749 7479                                            jz      irq1.140                                        ;yes, skip ahead
   2514 0000074B E460                                            in      al,EKEYBPORTDATA                                ;read scan code 5
-  2515 0000074D A22A080000                                      mov     [wbConsoleScan5],al                             ;save scan code 5
+  2515 0000074D A212080000                                      mov     [wbConsoleScan5],al                             ;save scan code 5
   2516 00000752 EB78                                            jmp     irq1.150                                        ;continue
   2517 00000754 30C0                    irq1.80                 xor     al,al                                           ;assume no ASCII translation
   2518 00000756 F6C480                                          test    ah,EKEYBUP                                      ;release code?
@@ -2704,7 +2704,7 @@
   2532 00000780 80F95A                                          cmp     cl,EASCIIUPPERZ                                 ;greater than 'Z'?
   2533 00000783 7702                                            ja      irq1.100                                        ;yes, skip ahead
   2534 00000785 3420                                            xor     al,EASCIICASE                                   ;switch case
-  2535 00000787 A22B080000              irq1.100                mov     [wbConsoleChar],al                              ;save ASCII code
+  2535 00000787 A213080000              irq1.100                mov     [wbConsoleChar],al                              ;save ASCII code
   2536 0000078C BA00000041              irq1.110                mov     edx,EMSGKEYDOWN                                 ;assume key-down event
   2537 00000791 F6C480                                          test    ah,EKEYBUP                                      ;release scan-code?
   2538 00000794 7405                                            jz      irq1.120                                        ;no, skip ahead
@@ -2724,7 +2724,7 @@
   2552 000007BD E855070000                                      call    PutMessage                                      ;put message to console
   2553 000007C2 EB08                    irq1.130                jmp     irq1.150                                        ;finish keyboard handling
   2554 000007C4 B080                    irq1.140                mov     al,EKEYFTIMEOUT                                 ;controller timeout flag
-  2555 000007C6 080524080000                                    or      [wbConsoleStatus],al                            ;set controller timeout flag
+  2555 000007C6 08050C080000                                    or      [wbConsoleStatus],al                            ;set controller timeout flag
   2556 000007CC E87E050000              irq1.150                call    PutConsoleOIAChar                               ;update operator info area
   2557 000007D1 E820080000                                      call    PutPrimaryEndOfInt                              ;send end-of-interrupt to PIC
   2558 000007D6 1F                                              pop     ds                                              ;restore non-volatile regs
@@ -3071,7 +3071,7 @@
   2859                                  ;
   2860 0000096B 6A18                                            push    EGDTOSDATA                                      ;load OS data GDT selector ...
   2861 0000096D 1F                                              pop     ds                                              ;... into data segment reg
-  2862 0000096E BE08080000                                      mov     esi,wsConsoleMemRoot                            ;memory root structure address
+  2862 0000096E BE04090000                                      mov     esi,wsConsoleMemRoot                            ;memory root structure address
   2863                                  ;
   2864                                  ;       Set requested size to minimum block size if requested size is too small.
   2865                                  ;
@@ -3276,7 +3276,7 @@
   3064 00000A8D 07                                              pop     es                                              ;... into extra segment reg
   3065 00000A8E 6A18                                            push    EGDTOSDATA                                      ;load OS data selector ...
   3066 00000A90 1F                                              pop     ds                                              ;... into data segment reg
-  3067 00000A91 BE08080000                                      mov     esi,wsConsoleMemRoot                            ;memory root structure
+  3067 00000A91 BE04090000                                      mov     esi,wsConsoleMemRoot                            ;memory root structure
   3068 00000A96 89D7                                            mov     edi,edx                                         ;memory block address
   3069                                  ;
   3070                                  ;       If the block is FREE, return success. Otherwise, if it is not USER, return with error.
@@ -3615,7 +3615,7 @@
   3403                                  ;
   3404                                  ;-----------------------------------------------------------------------------------------------------------------------
   3405 00000BF9 30C0                    FirstConsoleColumn      xor     al,al                                           ;zero column
-  3406 00000BFB A220080000                                      mov     [wbConsoleColumn],al                            ;save column
+  3406 00000BFB A208080000                                      mov     [wbConsoleColumn],al                            ;save column
   3407 00000C00 C3                                              ret                                                     ;return
   3408                                  ;-----------------------------------------------------------------------------------------------------------------------
   3409                                  ;
@@ -3711,9 +3711,9 @@
   3499                                  ;       In:             DS      OS data selector
   3500                                  ;
   3501                                  ;-----------------------------------------------------------------------------------------------------------------------
-  3502 00000C8E A020080000              NextConsoleColumn       mov     al,[wbConsoleColumn]                            ;current column
+  3502 00000C8E A008080000              NextConsoleColumn       mov     al,[wbConsoleColumn]                            ;current column
   3503 00000C93 FEC0                                            inc     al                                              ;increment column
-  3504 00000C95 A220080000                                      mov     [wbConsoleColumn],al                            ;save column
+  3504 00000C95 A208080000                                      mov     [wbConsoleColumn],al                            ;save column
   3505 00000C9A 3C50                                            cmp     al,ECONCOLS                                     ;end of row?
   3506 00000C9C 720A                                            jb      .10                                             ;no, skip ahead
   3507 00000C9E E856FFFFFF                                      call    FirstConsoleColumn                              ;reset column to start of row
@@ -3728,15 +3728,15 @@
   3516                                  ;       In:             DS      OS data selector
   3517                                  ;
   3518                                  ;-----------------------------------------------------------------------------------------------------------------------
-  3519 00000CA9 A021080000              NextConsoleRow          mov     al,[wbConsoleRow]                               ;current row
+  3519 00000CA9 A009080000              NextConsoleRow          mov     al,[wbConsoleRow]                               ;current row
   3520 00000CAE FEC0                                            inc     al                                              ;increment row
-  3521 00000CB0 A221080000                                      mov     [wbConsoleRow],al                               ;save row
+  3521 00000CB0 A209080000                                      mov     [wbConsoleRow],al                               ;save row
   3522 00000CB5 3C18                                            cmp     al,ECONROWS                                     ;end of screen?
   3523 00000CB7 7211                                            jb      .10                                             ;no, skip ahead
   3524 00000CB9 E8BC020000                                      call    ScrollConsoleRow                                ;scroll up one row
-  3525 00000CBE A021080000                                      mov     al,[wbConsoleRow]                               ;row
+  3525 00000CBE A009080000                                      mov     al,[wbConsoleRow]                               ;row
   3526 00000CC3 FEC8                                            dec     al                                              ;decrement row
-  3527 00000CC5 A221080000                                      mov     [wbConsoleRow],al                               ;save row
+  3527 00000CC5 A209080000                                      mov     [wbConsoleRow],al                               ;save row
   3528 00000CCA C3                      .10                     ret                                                     ;return
   3529                                  ;-----------------------------------------------------------------------------------------------------------------------
   3530                                  ;
@@ -3748,17 +3748,17 @@
   3536                                  ;       In:             DS      OS data selector
   3537                                  ;
   3538                                  ;-----------------------------------------------------------------------------------------------------------------------
-  3539 00000CCB A020080000              PreviousConsoleColumn   mov     al,[wbConsoleColumn]                            ;current column
+  3539 00000CCB A008080000              PreviousConsoleColumn   mov     al,[wbConsoleColumn]                            ;current column
   3540 00000CD0 08C0                                            or      al,al                                           ;start of row?
   3541 00000CD2 7514                                            jnz     .10                                             ;no, skip ahead
-  3542 00000CD4 8A2521080000                                    mov     ah,[wbConsoleRow]                               ;current row
+  3542 00000CD4 8A2509080000                                    mov     ah,[wbConsoleRow]                               ;current row
   3543 00000CDA 08E4                                            or      ah,ah                                           ;top of screen?
   3544 00000CDC 7411                                            jz      .20                                             ;yes, exit with no change
   3545 00000CDE FECC                                            dec     ah                                              ;decrement row
-  3546 00000CE0 882521080000                                    mov     [wbConsoleRow],ah                               ;save row
+  3546 00000CE0 882509080000                                    mov     [wbConsoleRow],ah                               ;save row
   3547 00000CE6 B050                                            mov     al,ECONCOLS                                     ;set maximum column
   3548 00000CE8 FEC8                    .10                     dec     al                                              ;decrement column
-  3549 00000CEA A220080000                                      mov     [wbConsoleColumn],al                            ;save column
+  3549 00000CEA A208080000                                      mov     [wbConsoleColumn],al                            ;save column
   3550 00000CEF C3                      .20                     ret                                                     ;return
   3551                                  ;-----------------------------------------------------------------------------------------------------------------------
   3552                                  ;
@@ -3774,8 +3774,8 @@
   3562 00000CF1 06                                              push    es                                              ;
   3563 00000CF2 6A20                                            push    EGDTCGA                                         ;load CGA selector ...
   3564 00000CF4 07                                              pop     es                                              ;... into extra segment reg
-  3565 00000CF5 8A0D20080000                                    mov     cl,[wbConsoleColumn]                            ;column
-  3566 00000CFB 8A2D21080000                                    mov     ch,[wbConsoleRow]                               ;row
+  3565 00000CF5 8A0D08080000                                    mov     cl,[wbConsoleColumn]                            ;column
+  3566 00000CFB 8A2D09080000                                    mov     ch,[wbConsoleRow]                               ;row
   3567 00000D01 E8A0020000                                      call    SetConsoleChar                                  ;put character at row, column
   3568 00000D06 07                                              pop     es                                              ;restore non-volatile regs
   3569 00000D07 59                                              pop     ecx                                             ;
@@ -3866,7 +3866,7 @@
   3654 00000D56 1F                                              pop     ds                                              ;... into data segment register
   3655 00000D57 6A20                                            push    EGDTCGA                                         ;load CGA selector ...
   3656 00000D59 07                                              pop     es                                              ;... into extra segment register
-  3657 00000D5A BE25080000                                      mov     esi,wbConsoleScan0                              ;scan codes address
+  3657 00000D5A BE0D080000                                      mov     esi,wbConsoleScan0                              ;scan codes address
   3658 00000D5F B718                                            mov     bh,ECONOIAROW                                   ;OIA row
   3659 00000D61 B300                                            mov     bl,0                                            ;starting column
   3660 00000D63 B906000000                                      mov     ecx,6                                           ;maximum scan codes
@@ -3884,7 +3884,7 @@
   3672 00000D85 80C302                  .30                     add     bl,2                                            ;next column (+2)
   3673 00000D88 59                                              pop     ecx                                             ;restore remaining
   3674 00000D89 E2DD                                            loop    .10                                             ;next code
-  3675 00000D8B A02B080000                                      mov     al,[wbConsoleChar]                              ;console ASCII character
+  3675 00000D8B A013080000                                      mov     al,[wbConsoleChar]                              ;console ASCII character
   3676 00000D90 3C20                                            cmp     al,32                                           ;printable? (lower-bounds)
   3677 00000D92 720D                                            jb      .40                                             ;no, skip ahead
   3678 00000D94 3C7E                                            cmp     al,126                                          ;printable? (upper-bounds)
@@ -4225,8 +4225,8 @@
   4013 00000F5D B928000000                                      mov     ecx,ECONROWDWORDS                               ;double-words per row
   4014 00000F62 F3AB                                            rep     stosd                                           ;reset OIA line
   4015 00000F64 30C0                                            xor     al,al                                           ;zero register
-  4016 00000F66 A221080000                                      mov     [wbConsoleRow],al                               ;reset console row
-  4017 00000F6B A220080000                                      mov     [wbConsoleColumn],al                            ;reset console column
+  4016 00000F66 A209080000                                      mov     [wbConsoleRow],al                               ;reset console row
+  4017 00000F6B A208080000                                      mov     [wbConsoleColumn],al                            ;reset console column
   4018 00000F70 E857000000                                      call    PlaceCursor                                     ;place cursor at current position
   4019 00000F75 07                                              pop     es                                              ;restore non-volatile regs
   4020 00000F76 1F                                              pop     ds                                              ;
@@ -4334,10 +4334,10 @@
   4122                                  ;
   4123                                  ;-----------------------------------------------------------------------------------------------------------------------
   4124 00000FCC 51                      PlaceCursor             push    ecx                                             ;save non-volatile regs
-  4125 00000FCD A021080000                                      mov     al,[wbConsoleRow]                               ;AL = row
+  4125 00000FCD A009080000                                      mov     al,[wbConsoleRow]                               ;AL = row
   4126 00000FD2 B450                                            mov     ah,ECONCOLS                                     ;AH = cols/row
   4127 00000FD4 F6E4                                            mul     ah                                              ;row offset
-  4128 00000FD6 020520080000                                    add     al,[wbConsoleColumn]                            ;add column
+  4128 00000FD6 020508080000                                    add     al,[wbConsoleColumn]                            ;add column
   4129 00000FDC 80D400                                          adc     ah,0                                            ;add overflow
   4130 00000FDF 89C1                                            mov     ecx,eax                                         ;screen offset
   4131 00000FE1 B2D4                                            mov     dl,ECRTPORTLO                                   ;crt controller port lo
@@ -4596,7 +4596,7 @@
   4374 0000001B B007                <1>  mov al,ePlaceCursor
   4374 0000001D CD30                <1>  int _svc
   4375                                                          getConsoleString wzConsoleInBuffer,79,1,13              ;accept keyboard input
-  4375 0000001F BA2C080000          <1>  mov edx,%1
+  4375 0000001F BA14080000          <1>  mov edx,%1
   4375 00000024 B94F000000          <1>  mov ecx,%2
   4375 00000029 B701                <1>  mov bh,%3
   4375 0000002B B30D                <1>  mov bl,%4
@@ -4607,10 +4607,10 @@
   4376 00000036 B008                <1>  mov al,ePutConsoleString
   4376 00000038 CD30                <1>  int _svc
   4377                                  
-  4378 0000003A BA2C080000                                      mov     edx,wzConsoleInBuffer                           ;console input buffer
-  4379 0000003F BB7C080000                                      mov     ebx,wzConsoleToken                              ;token buffer
+  4378 0000003A BA14080000                                      mov     edx,wzConsoleInBuffer                           ;console input buffer
+  4379 0000003F BB64080000                                      mov     ebx,wzConsoleToken                              ;token buffer
   4380 00000044 E879000000                                      call    ConTakeToken                                    ;handle console input
-  4381 00000049 BA7C080000                                      mov     edx,wzConsoleToken                              ;token buffer
+  4381 00000049 BA64080000                                      mov     edx,wzConsoleToken                              ;token buffer
   4382 0000004E E8A4000000                                      call    ConDetermineCommand                             ;determine command number
   4383 00000053 83F80C                                          cmp     eax,ECONJMPTBLCNT                               ;valid command number?
   4384 00000056 720B                                            jb      .20                                             ;yes, branch
@@ -4654,7 +4654,7 @@
   4419                                  ;
   4420                                  ;       Initialize MEMROOT structure
   4421                                  ;
-  4422 00000091 BF08080000                                      mov     edi,wsConsoleMemRoot                            ;memory root structure address
+  4422 00000091 BF04090000                                      mov     edi,wsConsoleMemRoot                            ;memory root structure address
   4423 00000096 B800000100                                      mov     eax,EKRNHEAPBASE                                ;base address of heap storage
   4424 0000009B 31C9                                            xor     ecx,ecx                                         ;zero register
   4425 0000009D B104                                            mov     cl,4                                            ;count
@@ -4813,15 +4813,15 @@
   4568                                  ;
   4569                                  ;       Get address parameter
   4570                                  ;
-  4571 0000012F BA2C080000                                      mov     edx,wzConsoleInBuffer                           ;console input buffer address (param)
-  4572 00000134 BB7C080000                                      mov     ebx,wzConsoleToken                              ;console command token address
+  4571 0000012F BA14080000                                      mov     edx,wzConsoleInBuffer                           ;console input buffer address (param)
+  4572 00000134 BB64080000                                      mov     ebx,wzConsoleToken                              ;console command token address
   4573 00000139 E884FFFFFF                                      call    ConTakeToken                                    ;take first param as token
   4574                                  ;
   4575                                  ;       Convert input parameter from hexadecimal string to binary
   4576                                  ;
-  4577 0000013E 803D7C08000000                                  cmp     byte [wzConsoleToken],0                         ;token found?
+  4577 0000013E 803D6408000000                                  cmp     byte [wzConsoleToken],0                         ;token found?
   4578 00000145 7421                                            je      .10                                             ;no, branch
-  4579 00000147 BA7C080000                                      mov     edx,wzConsoleToken                              ;first param as token address
+  4579 00000147 BA64080000                                      mov     edx,wzConsoleToken                              ;first param as token address
   4580                                  
   4581                                                          hexadecimalToUnsigned                                   ;convert string token to unsigned
   4581 0000014C B006                <1>  mov al,eHexadecimalToUnsigned
@@ -4879,15 +4879,15 @@
   4626                                  ;
   4627                                  ;       Get size parameter
   4628                                  ;
-  4629 00000174 BA2C080000                                      mov     edx,wzConsoleInBuffer                           ;console input buffer address (params)
-  4630 00000179 BB7C080000                                      mov     ebx,wzConsoleToken                              ;console command token address
+  4629 00000174 BA14080000                                      mov     edx,wzConsoleInBuffer                           ;console input buffer address (params)
+  4630 00000179 BB64080000                                      mov     ebx,wzConsoleToken                              ;console command token address
   4631 0000017E E83FFFFFFF                                      call    ConTakeToken                                    ;take first param as token
   4632                                  ;
   4633                                  ;       Convert input parameter from decimal string to binary
   4634                                  ;
-  4635 00000183 803D7C08000000                                  cmp     byte [wzConsoleToken],0                         ;token found?
+  4635 00000183 803D6408000000                                  cmp     byte [wzConsoleToken],0                         ;token found?
   4636 0000018A 7434                                            je      .10                                             ;no, branch
-  4637 0000018C BA7C080000                                      mov     edx,wzConsoleToken                              ;first param as token address
+  4637 0000018C BA64080000                                      mov     edx,wzConsoleToken                              ;first param as token address
   4638                                  
   4639                                                          decimalToUnsigned                                       ;convert string token to unsigned
   4639 00000191 B003                <1>  mov al,eDecimalToUnsigned
@@ -4908,14 +4908,14 @@
   4650                                  ;
   4651                                  ;       Report allocated memory block address
   4652                                  ;
-  4653 000001A3 BACC080000                                      mov     edx,wzConsoleOutBuffer                          ;output buffer address
+  4653 000001A3 BAB4080000                                      mov     edx,wzConsoleOutBuffer                          ;output buffer address
   4654 000001A8 89C1                                            mov     ecx,eax                                         ;memory address
   4655                                  
   4656                                                          unsignedToHexadecimal                                   ;convert memory address to hex
   4656 000001AA B00A                <1>  mov al,eUnsignedToHexadecimal
   4656 000001AC CD30                <1>  int _svc
   4657                                                          putConsoleString wzConsoleOutBuffer                     ;display memory address
-  4657 000001AE BACC080000          <1>  mov edx,%1
+  4657 000001AE BAB4080000          <1>  mov edx,%1
   4657 000001B3 B008                <1>  mov al,ePutConsoleString
   4657 000001B5 CD30                <1>  int _svc
   4658                                                          putConsoleString czNewLine                              ;display new line
@@ -4943,12 +4943,12 @@
   4677                                  ;
   4678                                  ;                       update the source address if a parameter is given
   4679                                  ;
-  4680 000001C8 BA2C080000                                      mov     edx,wzConsoleInBuffer                           ;console input buffer address (params)
-  4681 000001CD BB7C080000                                      mov     ebx,wzConsoleToken                              ;console command token address
+  4680 000001C8 BA14080000                                      mov     edx,wzConsoleInBuffer                           ;console input buffer address (params)
+  4681 000001CD BB64080000                                      mov     ebx,wzConsoleToken                              ;console command token address
   4682 000001D2 E8EBFEFFFF                                      call    ConTakeToken                                    ;take first param as token
-  4683 000001D7 803D7C08000000                                  cmp     byte [wzConsoleToken],0                         ;token found?
+  4683 000001D7 803D6408000000                                  cmp     byte [wzConsoleToken],0                         ;token found?
   4684 000001DE 740E                                            je      .10                                             ;no, branch
-  4685 000001E0 BA7C080000                                      mov     edx,wzConsoleToken                              ;first param as token address
+  4685 000001E0 BA64080000                                      mov     edx,wzConsoleToken                              ;first param as token address
   4686                                  
   4687                                                          hexadecimalToUnsigned                                   ;convert string token to unsigned
   4687 000001E5 B006                <1>  mov al,eHexadecimalToUnsigned
@@ -4965,7 +4965,7 @@
   4697                                  ;                       start the row with the source address in hexadecimal
   4698                                  ;
   4699 000001F8 51                      .20                     push    ecx                                             ;save remaining rows
-  4700 000001F9 BFCC080000                                      mov     edi,wzConsoleOutBuffer                          ;output buffer address
+  4700 000001F9 BFB4080000                                      mov     edi,wzConsoleOutBuffer                          ;output buffer address
   4701 000001FE 89FA                                            mov     edx,edi                                         ;output buffer address
   4702 00000200 89F1                                            mov     ecx,esi                                         ;console memory address
   4703                                  
@@ -5020,7 +5020,7 @@
   4750                                  ;                       display constructed output buffer and newline
   4751                                  ;
   4752                                                          putConsoleString wzConsoleOutBuffer                     ;display constructed output
-  4752 00000249 BACC080000          <1>  mov edx,%1
+  4752 00000249 BAB4080000          <1>  mov edx,%1
   4752 0000024E B008                <1>  mov al,ePutConsoleString
   4752 00000250 CD30                <1>  int _svc
   4753                                                          putConsoleString czNewLine                              ;display new line

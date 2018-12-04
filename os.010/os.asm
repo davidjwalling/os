@@ -600,7 +600,6 @@ wbClockDays             resb    1                                               
 ECONDATA                equ     ($)
 wdConsoleMemBase        resd    1                                               ;console memory address
 wdConsoleHeapSize       resd    1                                               ;kernel heap size
-wsConsoleMemRoot        resb    EMEMROOTLEN                                     ;kernel base memory map
 wbConsoleColumn         resb    1                                               ;console column
 wbConsoleRow            resb    1                                               ;console row
 wbConsoleShift          resb    1                                               ;console shift flags
@@ -616,6 +615,7 @@ wbConsoleChar           resb    1                                               
 wzConsoleInBuffer       resb    80                                              ;command input buffer
 wzConsoleToken          resb    80                                              ;token buffer
 wzConsoleOutBuffer      resb    80                                              ;response output buffer
+wsConsoleMemRoot        resb    EMEMROOTLEN                                     ;kernel base memory map
 ECONDATALEN             equ     ($-ECONDATA)                                    ;size of console data area
 ;-----------------------------------------------------------------------------------------------------------------------
 ;

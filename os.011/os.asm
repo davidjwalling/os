@@ -283,6 +283,10 @@ ERTCDAYREG              equ     07h                                             
 ERTCMONTHREG            equ     08h                                             ;month
 ERTCYEARREG             equ     09h                                             ;year of the century
 ERTCSTATUSREG           equ     0bh                                             ;status
+ERTCBASERAMLO           equ     15h                                             ;base RAM low
+ERTCBASERAMHI           equ     16H                                             ;base RAM high
+ERTCEXTRAMLO            equ     17H                                             ;extended RAM low
+ERTCEXTRAMHI            equ     18H                                             ;extended RAM high
 ERTCCENTURYREG          equ     32h                                             ;century
 ERTCBINARYVALS          equ     00000100b                                       ;values are binary
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -538,7 +542,7 @@ struc                   OSDATA
                         resw    1                                               ;40e LPT4 port address
                         resb    2                                               ;410 equipment list flags
                         resb    1                                               ;412 errors in PCjr infrared keybd link
-                        resw    1                                               ;413 memory size (kb) INT 12h
+wwROMMemSize            resw    1                                               ;413 memory size (kb) INT 12h
                         resb    1                                               ;415 mfr error test scratchpad
                         resb    1                                               ;416 PS/2 BIOS control flags
                         resb    1                                               ;417 keyboard flag byte 0
@@ -638,7 +642,9 @@ wbClockDays             resb    1                                               
 ECONDATA                equ     ($)
 wdConsoleMemBase        resd    1                                               ;console memory address
 wdConsoleHeapSize       resd    1                                               ;kernel heap size
-wsConsoleMemRoot        resb    EMEMROOTLEN                                     ;kernel base memory map
+wdBaseMemSize           resd    1                                               ;base memory size (int 12h)
+wdExtendedMemSize       resd    1                                               ;extended memory size (int 12h)
+wdROMMemSize            resd    1                                               ;ROM memory size
 wbConsoleColumn         resb    1                                               ;console column
 wbConsoleRow            resb    1                                               ;console row
 wbConsoleShift          resb    1                                               ;console shift flags
@@ -654,6 +660,10 @@ wbConsoleChar           resb    1                                               
 wzConsoleInBuffer       resb    80                                              ;command input buffer
 wzConsoleToken          resb    80                                              ;token buffer
 wzConsoleOutBuffer      resb    80                                              ;response output buffer
+wzBaseMemSize           resb    11                                              ;CMOS base memory bytes     zz,zzz,zz9\0
+wzROMMemSize            resb    11                                              ;ROM base memory bytes      zz,zzz,zz9\0
+wzExtendedMemSize       resb    11                                              ;CMOS extended memory bytes zz,zzz,zz9\0
+wsConsoleMemRoot        resb    EMEMROOTLEN                                     ;kernel base memory map
 wsConsoleDateTime       resb    EDATETIMELEN                                    ;date-time buffer
 ECONDATALEN             equ     ($-ECONDATA)                                    ;size of console data area
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -2794,7 +2804,10 @@ tsvc                    tsvce   AllocateMemory                                  
                         tsvce   CompareMemory                                   ;compare memory
                         tsvce   DecimalToUnsigned                               ;convert decimal string to unsigned integer
                         tsvce   FreeMemory                                      ;free memory block
+                        tsvce   GetBaseMemSize                                  ;get base RAM size in bytes
                         tsvce   GetConsoleString                                ;get string input
+                        tsvce   GetExtendedMemSize                              ;get extended RAM size in bytes
+                        tsvce   GetROMMemSize                                   ;get RAM size as reported by INT 12h
                         tsvce   HexadecimalToUnsigned                           ;convert hexadecimal string to unsigned integer
                         tsvce   IsLeapYear                                      ;return ecx=1 if leap year
                         tsvce   PlaceCursor                                     ;place the cursor at the current loc
@@ -2845,12 +2858,24 @@ maxtsvc                 equ     ($-tsvc)/4                                      
                         mov     al,eFreeMemory                                  ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
+%macro                  getBaseMemSize 0
+                        mov     al,eGetBaseMemSize                              ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
 %macro                  getConsoleString 4
                         mov     edx,%1                                          ;buffer address
                         mov     ecx,%2                                          ;max characters
                         mov     bh,%3                                           ;echo indicator
                         mov     bl,%4                                           ;terminator
                         mov     al,eGetConsoleString                            ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  getExtendedMemSize 0
+                        mov     al,eGetExtendedMemSize                          ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  getROMMemSize 0
+                        mov     al,eGetROMMemSize                               ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
 %macro                  hexadecimalToUnsigned 0
@@ -4722,6 +4747,9 @@ SetConsoleString        push    esi                                             
 ;
 ;       These routines read and/or write directly to ports.
 ;
+;       GetBaseMemSize
+;       GetExtendedMemSize
+;       GetROMMemSize
 ;       PlaceCursor
 ;       PutPrimaryEndOfInt
 ;       PutSecondaryEndOfInt
@@ -4732,6 +4760,59 @@ SetConsoleString        push    esi                                             
 ;       WaitForKeyOutBuffer
 ;
 ;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        GetBaseMemSize
+;
+;       Description:    Return the amount of base RAM as reported by the CMOS.
+;
+;       Output:         EAX     base RAM size in bytes
+;
+;-----------------------------------------------------------------------------------------------------------------------
+GetBaseMemSize          xor     eax,eax                                         ;zero register
+                        mov     al,ERTCBASERAMHI                                ;base RAM high register
+                        out     ERTCREGPORT,al                                  ;select base RAM high register
+                        in      al,ERTCDATAPORT                                 ;read base RAM high (KB)
+                        mov     ah,al                                           ;save base RAM high
+                        mov     al,ERTCBASERAMLO                                ;base RAM low register
+                        out     ERTCREGPORT,al                                  ;select base RAM low register
+                        in      al,ERTCDATAPORT                                 ;read base RAM low (KB)
+                        ;shl    eax,10                                          ;kilobytes to bytes
+                        ret                                                     ;return to caller
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        GetExtendedMemSize
+;
+;       Description:    Return the amount of extended RAM as reported by the CMOS.
+;
+;       Output:         EAX     extended RAM size in bytes
+;
+;-----------------------------------------------------------------------------------------------------------------------
+GetExtendedMemSize      xor     eax,eax                                         ;zero register
+                        mov     al,ERTCEXTRAMHI                                 ;extended RAM high register
+                        mov     al,31h
+                        out     ERTCREGPORT,al                                  ;select extended RAM high register
+                        in      al,ERTCDATAPORT                                 ;read extended RAM high (KB)
+                        mov     ah,al                                           ;save extended RAM high
+                        mov     al,ERTCEXTRAMLO                                 ;extended RAM low register
+                        mov     al,30h
+                        out     ERTCREGPORT,al                                  ;select extended RAM low register
+                        in      al,ERTCDATAPORT                                 ;read extended RAM low (KB)
+                        ;shl    eax,10                                          ;kilobytes to bytes
+                        ret                                                     ;return to caller
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        GetROMMemSize
+;
+;       Description:    Return the amount of RAM as reported by the BIOS during power-up.
+;
+;       Output:         EAX     RAM size in bytes
+;
+;-----------------------------------------------------------------------------------------------------------------------
+GetROMMemSize           xor     eax,eax                                         ;zero register
+                        mov     ax,[wwROMMemSize]                               ;memory size (KB) as returned by INT 12h
+                        ;shl    eax,10                                          ;memory size in bytes
+                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        PlaceCursor
@@ -5060,6 +5141,15 @@ ConCode                 call    ConInitializeData                               
 
                         clearConsoleScreen                                      ;clear the console screen
                         putConsoleString czTitle                                ;display startup message
+                        putConsoleString czROMMem                               ;ROM memory label
+                        putConsoleString wzROMMemSize                           ;ROM memory amount
+                        putConsoleString czNewLine                              ;new line
+                        putConsoleString czBaseMem                              ;base memory label
+                        putConsoleString wzBaseMemSize                          ;base memory size
+                        putConsoleString czNewLine                              ;new line
+                        putConsoleString czExtendedMem                          ;extended memory label
+                        putConsoleString wzExtendedMemSize                      ;extended memory size
+                        putConsoleString czNewLine                              ;new line
 .10                     putConsoleString czPrompt                               ;display input prompt
                         placeCursor                                             ;set CRT cursor location
                         getConsoleString wzConsoleInBuffer,79,1,13              ;accept keyboard input
@@ -5129,6 +5219,27 @@ ConInitializeData       push    ecx                                             
                         mov     cl,6                                            ;count
                         xor     eax,eax                                         ;zero register
                         rep     stosd                                           ;zero owner, reserved, pointers
+;
+;       Read memory sizes from ROM
+;
+                        getROMMemSize                                           ;get ROM memory size
+                        mov     [wdROMMemSize],eax                              ;bytes reported by ROM
+                        mov     ecx,eax                                         ;integer param
+                        mov     edx,wzROMMemSize                                ;output buffer param
+                        mov     bh,3                                            ;no leading zeros; thousands grouping
+                        unsignedToDecimalString                                 ;build ASCIIZ decimal string
+                        getBaseMemSize                                          ;get base RAM count from CMOS
+                        mov     [wdBaseMemSize],eax                             ;save base RAM count
+                        mov     ecx,eax                                         ;integer param
+                        mov     edx,wzBaseMemSize                               ;output buffer param
+                        mov     bh,3                                            ;no leading zeros; thousands grouping
+                        unsignedToDecimalString                                 ;build ASCIIZ decimal string
+                        getExtendedMemSize                                      ;get extended RAM count from CMOS
+                        mov     [wdExtendedMemSize],eax                         ;save base RAM count
+                        mov     ecx,eax                                         ;integer param
+                        mov     edx,wzExtendedMemSize                           ;output buffer param
+                        mov     bh,3                                            ;no leading zeros; thousands grouping
+                        unsignedToDecimalString                                 ;build ASCIIZ decimal string
 ;
 ;       Restore and return.
 ;
@@ -5679,9 +5790,12 @@ tConCmdTbl              equ     $                                               
 ;       Constants
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+czBaseMem               db      "Base memory: ",0                               ;base memory from BIOS
+czExtendedMem           db      "Extended memory: ",0                           ;extended memory from BIOS
 czNewLine               db      13,10,0                                         ;new line string
 czOK                    db      "ok",13,10,0                                    ;ok string
 czPrompt                db      ":",0                                           ;prompt string
+czROMMem                db      "Base memory below EBDA (Int 12h): ",0          ;memory reported by ROM
 czTitle                 db      "Custom Operating System 1.0",13,10,0           ;version string
 czUnknownCommand        db      "Unknown command",13,10,0                       ;unknown command response string
 czYearIsLeap            db      "The year is a leap year.",13,10,0              ;leap year message

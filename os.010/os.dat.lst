@@ -600,22 +600,22 @@
    600                                  ECONDATA                equ     ($)
    601 00000800 <res 00000004>          wdConsoleMemBase        resd    1                                               ;console memory address
    602 00000804 <res 00000004>          wdConsoleHeapSize       resd    1                                               ;kernel heap size
-   603 00000808 <res 00000018>          wsConsoleMemRoot        resb    EMEMROOTLEN                                     ;kernel base memory map
-   604 00000820 <res 00000001>          wbConsoleColumn         resb    1                                               ;console column
-   605 00000821 <res 00000001>          wbConsoleRow            resb    1                                               ;console row
-   606 00000822 <res 00000001>          wbConsoleShift          resb    1                                               ;console shift flags
-   607 00000823 <res 00000001>          wbConsoleLock           resb    1                                               ;console lock flags
-   608 00000824 <res 00000001>          wbConsoleStatus         resb    1                                               ;controller status
-   609 00000825 <res 00000001>          wbConsoleScan0          resb    1                                               ;scan code
-   610 00000826 <res 00000001>          wbConsoleScan1          resb    1                                               ;scan code
-   611 00000827 <res 00000001>          wbConsoleScan2          resb    1                                               ;scan code
-   612 00000828 <res 00000001>          wbConsoleScan3          resb    1                                               ;scan code
-   613 00000829 <res 00000001>          wbConsoleScan4          resb    1                                               ;scan code
-   614 0000082A <res 00000001>          wbConsoleScan5          resb    1                                               ;scan code
-   615 0000082B <res 00000001>          wbConsoleChar           resb    1                                               ;ASCII code
-   616 0000082C <res 00000050>          wzConsoleInBuffer       resb    80                                              ;command input buffer
-   617 0000087C <res 00000050>          wzConsoleToken          resb    80                                              ;token buffer
-   618 000008CC <res 00000050>          wzConsoleOutBuffer      resb    80                                              ;response output buffer
+   603 00000808 <res 00000001>          wbConsoleColumn         resb    1                                               ;console column
+   604 00000809 <res 00000001>          wbConsoleRow            resb    1                                               ;console row
+   605 0000080A <res 00000001>          wbConsoleShift          resb    1                                               ;console shift flags
+   606 0000080B <res 00000001>          wbConsoleLock           resb    1                                               ;console lock flags
+   607 0000080C <res 00000001>          wbConsoleStatus         resb    1                                               ;controller status
+   608 0000080D <res 00000001>          wbConsoleScan0          resb    1                                               ;scan code
+   609 0000080E <res 00000001>          wbConsoleScan1          resb    1                                               ;scan code
+   610 0000080F <res 00000001>          wbConsoleScan2          resb    1                                               ;scan code
+   611 00000810 <res 00000001>          wbConsoleScan3          resb    1                                               ;scan code
+   612 00000811 <res 00000001>          wbConsoleScan4          resb    1                                               ;scan code
+   613 00000812 <res 00000001>          wbConsoleScan5          resb    1                                               ;scan code
+   614 00000813 <res 00000001>          wbConsoleChar           resb    1                                               ;ASCII code
+   615 00000814 <res 00000050>          wzConsoleInBuffer       resb    80                                              ;command input buffer
+   616 00000864 <res 00000050>          wzConsoleToken          resb    80                                              ;token buffer
+   617 000008B4 <res 00000050>          wzConsoleOutBuffer      resb    80                                              ;response output buffer
+   618 00000904 <res 00000018>          wsConsoleMemRoot        resb    EMEMROOTLEN                                     ;kernel base memory map
    619                                  ECONDATALEN             equ     ($-ECONDATA)                                    ;size of console data area
    620                                  ;-----------------------------------------------------------------------------------------------------------------------
    621                                  ;
