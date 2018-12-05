@@ -2,7 +2,7 @@
 ;
 ;       File:           os.asm
 ;
-;       Project:        os.011
+;       Project:        os.017
 ;
 ;       Description:    In this sample, the kernel is expanded to iterate across tasks in a task queue.
 ;
@@ -435,9 +435,9 @@ EGDTLOADERLDT           equ     050h                                            
 EGDTLOADERTSS           equ     058h                                            ;loader task state segment selector
 EGDTCONSOLELDT          equ     060h                                            ;console local descriptor table selector
 EGDTCONSOLETSS          equ     068h                                            ;console task state segment selector
-ESELBACKGROUNDLDT       equ     070h                                            ;background local descr table selector
-ESELBACKGROUNDTSS       equ     078h                                            ;background task state segment selector
-ESELKEYBOARDMQ          equ     080h                                            ;keyboard focus message queue (IRQ1)
+EGDTBACKGROUNDLDT       equ     070h                                            ;background local descr table selector
+EGDTBACKGROUNDTSS       equ     078h                                            ;background task state segment selector
+EGDTKEYBOARDMQ          equ     080h                                            ;keyboard focus message queue (IRQ1)
 ;-----------------------------------------------------------------------------------------------------------------------
 ;       LDT Selectors                                                           ESEL...
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -460,12 +460,12 @@ EKEYFTIMEOUT            equ     10000000b                                       
 ;       Kernel Constants                                                        EKRN...
 ;-----------------------------------------------------------------------------------------------------------------------
 EKRNDATASEG             equ     00000h                                          ;kernel data segment (0000:0800)
-EKRNCODEBASE            equ     1000h                                           ;kernel base address (0000:1000)
+EKRNCODEBASE            equ     01000h                                          ;kernel base address (0000:1000)
 EKRNCODESEG             equ     (EKRNCODEBASE >> 4)                             ;kernel code segment (0100:0000)
-EKRNCODELEN             equ     7000h                                           ;kernel code size (1000h to 8000h)
-EKRNCODESRCADR          equ     500h                                            ;kernel code offset to loader DS:
-EKRNHEAPSIZE            equ     80000000h                                       ;kernel heap size
-EKRNHEAPBASE            equ     10000h                                          ;kernel heap base
+EKRNCODELEN             equ     07000h                                          ;kernel code size (1000h to 8000h)
+EKRNCODESRCADR          equ     0500h                                           ;kernel code offset to loader DS:
+EKRNHEAPSIZE            equ     080000000h                                      ;kernel heap size
+EKRNHEAPBASE            equ     010000h                                         ;kernel heap base
 ;-----------------------------------------------------------------------------------------------------------------------
 ;       Local Descriptor Table (LDT) Selectors                                  ELDT...
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -1318,7 +1318,7 @@ wcPrepInBuf             equ     $
 ;
 ;       The disk contains two copies of the File Allocation Table (FAT). On our disk, each FAT copy is 1200h bytes in
 ;       length. Each FAT entry contains the logical number of the next cluster. The first two entries are reserved. Our
-;       OS.COM file will be 7400h bytes in length. The first 400h bytes are the 16-bit loader code. The remaining 7000h
+;       OS.COM file here is 7400h bytes in length. The first 400h bytes are the 16-bit loader code. The remaining 7000h
 ;       bytes are the 32-bit kernel code. Our disk parameter table defines a cluster as containing one sector and each
 ;       sector having 200h bytes. Therefore, our FAT table must reserve 58 clusters for OS.COM. The clusters used by
 ;       OS.COM, then, will be cluster 2 through 59. The entry for cluster 59 is set to "0fffh" to indicate that it is
@@ -1476,7 +1476,7 @@ Loader                  push    cs                                              
                         mov     ax,EGDTCONSOLETSS                               ;console task state segment selector
                         cld                                                     ;forward strings
                         rep     stosw                                           ;store selectors in task queue
-                        mov     ax,ESELBACKGROUNDTSS                            ;background task state segment selector
+                        mov     ax,EGDTBACKGROUNDTSS                            ;background task state segment selector
                         stosw                                                   ;store selector in task queue
                         pop     cx                                              ;restore remaining outer iterations
                         loop    .10                                             ;next
@@ -2735,7 +2735,7 @@ irq1.120                and     eax,0FFFFh                                      
                         or      edx,eax                                         ;msg id and codes
                         xor     ecx,ecx                                         ;null param
                         push    eax                                             ;save codes
-                        mov     eax,ESELKEYBOARDMQ                              ;keyboard focus message queue
+                        mov     eax,EGDTKEYBOARDMQ                              ;keyboard focus message queue
                         call    PutMessage                                      ;put message to console
                         pop     eax                                             ;restore codes
                         test    al,al                                           ;ASCII translation?
@@ -2744,7 +2744,7 @@ irq1.120                and     eax,0FFFFh                                      
                         and     eax,0FFFFh                                      ;clear high-order word
                         or      edx,eax                                         ;msg id and codes
                         xor     ecx,ecx                                         ;null param
-                        mov     eax,ESELKEYBOARDMQ                              ;keyboard focus message queue
+                        mov     eax,EGDTKEYBOARDMQ                              ;keyboard focus message queue
                         call    PutMessage                                      ;put message to console
 irq1.130                jmp     irq1.150                                        ;finish keyboard handling
 irq1.140                mov     al,EKEYFTIMEOUT                                 ;controller timeout flag
@@ -4802,7 +4802,8 @@ GetMessage              push    ebx                                             
 ;
 ;       Description:    This routine adda a message to the message queue.
 ;
-;       In:             ECX     hi-order data word
+;       In:             EAX     message queue selector
+;                       ECX     hi-order data word
 ;                       EDX     lo-order data word
 ;
 ;       Out:            CY      0 = success
@@ -4810,7 +4811,7 @@ GetMessage              push    ebx                                             
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 PutMessage              push    ds                                              ;save non-volatile regs
-                        push    ELDTMQ                                          ;load task message queue selector ...
+                        push    eax                                             ;load task message queue selector ...
                         pop     ds                                              ;... into data segment register
                         mov     eax,[MQTail]                                    ;tail ptr
                         cmp     dword [eax],0                                   ;is queue full?
@@ -6367,7 +6368,7 @@ section                 bgtss                                                   
                         dd      001Ch                                           ;54 ds
                         dd      0                                               ;58 fs
                         dd      0                                               ;5c gs
-                        dd      ESELBACKGROUNDLDT                               ;60 ldt selector in gdt
+                        dd      EGDTBACKGROUNDLDT                               ;60 ldt selector in gdt
                         times   128-($-$$) db 0h                                ;zero fill to end of section
 ;-----------------------------------------------------------------------------------------------------------------------
 ;

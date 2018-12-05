@@ -430,12 +430,12 @@ EKEYFTIMEOUT            equ     10000000b                                       
 ;-----------------------------------------------------------------------------------------------------------------------
 ;       Kernel Constants                                                        EKRN...
 ;-----------------------------------------------------------------------------------------------------------------------
-EKRNCODEBASE            equ     1000h                                           ;kernel base address (0000:1000)
+EKRNCODEBASE            equ     01000h                                          ;kernel base address (0000:1000)
 EKRNCODESEG             equ     (EKRNCODEBASE >> 4)                             ;kernel code segment (0100:0000)
-EKRNCODELEN             equ     5000h                                           ;kernel code size (1000h to 6000h)
-EKRNCODESRCADR          equ     500h                                            ;kernel code offset to loader DS:
-EKRNHEAPSIZE            equ     80000000h                                       ;kernel heap size
-EKRNHEAPBASE            equ     10000h                                          ;kernel heap base
+EKRNCODELEN             equ     05000h                                          ;kernel code size (1000h to 6000h)
+EKRNCODESRCADR          equ     0500h                                           ;kernel code offset to loader DS:
+EKRNHEAPSIZE            equ     080000000h                                      ;kernel heap size
+EKRNHEAPBASE            equ     010000h                                         ;kernel heap base
 ;-----------------------------------------------------------------------------------------------------------------------
 ;       Local Descriptor Table (LDT) Selectors                                  ELDT...
 ;-----------------------------------------------------------------------------------------------------------------------

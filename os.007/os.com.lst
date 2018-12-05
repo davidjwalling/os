@@ -400,10 +400,10 @@
    400                                  ;-----------------------------------------------------------------------------------------------------------------------
    401                                  ;       Kernel Constants                                                        EKRN...
    402                                  ;-----------------------------------------------------------------------------------------------------------------------
-   403                                  EKRNCODEBASE            equ     1000h                                           ;kernel base address (0000:1000)
+   403                                  EKRNCODEBASE            equ     01000h                                          ;kernel base address (0000:1000)
    404                                  EKRNCODESEG             equ     (EKRNCODEBASE >> 4)                             ;kernel code segment (0100:0000)
-   405                                  EKRNCODELEN             equ     5000h                                           ;kernel code size (1000h to 6000h)
-   406                                  EKRNCODESRCADR          equ     500h                                            ;kernel code offset to loader DS:
+   405                                  EKRNCODELEN             equ     05000h                                          ;kernel code size (1000h to 6000h)
+   406                                  EKRNCODESRCADR          equ     0500h                                           ;kernel code offset to loader DS:
    407                                  ;-----------------------------------------------------------------------------------------------------------------------
    408                                  ;       Local Descriptor Table (LDT) Selectors                                  ELDT...
    409                                  ;-----------------------------------------------------------------------------------------------------------------------

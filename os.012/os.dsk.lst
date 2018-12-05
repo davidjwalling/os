@@ -430,12 +430,12 @@
    430                                  ;-----------------------------------------------------------------------------------------------------------------------
    431                                  ;       Kernel Constants                                                        EKRN...
    432                                  ;-----------------------------------------------------------------------------------------------------------------------
-   433                                  EKRNCODEBASE            equ     1000h                                           ;kernel base address (0000:1000)
+   433                                  EKRNCODEBASE            equ     01000h                                          ;kernel base address (0000:1000)
    434                                  EKRNCODESEG             equ     (EKRNCODEBASE >> 4)                             ;kernel code segment (0100:0000)
-   435                                  EKRNCODELEN             equ     5000h                                           ;kernel code size (1000h to 6000h)
-   436                                  EKRNCODESRCADR          equ     500h                                            ;kernel code offset to loader DS:
-   437                                  EKRNHEAPSIZE            equ     80000000h                                       ;kernel heap size
-   438                                  EKRNHEAPBASE            equ     10000h                                          ;kernel heap base
+   435                                  EKRNCODELEN             equ     05000h                                          ;kernel code size (1000h to 6000h)
+   436                                  EKRNCODESRCADR          equ     0500h                                           ;kernel code offset to loader DS:
+   437                                  EKRNHEAPSIZE            equ     080000000h                                      ;kernel heap size
+   438                                  EKRNHEAPBASE            equ     010000h                                         ;kernel heap base
    439                                  ;-----------------------------------------------------------------------------------------------------------------------
    440                                  ;       Local Descriptor Table (LDT) Selectors                                  ELDT...
    441                                  ;-----------------------------------------------------------------------------------------------------------------------
