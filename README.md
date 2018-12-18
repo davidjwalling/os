@@ -37,23 +37,19 @@ Part 3.			Memory and Clock
 	os.011		Add memory-size reporting from BIOS and Real-Time Clock (RTC) chip.
 	os.012		Add "date", "time" and related commands with RTC chip support.
 
-Part 4.			Network Adapter
+Part 4.			Network Adapter, Part I
 
 	os.013		Add logic to probe for and list PCI devices using the "pciprobe" or "lspci" commands.
 	os.014		Add code to display ethernet adapter memory i/o address and i/o port.
 	os.015		Add code to initialize and reset discovered PCI network adapter.
-	os.016		Add code to send an Ethernet frame.
-	os.017		Add code to receive an Ethernet frame.
-	os.018
-	os.019
-	os.020
+	os.016		Add code to receive an Ethernet frame.
 
 Part 5.			Tasks
 
-	os.021		Add a second task manually and IRQ0-driven task switching.
-	os.022		Add support to load a task from disk.
-	os.023		Add commands to start, stop and list tasks.
-	os.024		Add code to configure tasks to run on start-up.
+	os.017		Add a second task manually and IRQ0-driven task switching.
+	os.018		Add support to load a task from disk.
+	os.019		Add commands to start, stop and list tasks.
+	os.020		Add code to configure tasks to run on start-up.
 
 ## Compilation
 
