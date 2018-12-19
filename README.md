@@ -51,9 +51,9 @@ Part 5.			Tasks
 	os.019		Add commands to start, stop and list tasks.
 	os.020		Add code to configure tasks to run on start-up.
 
-## Compilation
+## Assembly
 
-Local compilation of the source code requires NASM (the Netwide Assembler) or a compatible assembler.
+Assembling the source code requires NASM (the Netwide Assembler) or a compatible assembler.
 
 	2018-07-04	Recommended version of NASM is 2.13.03.
 

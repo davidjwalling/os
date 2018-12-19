@@ -37,20 +37,23 @@
 ;       Conventions
 ;
 ;       Alignment:      In this document, columns are numbered beginning with 1.
+;                       Logical tabs are set after each eight columns.
+;                       Tabs are simulated using SPACE characters.
+;                       For comments that span an entire line, comment text begins in column 9.
 ;                       Assembly instructions (mnemonics) begin in column 25.
 ;                       Assembly operands begin in column 33.
 ;                       Inline comments begin in column 81.
 ;                       Lines should not extend beyond column 120.
 ;
 ;       Arguments:      Arguments are passed as registers and generally follow this order: EAX, ECX, EDX, EBX.
-;                       However, ECX may be used as the first parameter if a test for zero is required. EBX and EBP
+;                       However, ECX may be used as the sole parameter if a test for zero is required. EBX and EBP
 ;                       may be used as parameters if the routine is considered a "method" of an "object". In this
 ;                       case, EBX or EBP will address the object storage. If the routine is general-purpose string
 ;                       or character-array manipulator, ESI and EDI may be used as parameters to address input and/or
 ;                       ouput buffers, respectively.
 ;
 ;       Code Order:     Routines should appear in the order of their first likely use.
-;                       Negative relative call or jump addresses indicate reuse.
+;                       Negative relative call or jump addresses usually, therefore, indicate reuse.
 ;
 ;       Comments:       A comment that spans the entire line begins with a semicolon in column 1.
 ;                       A comment that accompanies code on a line begins with a semicolon in column 81.
@@ -87,7 +90,7 @@
 ;       Macros:         Macro names are in camel case, beginning with a lower-case letter (getDateString).
 ;                       Macro names describe an action and so DO begin with a verb.
 ;
-;       Memory Use:     Operating system memory allocation is avoided wherever possible.
+;       Memory Use:     Operating system memory allocation is minimized.
 ;                       Buffers are kept to as small a size as practicable.
 ;                       Data and code intermingling is avoided wherever possible.
 ;
@@ -98,7 +101,7 @@
 ;                       setting the carry flag to 1. Routines may prefer the use of ECX as a return value if the
 ;                       value is to be tested for null upon return (using the jecxz instruction).
 ;
-;       Routines:       Routine names are in mixed case, capitalized (GetYear, ReadRealTimeClock).
+;       Routines:       Routine names are in mixed case and capitalized (GetYear, ReadRealTimeClock).
 ;                       Routine names begin with a verb (Get, Read, Load).
 ;                       Routines should have a single entry address and a single exit instruction (ret, iretd, etc.).
 ;                       Routines that serve as wrappers for library functions carry the same name as the library
