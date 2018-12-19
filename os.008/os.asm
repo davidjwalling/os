@@ -43,20 +43,23 @@
 ;       Conventions
 ;
 ;       Alignment:      In this document, columns are numbered beginning with 1.
+;                       Logical tabs are set after each eight columns.
+;                       Tabs are simulated using SPACE characters.
+;                       For comments that span an entire line, comment text begins in column 9.
 ;                       Assembly instructions (mnemonics) begin in column 25.
 ;                       Assembly operands begin in column 33.
 ;                       Inline comments begin in column 81.
 ;                       Lines should not extend beyond column 120.
 ;
 ;       Arguments:      Arguments are passed as registers and generally follow this order: EAX, ECX, EDX, EBX.
-;                       However, ECX may be used as the first parameter if a test for zero is required. EBX and EBP
+;                       However, ECX may be used as the sole parameter if a test for zero is required. EBX and EBP
 ;                       may be used as parameters if the routine is considered a "method" of an "object". In this
 ;                       case, EBX or EBP will address the object storage. If the routine is general-purpose string
 ;                       or character-array manipulator, ESI and EDI may be used as parameters to address input and/or
 ;                       ouput buffers, respectively.
 ;
 ;       Code Order:     Routines should appear in the order of their first likely use.
-;                       Negative relative call or jump addresses indicate reuse.
+;                       Negative relative call or jump addresses usually, therefore, indicate reuse.
 ;
 ;       Comments:       A comment that spans the entire line begins with a semicolon in column 1.
 ;                       A comment that accompanies code on a line begins with a semicolon in column 81.
@@ -93,7 +96,7 @@
 ;       Macros:         Macro names are in camel case, beginning with a lower-case letter (getDateString).
 ;                       Macro names describe an action and so DO begin with a verb.
 ;
-;       Memory Use:     Operating system memory allocation is avoided wherever possible.
+;       Memory Use:     Operating system memory allocation is minimized.
 ;                       Buffers are kept to as small a size as practicable.
 ;                       Data and code intermingling is avoided wherever possible.
 ;
@@ -104,7 +107,7 @@
 ;                       setting the carry flag to 1. Routines may prefer the use of ECX as a return value if the
 ;                       value is to be tested for null upon return (using the jecxz instruction).
 ;
-;       Routines:       Routine names are in mixed case, capitalized (GetYear, ReadRealTimeClock).
+;       Routines:       Routine names are in mixed case and capitalized (GetYear, ReadRealTimeClock).
 ;                       Routine names begin with a verb (Get, Read, Load).
 ;                       Routines should have a single entry address and a single exit instruction (ret, iretd, etc.).
 ;                       Routines that serve as wrappers for library functions carry the same name as the library
@@ -1461,17 +1464,33 @@ czStartingMsg           db      "Starting OS",13,10,0                           
 ;       3210987654321098765432109876543210987654321098765432109876543210
 ;       ----------------------------------------------------------------
 ;       h......hffffmmmma......ab......................bn..............n
-;       00000000                        all areas have base addresses below 2^24
-;               0100                    (0x4) 32-bit single-byte granularity
-;               1100                    (0xC) 32-bit 4KB granularity
-;                   1001                present, ring-0, selector
 ;
-;       h...h   hi-order base address (bits 24-31)
-;       ffff    flags
-;       mmmm    hi-order limit (bits 16-19)
-;       a...a   access
-;       b...b   lo-order base address (bits 0-23)
-;       n...n   lo-order limit (bits 0-15)
+;       h......h                                                                hi-order base address (bits 24-31)
+;               ffff                                                            flags
+;                   mmmm                                                        hi-order limit (bits 16-19)
+;                       a......a                                                access
+;                               b......................b                        lo-order base address (bits 0-23)
+;                                                       n..............n        lo-order limit (bits 0-15)
+;
+;       00000000                                                                all areas have base addresses below 2^24
+;               0...                                                            single-byte size granularity
+;               1...                                                            4-kilobyte size granularity
+;               .0..                                                            16-bit default for code segments
+;               .1..                                                            32-bit default for code segments
+;               ..0.                                                            intel-reserved; should be zero
+;               ...0                                                            available for operating system use
+;                   0000                                                        segment is less than 2^16 in size
+;                   1111                                                        segment is greater than 2^24-2 in size
+;                       1.......                                                segment is present in memory
+;                       .00.....                                                segment is of privilege level 0
+;                       ...0....                                                segment is of system or gate type
+;                       ...00010                                                local decriptor table (LDT)
+;                       ...01001                                                task state segment (TSS) available
+;                       ...01011                                                task state segment (TSS) busy
+;                       ...10...                                                data segment
+;                       ...10011                                                writable data (accessed)
+;                       ...11...                                                code segment
+;                       ...11011                                                readable non-conforming code (accessed)
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 gdt                                                     ;global descriptor table
@@ -1882,11 +1901,11 @@ section                 kernel  vstart=0h                                       
 ;       Description:    This routine will be used to respond to processor interrupts that are not otherwise handled.
 ;                       At this stage, we simply restore the stack and return from the interrupt.
 ;
-;       In:             [esp+16]        eflags                                  stored by interrupt call
-;                       [esp+12]        cs                                      stored by interrupt call
-;                       [esp+8]         eip                                     stored by interrupt call
-;                       [esp+4]         interrupt number (0-31)                 stored by push instruction
-;                       [esp+0]         error message address                   stored by push instructions
+;       In:             [ESP+16]        eflags                                  stored by interrupt call
+;                       [ESP+12]        cs                                      stored by interrupt call
+;                       [ESP+8]         eip                                     stored by interrupt call
+;                       [ESP+4]         interrupt number (0-31)                 stored by push instruction
+;                       [ESP+0]         error message address                   stored by push instructions
 ;
 ;       Out:            N/A             This routine does not exit.
 ;
@@ -1894,25 +1913,25 @@ section                 kernel  vstart=0h                                       
 ReportInterrupt         push    ds                                              ;save DS at time of interrupt
                         push    es                                              ;save ES at time of interrupt
                         pushad                                                  ;save EAX,ECX,EDX,EBX,EBP,ESP,ESI,EDI
-                        mov     ebp,esp                                         ;ebp --> [EDI]
+                        mov     ebp,esp                                         ;EBP --> [EDI]
 ;
 ;       Addressability to registers at the time of the interrupt is now established as:
 ;
-;                       [ebp+56]        eflags
-;                       [ebp+52]        cs
-;                       [ebp+48]        eip
-;                       [ebp+44]        interrupt number (0-31)
-;                       [ebp+40]        error message address
-;                       [ebp+36]        ds
-;                       [ebp+32]        es
-;                       [ebp+28]        eax
-;                       [ebp+24]        ecx
-;                       [ebp+20]        edx
-;                       [ebp+16]        ebx
-;                       [ebp+12]        esp
-;                       [ebp+8]         ebp
-;                       [ebp+4]         esi
-;                       [ebp+0]         edi
+;                       [EBP+56]        eflags
+;                       [EBP+52]        cs
+;                       [EBP+48]        eip
+;                       [EBP+44]        interrupt number (0-31)
+;                       [EBP+40]        error message address
+;                       [EBP+36]        ds
+;                       [EBP+32]        es
+;                       [EBP+28]        eax
+;                       [EBP+24]        ecx
+;                       [EBP+20]        edx
+;                       [EBP+16]        ebx
+;                       [EBP+12]        esp
+;                       [EBP+8]         ebp
+;                       [EBP+4]         esi
+;                       [EBP+0]         edi
 ;
                         push    cs                                              ;load code selector ...
                         pop     ds                                              ;... into DS
