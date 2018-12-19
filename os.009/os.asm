@@ -1902,9 +1902,9 @@ section                 kernel  vstart=0h                                       
 ;       Description:    This routine will be used to respond to processor interrupts that are not otherwise handled.
 ;                       At this stage, we simply restore the stack and return from the interrupt.
 ;
-;       In:             [ESP+16]        eflags                                  stored by interrupt call
-;                       [ESP+12]        cs                                      stored by interrupt call
-;                       [ESP+8]         eip                                     stored by interrupt call
+;       In:             [ESP+16]        EFLAGS                                  stored by interrupt call
+;                       [ESP+12]        CS                                      stored by interrupt call
+;                       [ESP+8]         EIP                                     stored by interrupt call
 ;                       [ESP+4]         interrupt number (0-31)                 stored by push instruction
 ;                       [ESP+0]         error message address                   stored by push instructions
 ;
@@ -1918,21 +1918,21 @@ ReportInterrupt         push    ds                                              
 ;
 ;       Addressability to registers at the time of the interrupt is now established as:
 ;
-;                       [EBP+56]        eflags
-;                       [EBP+52]        cs
-;                       [EBP+48]        eip
+;                       [EBP+56]        EFLAGS
+;                       [EBP+52]        CS
+;                       [EBP+48]        EIP
 ;                       [EBP+44]        interrupt number (0-31)
 ;                       [EBP+40]        error message address
-;                       [EBP+36]        ds
-;                       [EBP+32]        es
-;                       [EBP+28]        eax
-;                       [EBP+24]        ecx
-;                       [EBP+20]        edx
-;                       [EBP+16]        ebx
-;                       [EBP+12]        esp
-;                       [EBP+8]         ebp
-;                       [EBP+4]         esi
-;                       [EBP+0]         edi
+;                       [EBP+36]        DS
+;                       [EBP+32]        ES
+;                       [EBP+28]        EAX
+;                       [EBP+24]        ECX
+;                       [EBP+20]        EDX
+;                       [EBP+16]        EBX
+;                       [EBP+12]        ESP
+;                       [EBP+8]         EBP
+;                       [EBP+4]         ESI
+;                       [EBP+0]         EDI
 ;
                         push    cs                                              ;load code selector ...
                         pop     ds                                              ;... into DS

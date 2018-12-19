@@ -2046,9 +2046,9 @@
   1902                                  ;       Description:    This routine will be used to respond to processor interrupts that are not otherwise handled.
   1903                                  ;                       At this stage, we simply restore the stack and return from the interrupt.
   1904                                  ;
-  1905                                  ;       In:             [ESP+16]        eflags                                  stored by interrupt call
-  1906                                  ;                       [ESP+12]        cs                                      stored by interrupt call
-  1907                                  ;                       [ESP+8]         eip                                     stored by interrupt call
+  1905                                  ;       In:             [ESP+16]        EFLAGS                                  stored by interrupt call
+  1906                                  ;                       [ESP+12]        CS                                      stored by interrupt call
+  1907                                  ;                       [ESP+8]         EIP                                     stored by interrupt call
   1908                                  ;                       [ESP+4]         interrupt number (0-31)                 stored by push instruction
   1909                                  ;                       [ESP+0]         error message address                   stored by push instructions
   1910                                  ;
@@ -2062,21 +2062,21 @@
   1918                                  ;
   1919                                  ;       Addressability to registers at the time of the interrupt is now established as:
   1920                                  ;
-  1921                                  ;                       [EBP+56]        eflags
-  1922                                  ;                       [EBP+52]        cs
-  1923                                  ;                       [EBP+48]        eip
+  1921                                  ;                       [EBP+56]        EFLAGS
+  1922                                  ;                       [EBP+52]        CS
+  1923                                  ;                       [EBP+48]        EIP
   1924                                  ;                       [EBP+44]        interrupt number (0-31)
   1925                                  ;                       [EBP+40]        error message address
-  1926                                  ;                       [EBP+36]        ds
-  1927                                  ;                       [EBP+32]        es
-  1928                                  ;                       [EBP+28]        eax
-  1929                                  ;                       [EBP+24]        ecx
-  1930                                  ;                       [EBP+20]        edx
-  1931                                  ;                       [EBP+16]        ebx
-  1932                                  ;                       [EBP+12]        esp
-  1933                                  ;                       [EBP+8]         ebp
-  1934                                  ;                       [EBP+4]         esi
-  1935                                  ;                       [EBP+0]         edi
+  1926                                  ;                       [EBP+36]        DS
+  1927                                  ;                       [EBP+32]        ES
+  1928                                  ;                       [EBP+28]        EAX
+  1929                                  ;                       [EBP+24]        ECX
+  1930                                  ;                       [EBP+20]        EDX
+  1931                                  ;                       [EBP+16]        EBX
+  1932                                  ;                       [EBP+12]        ESP
+  1933                                  ;                       [EBP+8]         EBP
+  1934                                  ;                       [EBP+4]         ESI
+  1935                                  ;                       [EBP+0]         EDI
   1936                                  ;
   1937 00000158 0E                                              push    cs                                              ;load code selector ...
   1938 00000159 1F                                              pop     ds                                              ;... into DS
