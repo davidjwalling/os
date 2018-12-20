@@ -382,18 +382,20 @@ EASCIICASEMASK          equ     11011111b                                       
 ;       Peripheral Component Interconnect (PCI)                                 EPCI...
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-EPCIPORTCONFIGADDR      equ     0CF8h                                           ;PCI Configuration Address Port
-EPCIPORTCONFIGDATA      equ     0CFCh                                           ;PCI Configuration Data Port
-EPCIVENDORAPPLE         equ     106Bh                                           ;Apple
-EPCIVENDORINTEL         equ     8086h                                           ;Intel
-EPCIVENDORORACLE        equ     80EEh                                           ;Oracle
-EPCIAPPLEUSB            equ     003Fh                                           ;USB Controller
-EPCIINTELPRO1000MT      equ     100Fh                                           ;Pro/1000 MT Ethernet Adapter
-EPCIINTELPCIMEM         equ     1237h                                           ;PCI & Memory
-EPCIINTELAD1881         equ     2415h                                           ;Aureal AD1881 SOUNDMAX
-EPCIINTELPIIX3          equ     7000h                                           ;PIIX3 PCI-to-ISA Bridge (Triton II)
-EPCIINTEL82371AB        equ     7111h                                           ;82371AB/EB PCI Bus Master IDE Cntrlr
-EPCIINTELPIIX4          equ     7113h                                           ;PIIX4/4E/4M Power Mgmt Cntrlr
+EPCIPORTCONFIGADDRHI    equ     00Ch                                            ;PCI configuration address port hi-order
+EPCIPORTCONFIGADDRLO    equ     0F8h                                            ;PCI configuration address port lo-order
+EPCIPORTCONFIGDATAHI    equ     00Ch                                            ;PCI configuration data port hi-order
+EPCIPORTCONFIGDATALO    equ     0FCh                                            ;PCI configuration data port lo-order
+EPCIVENDORAPPLE         equ     0106Bh                                          ;Apple
+EPCIVENDORINTEL         equ     08086h                                          ;Intel
+EPCIVENDORORACLE        equ     080EEh                                          ;Oracle
+EPCIAPPLEUSB            equ     0003Fh                                          ;USB Controller
+EPCIINTELPRO1000MT      equ     0100Fh                                          ;Pro/1000 MT Ethernet Adapter
+EPCIINTELPCIMEM         equ     01237h                                          ;PCI & Memory
+EPCIINTELAD1881         equ     02415h                                          ;Aureal AD1881 SOUNDMAX
+EPCIINTELPIIX3          equ     07000h                                          ;PIIX3 PCI-to-ISA Bridge (Triton II)
+EPCIINTEL82371AB        equ     07111h                                          ;82371AB/EB PCI Bus Master IDE Cntrlr
+EPCIINTELPIIX4          equ     07113h                                          ;PIIX4/4E/4M Power Mgmt Cntrlr
 EPCIORACLEVBOXGA        equ     0BEEFh                                          ;VirtualBox Graphics Adapter
 EPCIORACLEVBOXDEVICE    equ     0CAFEh                                          ;VirtualBox Device
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -555,14 +557,14 @@ endstruc
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 struc                   PCI
-.configdata             equ     $                                               ;data read from port 0CFCh
-.configdata_lo          resw    1                                               ;low-order data
-.configdata_hi          resw    1                                               ;high-order data
-.selector               resd    1                                               ;1000 0000 bbbb bbbb dddd dfff 0000 0000
 .bus                    resb    1                                               ;bus identifier (00-FF)
 .device                 resb    1                                               ;device identifier (00-1F)
 .function               resb    1                                               ;function identifer (0-7)
 .register               resb    1                                               ;register identifier (00-FF)
+.selector               resd    1                                               ;1000 0000 bbbb bbbb dddd dfff rrrr rrrr
+.configdata             equ     $                                               ;data read from port 0CFCh
+.configdata_lo          resw    1                                               ;low-order data
+.configdata_hi          resw    1                                               ;high-order data
 .bar0                   resd    1                                               ;base address register 0
 .bar1                   resd    1                                               ;base address register 1
 .bar2                   resd    1                                               ;base address register 2
@@ -5709,29 +5711,96 @@ ConMonthName            readRealTimeClock  wsConsoleDateTime                    
 ;-----------------------------------------------------------------------------------------------------------------------
 ConPCIProbe             push    ebx                                             ;save non-volatile regs
 ;
-;       Setup addressability.
+;       Initialize variables.
+;       Construct PCI selector.
+;       Read PCI configuration data.
 ;
                         mov     ebx,wsConsolePCI                                ;PCI structure address
+                        call    ConInitPCIContext                               ;initialize PCI struct
+.10                     call    ConBuildPCISelector                             ;build the PCI selector
+                        call    ConReadPCIConfigData                            ;read the configuration data
 ;
-;       Initialize variables.
+;       Interpret PCI data value and display finding.
 ;
-                        xor     eax,eax                                         ;zero register
-                        mov     [ebx+PCI.configdata],eax                        ;initialize config-data
-                        mov     [ebx+PCI.selector],eax                          ;initialize selector
-                        mov     [ebx+PCI.bus],al                                ;initialize bus
-                        mov     [ebx+PCI.device],al                             ;initialize device
-                        mov     [ebx+PCI.function],al                           ;initialize function
-                        mov     [ebx+PCI.register],al                           ;initialize register
-                        mov     [ebx+PCI.bar0],eax                              ;initialize base address reg 0
-                        mov     [ebx+PCI.bar1],eax                              ;initialize base address reg 1
-                        mov     [ebx+PCI.bar2],eax                              ;initialize base address reg 2
-                        mov     [ebx+PCI.bar3],eax                              ;initialize base address reg 3
-                        mov     [ebx+PCI.bar4],eax                              ;initialize base address reg 4
-                        mov     [ebx+PCI.bar5],eax                              ;initialize base address reg 5
+                        cmp     eax,0FFFFFFFFh                                  ;function defined?
+                        jne     .20                                             ;yes, branch
+                        cmp     byte [ebx+PCI.function],0                       ;function zero?
+                        je      .40                                             ;yes, skip to next device
+                        jmp     short .30                                       ;no, skip to next function
 ;
-;       Construct PCI selector.
+;       Build PCI identifying string.
+;       Write identifying string to console.
+;       Determine the vendor and chip.
+;       Write vendor and chip to console.
 ;
-.10                     mov     ah,[ebx+PCI.bus]                                ;AH = bbbb bbbb
+.20                     mov     edx,wzConsoleToken                              ;output buffer
+                        call    ConBuildPCIIdent                                ;build PCI bus, device, function ident
+
+                        putConsoleString wzConsoleToken                         ;display bus as decimal
+
+                        call    ConInterpretPCIData                             ;update flags based on data
+
+                        putConsoleString czSpace                                ;space delimiter
+                        putConsoleString [wdConsolePCIVendorStr]                ;display vendor string
+                        putConsoleString czSpace                                ;space delimiter
+                        putConsoleString [wdConsolePCIChipStr]                  ;display chip string
+                        putConsoleString czNewLine                              ;display new line
+;
+;       Next function.
+;
+.30                     call    ConNextPCIFunction                              ;next function
+                        jb      .10                                             ;continue if no overflow
+;
+;       Next device, bus.
+;
+.40                     call    ConNextPCIDevice                                ;next device, bus
+                        jb      .10                                             ;continue if no overflow
+;
+;       Restore and return.
+;
+                        pop     ebx                                             ;restore non-volatile regs
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConInitPCIContext
+;
+;       Description:    This routine zeros a PCI structure.
+;
+;       In:             DS:EBX  PCI structure address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConInitPCIContext       push    ecx                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    es                                              ;
+;
+;       Zero context.
+;
+                        push    ds                                              ;load data segment...
+                        pop     es                                              ;...into extra segment
+                        mov     edi,ebx                                         ;PCI structure offset
+                        mov     ecx,EPCILEN                                     ;PCI structure length
+                        xor     al,al                                           ;zero
+                        cld                                                     ;forward strings
+                        rep     stosb                                           ;zero structure members
+;
+;       Restore and return.
+;
+                        pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConBuildPCISelector
+;
+;       Description:    This routine sets the selector member of a PCI based on the bus, device and function.
+;
+;       In:             DS:EBX  PCI structure address
+;
+;       Out:            EAX     bus, device, function, register selector
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConBuildPCISelector     mov     ah,[ebx+PCI.bus]                                ;AH = bbbb bbbb
                         mov     dl,[ebx+PCI.device]                             ;DL = ???d dddd
                         shl     dl,3                                            ;DL = dddd d000
                         mov     al,[ebx+PCI.function]                           ;AL = ???? ?fff
@@ -5739,51 +5808,29 @@ ConPCIProbe             push    ebx                                             
                         or      al,dl                                           ;AL = dddd dfff
                         movzx   eax,ax                                          ;0000 0000 0000 0000 bbbb bbbb dddd dfff
                         shl     eax,8                                           ;0000 0000 bbbb bbbb dddd dfff 0000 0000
-                        or      eax,80000000h                                   ;1000 0000 bbbb bbbb dddd dfff 0000 0000
-                        mov     [ebx+PCI.selector],eax                          ;save selector
+                        mov     al,[ebx+PCI.register]                           ;0000 0000 bbbb bbbb dddd dfff rrrr rrrr
+                        or      eax,080000000h                                  ;1000 0000 bbbb bbbb dddd dfff rrrr rrrr
+                        mov     [ebx+PCI.selector],eax                          ;set selector
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Read PCI data register.
+;       Routine:        ConReadPCIConfigData
 ;
-                        mov     dx,EPCIPORTCONFIGADDR                           ;PCI config address port
-                        out     dx,eax                                          ;select device
-                        mov     dx,EPCIPORTCONFIGDATA                           ;PCI config data port
-                        in      eax,dx                                          ;read register data
-                        mov     [ebx+PCI.configdata],eax                        ;save config data
+;       Description:    This routine reads PCI configuration data from the register indicated by the selector.
 ;
-;       Interpret PCI data value and display finding.
+;       In:             DS:EBX  PCI structure address
 ;
-                        cmp     eax,0ffffffffh                                  ;not defined?
-                        je      .20                                             ;yes, branch
-                        mov     edx,wzConsoleToken                              ;output buffer
-                        call    ConBuildPCIIdent                                ;build PCI bus, device, function ident
-
-                        putConsoleString wzConsoleToken                         ;display bus as decimal
-
-                        call    ConInterpretPCIData                             ;update flags based on data
-
-                        putConsoleString czSpace
-                        putConsoleString [wdConsolePCIVendorStr]
-                        putConsoleString czSpace
-                        putConsoleString [wdConsolePCIChipStr]
-                        putConsoleString czNewLine                              ;display new line
+;       Out:            EAX     config data
 ;
-;       Step to next function, device, bus.
-;
-.20                     inc     byte [ebx+PCI.function]                         ;next function
-                        cmp     byte [ebx+PCI.function],8                       ;at limit?
-                        jb      .10                                             ;no, continue
-                        mov     byte [ebx+PCI.function],0                       ;zero function
-                        inc     byte [ebx+PCI.device]                           ;next device
-                        cmp     byte [ebx+PCI.device],32                        ;at limit?
-                        jb      .10                                             ;no, continue
-                        mov     byte [ebx+PCI.device],0                         ;zero device
-                        inc     byte [ebx+PCI.bus]                              ;next bus
-                        cmp     byte [ebx+PCI.bus],8                            ;at limit?
-                        jb      .10                                             ;no, continue
-;
-;       Restore and return.
-;
-                        pop     ebx                                             ;restore non-volatile regs
+;-----------------------------------------------------------------------------------------------------------------------
+ConReadPCIConfigData    mov     dh,EPCIPORTCONFIGADDRHI                         ;PCI configuration address port hi-order
+                        mov     dl,EPCIPORTCONFIGADDRLO                         ;PCI configuration address port lo-order
+                        mov     eax,[ebx+PCI.selector]                          ;PCI selector
+                        out     dx,eax                                          ;select bus, device, function, reg
+                        mov     dh,EPCIPORTCONFIGDATAHI                         ;PCI configuraiton data port hi-order
+                        mov     dl,EPCIPORTCONFIGDATALO                         ;PCI configuration data port lo-order
+                        in      eax,dx                                          ;read register
+                        mov     [ebx+PCI.configdata],eax                        ;set configdata
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5797,6 +5844,15 @@ ConPCIProbe             push    ebx                                             
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ConBuildPCIIdent        push    edi                                             ;save non-volatile regs
+                        push    es                                              ;
+;
+;       Establish addressability
+;
+                        push    ds                                              ;load data segment...
+                        pop     es                                              ;...into extra segment reg
+;
+;       Build identifier string (bus.device.function)
+;
                         mov     edi,edx                                         ;output buffer address
                         mov     al,[ebx+PCI.bus]                                ;current PCI bus (0-255)
                         xor     ah,ah                                           ;zero high-order dividend
@@ -5826,7 +5882,11 @@ ConBuildPCIIdent        push    edi                                             
                         stosb                                                   ;store 1's
                         xor     al,al                                           ;null terminator
                         stosb                                                   ;store terminator
-                        pop     edi                                             ;restore non-volatile regs
+;
+;       Restore and return.
+;
+                        pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5884,6 +5944,44 @@ ConInterpretPCIData     mov     eax,czApple
 .40                     mov     [wdConsolePCIVendorStr],eax                     ;save vendor string
                         mov     [wdConsolePCIChipStr],edx                       ;save chip string
                         ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConNextPCIFunction
+;
+;       Description:    This routine increments the function of the device.
+;
+;       In:             DS:EBX  PCI structure address
+;
+;       Out:            CY      0 = overflow
+;                               1 = no overflow, continue
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConNextPCIFunction      inc     byte [ebx+PCI.function]                         ;next function
+                        cmp     byte [ebx+PCI.function],8                       ;at limit?
+                        jb      .10                                             ;no, continue
+                        mov     byte [ebx+PCI.function],0                       ;zero function
+.10                     ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConNextPCIDevice
+;
+;       Description:    This routine increments the device of the PCI across buses.
+;
+;       In:             DS:EBX  PCI structure address
+;
+;       Out:            CY      0 = overflow
+;                               1 = no overflow, continue
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConNextPCIDevice        inc     byte [ebx+PCI.device]                           ;next device
+                        cmp     byte [ebx+PCI.device],32                        ;at limit?
+                        jb      .10                                             ;no, continue
+                        mov     byte [ebx+PCI.device],0                         ;zero device
+                        inc     byte [ebx+PCI.bus]                              ;next bus
+                        cmp     byte [ebx+PCI.bus],32                           ;at limit?
+                        jb      .10                                             ;no, continue
+                        mov     byte [ebx+PCI.bus],0                            ;zero bus
+.10                     ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        ConSecond
