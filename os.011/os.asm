@@ -1985,9 +1985,10 @@ ReportInterrupt         push    ds                                              
 ;
 ;       Addressability to registers at the time of the interrupt is now established as:
 ;
-;                       [EBP+56]        EFLAGS
-;                       [EBP+52]        CS
-;                       [EBP+48]        EIP
+;                       [EBP+60]        EFLAGS
+;                       [EBP+56]        CS
+;                       [EBP+52]        EIP
+;                       [EBP+48]        EIP hi-order
 ;                       [EBP+44]        interrupt number (0-31)
 ;                       [EBP+40]        error message address
 ;                       [EBP+36]        DS
@@ -2170,7 +2171,7 @@ ReportInterrupt         push    ds                                              
                         mov     esi,czIntCS                                     ;label
                         call    SetConsoleString                                ;draw label
                         xor     eax,eax                                         ;zero register
-                        mov     ax,[ebp+52]                                     ;CS
+                        mov     ax,[ebp+56]                                     ;CS
                         mov     cl,46                                           ;column
                         mov     ch,14                                           ;row
                         call    PutConsoleHexWord                               ;draw ASCII hex word
@@ -2181,7 +2182,7 @@ ReportInterrupt         push    ds                                              
                         mov     ch,11                                           ;row
                         mov     esi,czIntEFLAGS                                 ;label
                         call    SetConsoleString                                ;draw label
-                        mov     eax,[ebp+56]                                    ;EFLAGS
+                        mov     eax,[ebp+60]                                    ;EFLAGS
                         mov     cl,55                                           ;column
                         mov     ch,11                                           ;row
                         call    PutConsoleHexDword                              ;draw ASCII hex doubleword
@@ -2203,7 +2204,7 @@ ReportInterrupt         push    ds                                              
                         mov     ch,14                                           ;row
                         mov     esi,czIntEIP                                    ;label
                         call    SetConsoleString                                ;draw label
-                        mov     eax,[ebp+48]                                    ;EIP
+                        mov     eax,[ebp+52]                                    ;EIP lo-order 32-bits
                         mov     cl,55                                           ;column
                         mov     ch,14                                           ;row
                         call    PutConsoleHexDword                              ;draw ASCII hex doubleword
