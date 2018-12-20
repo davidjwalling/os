@@ -4,8 +4,8 @@
 ;
 ;       Project:        os.014
 ;
-;       Description:    In this sample, the console task is expanded to report the ethernet adapter memory address
-;                       and port, if found.
+;       Description:    In this sample, the console task is expanded to locate and report the ethernet adapter
+;                       at start-up.
 ;
 ;       Revised:        July 4, 2018
 ;
@@ -383,18 +383,20 @@ EASCIICASEMASK          equ     11011111b                                       
 ;       Peripheral Component Interconnect (PCI)                                 EPCI...
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-EPCIPORTCONFIGADDR      equ     0CF8h                                           ;PCI Configuration Address Port
-EPCIPORTCONFIGDATA      equ     0CFCh                                           ;PCI Configuration Data Port
-EPCIVENDORAPPLE         equ     106Bh                                           ;Apple
-EPCIVENDORINTEL         equ     8086h                                           ;Intel
-EPCIVENDORORACLE        equ     80EEh                                           ;Oracle
-EPCIAPPLEUSB            equ     003Fh                                           ;USB Controller
-EPCIINTELPRO1000MT      equ     100Fh                                           ;Pro/1000 MT Ethernet Adapter
-EPCIINTELPCIMEM         equ     1237h                                           ;PCI & Memory
-EPCIINTELAD1881         equ     2415h                                           ;Aureal AD1881 SOUNDMAX
-EPCIINTELPIIX3          equ     7000h                                           ;PIIX3 PCI-to-ISA Bridge (Triton II)
-EPCIINTEL82371AB        equ     7111h                                           ;82371AB/EB PCI Bus Master IDE Cntrlr
-EPCIINTELPIIX4          equ     7113h                                           ;PIIX4/4E/4M Power Mgmt Cntrlr
+EPCIPORTCONFIGADDRHI    equ     00Ch                                            ;PCI configuration address port hi-order
+EPCIPORTCONFIGADDRLO    equ     0F8h                                            ;PCI configuration address port lo-order
+EPCIPORTCONFIGDATAHI    equ     00Ch                                            ;PCI configuration data port hi-order
+EPCIPORTCONFIGDATALO    equ     0FCh                                            ;PCI configuration data port lo-order
+EPCIVENDORAPPLE         equ     0106Bh                                          ;Apple
+EPCIVENDORINTEL         equ     08086h                                          ;Intel
+EPCIVENDORORACLE        equ     080EEh                                          ;Oracle
+EPCIAPPLEUSB            equ     0003Fh                                          ;USB Controller
+EPCIINTELPRO1000MT      equ     0100Fh                                          ;Pro/1000 MT Ethernet Adapter
+EPCIINTELPCIMEM         equ     01237h                                          ;PCI & Memory
+EPCIINTELAD1881         equ     02415h                                          ;Aureal AD1881 SOUNDMAX
+EPCIINTELPIIX3          equ     07000h                                          ;PIIX3 PCI-to-ISA Bridge (Triton II)
+EPCIINTEL82371AB        equ     07111h                                          ;82371AB/EB PCI Bus Master IDE Cntrlr
+EPCIINTELPIIX4          equ     07113h                                          ;PIIX4/4E/4M Power Mgmt Cntrlr
 EPCIORACLEVBOXGA        equ     0BEEFh                                          ;VirtualBox Graphics Adapter
 EPCIORACLEVBOXDEVICE    equ     0CAFEh                                          ;VirtualBox Device
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -508,6 +510,21 @@ EDATETIMELEN            equ     ($-.second)
 endstruc
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;       ETHER
+;
+;       The ETHER structure defines an Ethernet adapter context.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+struc                   ETHER
+.selector               resd    1                                               ;PCI selector
+.mmio                   resd    1                                               ;memory mapped i/o address
+.port                   resd    1                                               ;i/o port
+.mac                    resb    6                                               ;mac address
+.irq                    resb    1                                               ;h/w interrupt request line (IRQ)
+EETHERLEN               equ     ($-.selector)
+endstruc
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;       MEMBLOCK
 ;
 ;       The MEMBLOCK structure defines a memory block.
@@ -560,20 +577,16 @@ endstruc
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 struc                   PCI
-.configdata             equ     $                                               ;data read from port 0CFCh
-.configdata_lo          resw    1                                               ;low-order data
-.configdata_hi          resw    1                                               ;high-order data
-.selector               resd    1                                               ;1000 0000 bbbb bbbb dddd dfff 0000 0000
 .bus                    resb    1                                               ;bus identifier (00-FF)
 .device                 resb    1                                               ;device identifier (00-1F)
 .function               resb    1                                               ;function identifer (0-7)
 .register               resb    1                                               ;register identifier (00-FF)
-.bar0                   resd    1                                               ;base address register 0
-.bar1                   resd    1                                               ;base address register 1
-.bar2                   resd    1                                               ;base address register 2
-.bar3                   resd    1                                               ;base address register 3
-.bar4                   resd    1                                               ;base address register 4
-.bar5                   resd    1                                               ;base address register 5
+.selector               resd    1                                               ;1000 0000 bbbb bbbb dddd dfff rrrr rrrr
+.configdata             equ     $                                               ;data read from port 0CFCh
+.configdata_lo          resw    1                                               ;low-order data
+.configdata_hi          resw    1                                               ;high-order data
+.vendorstr              resd    1                                               ;vendor name const string addr
+.chipstr                resd    1                                               ;chip name const string addr
 EPCILEN                 equ     ($-.configdata)
 endstruc
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -699,12 +712,6 @@ wdConsoleHeapSize       resd    1                                               
 wdBaseMemSize           resd    1                                               ;base memory size (int 12h)
 wdExtendedMemSize       resd    1                                               ;extended memory size (int 12h)
 wdROMMemSize            resd    1                                               ;ROM memory size
-wdConsolePCIVendorStr   resd    1                                               ;PCI vendor name string addr
-wdConsolePCIChipStr     resd    1                                               ;PCI device name string addr
-wdConsoleEthernetDevice resd    1                                               ;PCI ethernet adapter selector
-wdConsoleEthernetMem    resd    1                                               ;PCI ethernet memory mapped i/o address
-wdConsoleEthernetPort   resd    1                                               ;PCI ethernet i/o port
-wdConsoleEthernetCtrl   resd    1                                               ;PCI ethernet control register value
 wbConsoleColumn         resb    1                                               ;console column
 wbConsoleRow            resb    1                                               ;console row
 wbConsoleShift          resb    1                                               ;console shift flags
@@ -724,9 +731,11 @@ wzConsoleOutBuffer      resb    80                                              
 wzBaseMemSize           resb    11                                              ;CMOS base memory bytes     zz,zzz,zz9\0
 wzROMMemSize            resb    11                                              ;ROM base memory bytes      zz,zzz,zz9\0
 wzExtendedMemSize       resb    11                                              ;CMOS extended memory bytes zz,zzz,zz9\0
+wzConsolePCIIdent       resb    9                                               ;PCI ident zzz.zz.z\0
 wsConsoleMemRoot        resb    EMEMROOTLEN                                     ;kernel base memory map
 wsConsoleDateTime       resb    EDATETIMELEN                                    ;date-time buffer
 wsConsolePCI            resb    EPCILEN                                         ;PCI context
+wsConsoleEther          resb    EETHERLEN                                       ;ethernet context
 ECONDATALEN             equ     ($-ECONDATA)                                    ;size of console data area
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -2072,9 +2081,10 @@ ReportInterrupt         push    ds                                              
 ;
 ;       Addressability to registers at the time of the interrupt is now established as:
 ;
-;                       [EBP+56]        EFLAGS
-;                       [EBP+52]        CS
-;                       [EBP+48]        EIP
+;                       [EBP+60]        EFLAGS
+;                       [EBP+56]        CS
+;                       [EBP+52]        EIP
+;                       [EBP+48]        EIP hi-order
 ;                       [EBP+44]        interrupt number (0-31)
 ;                       [EBP+40]        error message address
 ;                       [EBP+36]        DS
@@ -2257,7 +2267,7 @@ ReportInterrupt         push    ds                                              
                         mov     esi,czIntCS                                     ;label
                         call    SetConsoleString                                ;draw label
                         xor     eax,eax                                         ;zero register
-                        mov     ax,[ebp+52]                                     ;CS
+                        mov     ax,[ebp+56]                                     ;CS
                         mov     cl,46                                           ;column
                         mov     ch,14                                           ;row
                         call    PutConsoleHexWord                               ;draw ASCII hex word
@@ -2268,7 +2278,7 @@ ReportInterrupt         push    ds                                              
                         mov     ch,11                                           ;row
                         mov     esi,czIntEFLAGS                                 ;label
                         call    SetConsoleString                                ;draw label
-                        mov     eax,[ebp+56]                                    ;EFLAGS
+                        mov     eax,[ebp+60]                                    ;EFLAGS
                         mov     cl,55                                           ;column
                         mov     ch,11                                           ;row
                         call    PutConsoleHexDword                              ;draw ASCII hex doubleword
@@ -2290,7 +2300,7 @@ ReportInterrupt         push    ds                                              
                         mov     ch,14                                           ;row
                         mov     esi,czIntEIP                                    ;label
                         call    SetConsoleString                                ;draw label
-                        mov     eax,[ebp+48]                                    ;EIP
+                        mov     eax,[ebp+52]                                    ;EIP lo-order 32-bits
                         mov     cl,55                                           ;column
                         mov     ch,14                                           ;row
                         call    PutConsoleHexDword                              ;draw ASCII hex doubleword
@@ -5226,6 +5236,9 @@ ConCode                 call    ConInitializeData                               
                         putConsoleString wzExtendedMemSize                      ;extended memory size
                         putConsoleString czKB                                   ;Kilobytes
                         putConsoleString czNewLine                              ;new line
+
+                        call    ConInitializeNetwork
+
 .10                     putConsoleString czPrompt                               ;display input prompt
                         placeCursor                                             ;set CRT cursor location
                         getConsoleString wzConsoleInBuffer,79,1,13              ;accept keyboard input
@@ -5316,6 +5329,263 @@ ConInitializeData       push    ecx                                             
                         mov     edx,wzExtendedMemSize                           ;output buffer param
                         mov     bh,3                                            ;no leading zeros; thousands grouping
                         unsignedToDecimalString                                 ;build ASCIIZ decimal string
+;
+;       Restore and return.
+;
+                        pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConInitializeNetwork
+;
+;       Description:    This routine initializes console network variables.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConInitializeNetwork    push    ebx                                             ;save non-volatile regs
+                        push    ecx                                             ;
+                        push    esi                                             ;
+                        push    edi                                             ;
+;
+;       Initialize ETHER structure.
+;
+                        mov     ebx,wsConsoleEther                              ;ETHER structure address
+                        call    ConInitEtherContext                             ;initialize ETHER struct
+
+;       Initialize variables.
+;       Construct PCI selector.
+;       Read PCI configuration data.
+;
+			mov	esi,ebx						;ETHER structure address
+                        mov     ebx,wsConsolePCI                                ;PCI structure address
+                        call    ConInitPCIContext                               ;initialize PCI struct
+.10                     call    ConBuildPCISelector                             ;build the PCI selector
+                        call    ConReadPCIConfigData                            ;read the configuration data
+
+;
+;       Proceed to next device is function 0 = -1. Otherwise proceed to next function.
+;
+                        cmp     eax,-1		                                ;function defined?
+                        jne     .20                                             ;yes, branch
+                        cmp     byte [ebx+PCI.function],0                       ;function zero?
+                        je      .30                                             ;yes, skip to next device
+;
+;       Exit PCI probe if supported adapter found. Otherwise, proceed to next function.
+;
+.20                     cmp     eax,EPCIINTELPRO1000MT<<16|EPCIVENDORINTEL      ;Intel Pro/1000 EM (copper)?
+                        je      .40                                             ;yes, found!
+;
+;       Next function
+;
+                        call    ConNextPCIFunction                              ;next function
+                        jb      .10                                             ;continue if no overflow
+;
+;       Next device, bus.
+;
+.30                     call    ConNextPCIDevice                                ;next device, bus.
+                        jb      .10                                             ;continue if no overflow
+                        jmp     .990                                            ;done, ETHER not found
+;
+;       Notify adapter found
+;       Set hardware flag if supported adapter found.
+;
+.40                     putConsoleString czEthernetAdapterFound
+
+                        or      byte [wbConsoleHWFlags],EHWETHERNET             ;ethernet adapter found
+                        mov     eax,[ebx+PCI.selector]                          ;PCI selector
+                        mov     [esi+ETHER.selector],eax                        ;save as ethernet device selector
+                        jmp     .990                                            ;done, ETHER found
+;
+;       Setup search of buffer addresses for Memory-mapped I/O address
+;
+                        mov     byte [ebx+PCI.register],010h          		;offset of first BAR register
+                        xor     ecx,ecx                                         ;zero reg
+                        mov     cl,6                                            ;maximum number of BAR
+;
+;       Apply BAR register offset to selector
+;
+.50                     mov     eax,[ebx+PCI.selector]                		;selector (register is zero)
+                        mov     al,[ebx+PCI.register]                 		;next BAR register
+                        mov     [esi+ETHER.selector],eax                	;save selector
+;
+;       Select and read buffer address register.
+;
+                        mov     dh,EPCIPORTCONFIGADDRHI                         ;PCI configuration address port (high)
+                        mov     dl,EPCIPORTCONFIGADDRLO                         ;PCI configuration address port (low)
+                        out     dx,eax                                          ;select register
+                        mov     dl,EPCIPORTCONFIGDATALO                         ;PCI configuration data port (low)
+                        in      eax,dx                                          ;read register
+;
+;       Skip BAR if null. Otherwise, test if memory-mapped i/o addr
+;
+                        test    eax,eax                                         ;BAR has a value?
+                        jz      .70                                             ;no, branch
+                        test    al,1                                            ;memory BAR (bit 0=0)
+                        jnz     .60                                             ;no, branch
+;
+;       Skip if we already have MMIO. Otherwise, mask bits and save.
+;
+                        cmp     dword [esi+ETHER.mmio],0                        ;do we already have an mmio addr?
+                        jne     .70                                             ;yes, branch
+                        and     al,0F8h                                         ;mask out bits 2-0
+                        mov     [esi+ETHER.mmio],eax                            ;save the memory mapped i/o addr
+                        jmp     .70                                             ;continue to next BAR
+;
+;       Skip port if we already have one. Otherwise, mask bits and save.
+;
+.60                     cmp     dword [esi+ETHER.port],0                        ;do we already have a port?
+                        jne     .70                                             ;yes, branch
+                        and     al,0FCh                                         ;zero bits 0,1
+                        mov     [esi+ETHER.port],eax                            ;save port addr
+;
+;       Next BAR
+;
+.70                     add     byte [ebx+PCI.register],4                       ;next BAR register offset
+                        loop    .50                                             ;look for next BAR
+;
+;       Read interrupt nbr
+;
+                        mov     eax,[ebp+ETHER.selector]                        ;ethernet device PCI selector
+                        mov     al,3ch                                          ;interrupt number port addr
+                        mov     [esi+ETHER.selector],eax                        ;ethernet device PCI select|register
+                        mov     dh,EPCIPORTCONFIGADDRHI                         ;PCI configuration address port (high)
+                        mov     dl,EPCIPORTCONFIGADDRLO                         ;PCI configuration address port (low)
+                        out     dx,eax                                          ;select register
+                        mov     dl,EPCIPORTCONFIGDATALO                         ;PCI configuration data port (low)
+                        in      eax,dx                                          ;read register
+                        mov     [esi+ETHER.irq],al                              ;save IRQ
+;
+;       Error if we have no MMIO address
+;
+                        mov     eax,[esi+ETHER.mmio]                            ;ethernet device memory I/O address
+                        test    eax,eax                                         ;do we have memory I/O address?
+                        jnz     .80                                             ;yes, branch
+
+                        putConsoleString czEthernetNotAddressable               ;report not addressable
+
+                        jmp     .990                                            ;done (could do MAC read from EEPROM here)
+
+.80                     putConsoleString czEthernetAddressable                  ;report addressable
+;
+;       Read MAC address from MMIO
+;
+                        mov     edx,[esi+ETHER.mmio]                            ;MMIO address
+                        add     edx,5400h                                       ;MAC address offset
+                        mov     eax,[edx]                                       ;MAC address lo-order dword
+                        mov     [esi+ETHER.mac],eax                             ;save
+                        mov     ax,[edx+4]                                      ;MAC address hi-order word
+                        mov     [esi+ETHER.mac+4],ax                            ;save
+;
+;       Enable transmission of packets
+;
+
+
+;
+;       Setup read base address (RDBAL) (2800h)
+;
+
+;
+;       Setup receive descriptor table length (2808h)
+;
+
+;
+;       Enable receipt of packets
+;
+                        pushf
+                        cli
+                        mov     edx,[esi+ETHER.mmio]                            ;memory i/o address
+                        add     edx,0100h                                       ;RCTL register address
+                        mov     eax,[edx]                                       ;RCTL value
+                        or      eax,00000002h                                   ;enable
+                        mov     [edx],eax                                       ;store RCTL value
+                        popf
+;
+;       Enable board interrupt
+;
+                        mov     edx,[esi+ETHER.mmio]                            ;memory i/o address
+                        add     edx,2818h                                       ;add descriptor tail offset
+                        mov     eax,2                                           ;buffer number
+                        mov     [edx],eax                                       ;store buffer number
+
+
+;-----------------------------------------------------------------------------------------------------------------------
+;       Decprecated code to read MAC from EEPROM
+;-----------------------------------------------------------------------------------------------------------------------
+;                       add     edx,14h                                         ;EERD register (to read EEPROM)
+;                       xor     eax,eax                                         ;0000 0000 0000 0000 0000 0000 0000 0000
+;                       mov     al,1                                            ;dddd dddd dddd dddd aaaa aaaa 000d 0001
+;                       mov     [edx],eax                                       ;start EEPROM read
+;                       mov     ecx,10000h
+;.51                    mov     eax,[edx]
+;                       test    al,010h
+;                       jnz     .52
+;                       loop    .51
+;                       putConsoleString czEthernetEEPROMReadTimeOut
+;                       jmp     .90
+;.52                    shr     eax,16
+;                       mov     [ebx+ETHER.mac],al
+;                       mov     [ebx+ETHER.mac+1],ah
+;                       xor     eax,eax
+;                       mov     ah,1
+;                       mov     al,1
+;                       mov     [edx],eax
+;                       mov     ecx,10000h
+;.53                    mov     eax,[edx]
+;                       test    al,010h
+;                       jnz     .54
+;                       loop    .53
+;                       putConsoleString czEthernetEEPROMReadTimeOut
+;                       jmp     .90
+;.54                    shr     eax,16
+;                       mov     [ebx+ETHER.mac+2],al
+;                       mov     [ebx+ETHER.mac+3],ah
+;                       xor     eax,eax
+;                       mov     ah,2
+;                       mov     al,1
+;                       mov     [edx],eax                                       ;start EEPROM read register 2
+;                       mov     ecx,10000h                                      ;timeout loop
+;.55                    mov     eax,[edx]                                       ;read EERD register
+;                       test    al,010h                                         ;test DONE bit
+;                       jnz     .56                                             ;branch if done
+;                       loop    .55                                             ;continue
+;                       putConsoleString czEthernetEEPROMReadTimeOut
+;                       jmp     .90
+;.56                    shr     eax,16                                          ;AX = MAC addr bytes 5,6
+;                       mov     [ebx+ETHER.mac+4],al                            ;save byte 5
+;                       mov     [ebx+ETHER.mac+5],ah                            ;save byte 6
+;                       putConsoleString czEthernetEEPROMReadOK
+;.60                    jmp     .90                                             ;branch to return
+;-----------------------------------------------------------------------------------------------------------------------
+;       end of EEPROM code
+;-----------------------------------------------------------------------------------------------------------------------
+.990                    pop     edi                                             ;restore non-volatile regs
+                        pop     esi                                             ;
+                        pop     ecx                                             ;
+                        pop     ebx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConInitEtherContext
+;
+;       Description:    This routine zeros an ETHER structure
+;
+;       In:             DS:EBX  ETHER structure address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConInitEtherContext     push    ecx                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    es                                              ;
+;
+;       Zero context.
+;
+                        push    ds                                              ;load data segment...
+                        pop     es                                              ;...into extra segment
+                        mov     edi,ebx                                         ;ETHER structure offset
+                        mov     ecx,EETHERLEN                                   ;ETHER structure length
+                        xor     al,al                                           ;zero
+                        cld                                                     ;forward strings
+                        rep     stosb                                           ;zero structure members
 ;
 ;       Restore and return.
 ;
@@ -5719,29 +5989,94 @@ ConMonthName            readRealTimeClock  wsConsoleDateTime                    
 ;-----------------------------------------------------------------------------------------------------------------------
 ConPCIProbe             push    ebx                                             ;save non-volatile regs
 ;
-;       Setup addressability.
+;       Initialize variables.
+;       Construct PCI selector.
+;       Read PCI configuration data.
 ;
                         mov     ebx,wsConsolePCI                                ;PCI structure address
+                        call    ConInitPCIContext                               ;initialize PCI struct
+.10                     call    ConBuildPCISelector                             ;build the PCI selector
+                        call    ConReadPCIConfigData                            ;read the configuration data
 ;
-;       Initialize variables.
+;       Interpret PCI data value and display finding.
 ;
-                        xor     eax,eax                                         ;zero register
-                        mov     [ebx+PCI.configdata],eax                        ;initialize config-data
-                        mov     [ebx+PCI.selector],eax                          ;initialize selector
-                        mov     [ebx+PCI.bus],al                                ;initialize bus
-                        mov     [ebx+PCI.device],al                             ;initialize device
-                        mov     [ebx+PCI.function],al                           ;initialize function
-                        mov     [ebx+PCI.register],al                           ;initialize register
-                        mov     [ebx+PCI.bar0],eax                              ;initialize base address reg 0
-                        mov     [ebx+PCI.bar1],eax                              ;initialize base address reg 1
-                        mov     [ebx+PCI.bar2],eax                              ;initialize base address reg 2
-                        mov     [ebx+PCI.bar3],eax                              ;initialize base address reg 3
-                        mov     [ebx+PCI.bar4],eax                              ;initialize base address reg 4
-                        mov     [ebx+PCI.bar5],eax                              ;initialize base address reg 5
+                        cmp     eax,-1                                          ;function defined?
+                        jne     .20                                             ;yes, branch
+                        cmp     byte [ebx+PCI.function],0                       ;function zero?
+                        je      .40                                             ;yes, skip to next device
+                        jmp     short .30                                       ;no, skip to next function
 ;
-;       Construct PCI selector.
+;       Build PCI identifying string.
+;       Write identifying string to console.
+;       Determine the vendor and chip.
+;       Write vendor and chip to console.
 ;
-.10                     mov     ah,[ebx+PCI.bus]                                ;AH = bbbb bbbb
+.20                     mov     edx,wzConsolePCIIdent                           ;output buffer
+                        call    ConBuildPCIIdent                                ;build PCI bus, device, function ident
+                        call    ConInterpretPCIData                             ;update flags based on data
+
+                        putConsoleString wzConsolePCIIdent                      ;display bus as decimal
+                        putConsoleString czSpace                                ;space delimiter
+                        putConsoleString [ebx+PCI.vendorstr]                    ;display vendor string
+                        putConsoleString czSpace                                ;space delimiter
+                        putConsoleString [ebx+PCI.chipstr]                      ;display chip string
+                        putConsoleString czNewLine                              ;display new line
+;
+;       Next function.
+;
+.30                     call    ConNextPCIFunction                              ;next function
+                        jb      .10                                             ;continue if no overflow
+;
+;       Next device, bus.
+;
+.40                     call    ConNextPCIDevice                                ;next device, bus
+                        jb      .10                                             ;continue if no overflow
+;
+;       Restore and return.
+;
+                        pop     ebx                                             ;restore non-volatile regs
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConInitPCIContext
+;
+;       Description:    This routine initializes a PCI structure.
+;
+;       In:             DS:EBX  PCI structure address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConInitPCIContext       push    ecx                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    es                                              ;
+;
+;       Zero context.
+;
+                        push    ds                                              ;load data segment...
+                        pop     es                                              ;...into extra segment
+                        mov     edi,ebx                                         ;PCI structure offset
+                        mov     ecx,EPCILEN                                     ;PCI structure length
+                        xor     al,al                                           ;zero
+                        cld                                                     ;forward strings
+                        rep     stosb                                           ;zero structure members
+;
+;       Restore and return.
+;
+                        pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConBuildPCISelector
+;
+;       Description:    This routine sets the selector member of a PCI based on the bus, device and function.
+;
+;       In:             DS:EBX  PCI structure address
+;
+;       Out:            EAX     bus, device, function, register selector
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConBuildPCISelector     mov     ah,[ebx+PCI.bus]                                ;AH = bbbb bbbb
                         mov     dl,[ebx+PCI.device]                             ;DL = ???d dddd
                         shl     dl,3                                            ;DL = dddd d000
                         mov     al,[ebx+PCI.function]                           ;AL = ???? ?fff
@@ -5749,119 +6084,29 @@ ConPCIProbe             push    ebx                                             
                         or      al,dl                                           ;AL = dddd dfff
                         movzx   eax,ax                                          ;0000 0000 0000 0000 bbbb bbbb dddd dfff
                         shl     eax,8                                           ;0000 0000 bbbb bbbb dddd dfff 0000 0000
-                        or      eax,80000000h                                   ;1000 0000 bbbb bbbb dddd dfff 0000 0000
-                        mov     [ebx+PCI.selector],eax                          ;save selector
+                        mov     al,[ebx+PCI.register]                           ;0000 0000 bbbb bbbb dddd dfff rrrr rrrr
+                        or      eax,080000000h                                  ;1000 0000 bbbb bbbb dddd dfff rrrr rrrr
+                        mov     [ebx+PCI.selector],eax                          ;set selector
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Read PCI data register.
+;       Routine:        ConReadPCIConfigData
 ;
-                        mov     dx,EPCIPORTCONFIGADDR                           ;PCI config address port
-                        out     dx,eax                                          ;select device
-                        mov     dx,EPCIPORTCONFIGDATA                           ;PCI config data port
-                        in      eax,dx                                          ;read register data
-                        mov     [ebx+PCI.configdata],eax                        ;save config data
+;       Description:    This routine reads PCI configuration data from the register indicated by the selector.
 ;
-;       Interpret PCI data value and display finding.
+;       In:             DS:EBX  PCI structure address
 ;
-                        cmp     eax,0ffffffffh                                  ;not defined?
-                        je      .20                                             ;yes, branch
-                        mov     edx,wzConsoleToken                              ;output buffer
-                        call    ConBuildPCIIdent                                ;build PCI bus, device, function ident
-
-                        putConsoleString wzConsoleToken                         ;display bus as decimal
-
-                        call    ConInterpretPCIData                             ;update flags based on data
-
-                        putConsoleString czSpace
-                        putConsoleString [wdConsolePCIVendorStr]
-                        putConsoleString czSpace
-                        putConsoleString [wdConsolePCIChipStr]
-                        putConsoleString czNewLine                              ;display new line
+;       Out:            EAX     config data
 ;
-;       Step to next function, device, bus.
-;
-.20                     inc     byte [ebx+PCI.function]                         ;next function
-                        cmp     byte [ebx+PCI.function],8                       ;at limit?
-                        jb      .10                                             ;no, continue
-                        mov     byte [ebx+PCI.function],0                       ;zero function
-                        inc     byte [ebx+PCI.device]                           ;next device
-                        cmp     byte [ebx+PCI.device],32                        ;at limit?
-                        jb      .10                                             ;no, continue
-                        mov     byte [ebx+PCI.device],0                         ;zero device
-                        inc     byte [ebx+PCI.bus]                              ;next bus
-                        cmp     byte [ebx+PCI.bus],8                            ;at limit?
-                        jb      .10                                             ;no, continue
-;
-;       Report if ethernet adapter found.
-;
-                        test    byte [wbConsoleHWFlags],EHWETHERNET             ;ethernet h/w switch set?
-                        jz      .30                                             ;branch if no
-
-                        putConsoleString czEthernetAdapterFound                 ;report adapter found
-;
-;       Read base address register 0 at offset 10h.
-;
-                        mov     eax,[wdConsoleEthernetDevice]                   ;adapter PCI selector
-                        or      eax,10h                                         ;set function bits
-                        mov     dx,0cf8h                                        ;register port
-                        out     dx,eax                                          ;select register
-                        mov     dx,0cfch                                        ;data port
-                        in      eax,dx                                          ;register data
-                        mov     [wdConsoleEthernetMem],eax                      ;save ethernet memory mapped i/o addr
-;
-;       Report base address register 0 value.
-;
-                        mov     ecx,eax                                         ;unsigned integer param
-                        mov     edx,wzConsoleToken                              ;target buffer address
-
-                        unsignedToHexadecimal                                   ;convert unsigned to ASCII hex string
-                        putConsoleString czEthernetMemoryAddr                   ;ethernet I/O memory address label
-                        putConsoleString wzConsoleToken                         ;output string to console
-                        putConsoleString czNewLine                              ;output newline to console
-;
-;                       read base address register 2 at offset 18h
-;
-                        mov     eax,[wdConsoleEthernetDevice]                   ;adapter PCI selector
-                        or      eax,18h                                         ;set function bits
-                        mov     dx,0cf8h                                        ;register port
-                        out     dx,eax                                          ;select register
-                        mov     dx,0cfch                                        ;data port
-                        in      eax,dx                                          ;register data
-                        and     al,0feh                                         ;clear bit zero
-                        mov     [wdConsoleEthernetPort],eax                     ;save ethernet i/o port
-;
-;                       report base address register 2 value
-;
-                        mov     ecx,eax                                         ;unsigned integer param
-                        mov     edx,wzConsoleToken                              ;target buffer address
-
-                        unsignedToHexadecimal                                   ;convert unsigned to ASCII hex string
-                        putConsoleString czEthernetPortAddr                     ;ethernet I/O port address label
-                        putConsoleString wzConsoleToken                         ;output string to console
-                        putConsoleString czNewLine                              ;output newline to console
-;
-;                       read ethernet control register using port i/o
-;
-                        mov     eax,[wdConsoleEthernetPort]                     ;ethernet i/o port
-                        mov     dx,ax                                           ;ethernet i/o port
-                        xor     eax,eax                                         ;control register (zero)
-                        out     dx,eax                                          ;select register
-                        add     dx,4                                            ;data register
-                        in      eax,dx                                          ;read register data
-                        mov     [wdConsoleEthernetCtrl],eax                     ;save ethernet control register value
-;
-;                       report adapter control register value
-;
-                        mov     ecx,eax                                         ;unsigned integer param
-                        mov     edx,wzConsoleToken                              ;target buffer address
-
-                        unsignedToHexadecimal                                   ;convert unsigned to ASCII hex string
-                        putConsoleString czEthCtrlPortVal                       ;ethernet control port value
-                        putConsoleString wzConsoleToken                         ;output string to console
-                        putConsoleString czNewLine                              ;output newline to console
-;
-;       Restore and return.
-;
-.30                     pop     ebx                                             ;restore non-volatile regs
+;-----------------------------------------------------------------------------------------------------------------------
+ConReadPCIConfigData    mov     dh,EPCIPORTCONFIGADDRHI                         ;PCI configuration address port hi-order
+                        mov     dl,EPCIPORTCONFIGADDRLO                         ;PCI configuration address port lo-order
+                        mov     eax,[ebx+PCI.selector]                          ;PCI selector
+                        out     dx,eax                                          ;select bus, device, function, reg
+                        mov     dh,EPCIPORTCONFIGDATAHI                         ;PCI configuraiton data port hi-order
+                        mov     dl,EPCIPORTCONFIGDATALO                         ;PCI configuration data port lo-order
+                        in      eax,dx                                          ;read register
+                        mov     [ebx+PCI.configdata],eax                        ;set configdata
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5871,10 +6116,19 @@ ConPCIProbe             push    ebx                                             
 ;                       Function code values.
 ;
 ;       In:             DS:EBX  PCI structure address
-;                       DS:EDX  output buffer address
+;                       DS:EDX  output buffer address 999.99.9\0
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ConBuildPCIIdent        push    edi                                             ;save non-volatile regs
+                        push    es                                              ;
+;
+;       Establish addressability
+;
+                        push    ds                                              ;load data segment...
+                        pop     es                                              ;...into extra segment reg
+;
+;       Build identifier string (bus.device.function)
+;
                         mov     edi,edx                                         ;output buffer address
                         mov     al,[ebx+PCI.bus]                                ;current PCI bus (0-255)
                         xor     ah,ah                                           ;zero high-order dividend
@@ -5904,7 +6158,11 @@ ConBuildPCIIdent        push    edi                                             
                         stosb                                                   ;store 1's
                         xor     al,al                                           ;null terminator
                         stosb                                                   ;store terminator
-                        pop     edi                                             ;restore non-volatile regs
+;
+;       Restore and return.
+;
+                        pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5959,17 +6217,47 @@ ConInterpretPCIData     mov     eax,czApple
                         jmp     .40                                             ;continue
 .30                     mov     eax,czOther                                     ;other
                         mov     edx,czOther                                     ;other
-.40                     mov     [wdConsolePCIVendorStr],eax                     ;save vendor string
-                        mov     [wdConsolePCIChipStr],edx                       ;save chip string
+.40                     mov     [ebx+PCI.vendorstr],eax                         ;save vendor string
+                        mov     [ebx+PCI.chipstr],edx                           ;save chip string
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Set hardware flag if supported adapter found.
+;       Routine:        ConNextPCIFunction
 ;
-                        cmp     word [ebx+PCI.configdata_hi],EPCIINTELPRO1000MT ;Pro/1000 MT Ethernet Adpater
-                        jne     .90                                             ;no, branch
-                        or      byte [wbConsoleHWFlags],EHWETHERNET             ;ethernet adapter found
-                        mov     eax,[ebx+PCI.selector]                          ;PCI selector
-                        mov     [wdConsoleEthernetDevice],eax                   ;save as ethernet device selector
-.90                     ret                                                     ;return
+;       Description:    This routine increments the function of the device.
+;
+;       In:             DS:EBX  PCI structure address
+;
+;       Out:            CY      0 = overflow
+;                               1 = no overflow, continue
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConNextPCIFunction      inc     byte [ebx+PCI.function]                         ;next function
+                        cmp     byte [ebx+PCI.function],8                       ;at limit?
+                        jb      .10                                             ;no, continue
+                        mov     byte [ebx+PCI.function],0                       ;zero function
+.10                     ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConNextPCIDevice
+;
+;       Description:    This routine increments the device of the PCI across buses.
+;
+;       In:             DS:EBX  PCI structure address
+;
+;       Out:            CY      0 = overflow
+;                               1 = no overflow, continue
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConNextPCIDevice        inc     byte [ebx+PCI.device]                           ;next device
+                        cmp     byte [ebx+PCI.device],32                        ;at limit?
+                        jb      .10                                             ;no, continue
+                        mov     byte [ebx+PCI.device],0                         ;zero device
+                        inc     byte [ebx+PCI.bus]                              ;next bus
+                        cmp     byte [ebx+PCI.bus],8                            ;at limit?
+                        jb      .10                                             ;no, continue
+                        mov     byte [ebx+PCI.bus],0                            ;zero bus
+.10                     ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        ConSecond
@@ -6134,9 +6422,8 @@ czApple                 db      "Apple",0                                       
 czAurealAD1881          db      "Aureal AD1881 SOUNDMAX",0                      ;soundmax string
 czBaseMem               db      "Base memory: ",0                               ;base memory from BIOS
 czEthernetAdapterFound  db      "Ethernet adapter found",13,10,0                ;adapter found message
-czEthernetMemoryAddr    db      "Ethernet I/O memory address: ",0               ;ethernet I/O memory address
-czEthernetPortAddr      db      "Ethernet I/O port address: ",0                 ;ethernet I/O port address
-czEthCtrlPortVal        db      "Ethernet control port value: ",0               ;ethernet control port value
+czEthernetAddressable   db      "Ethernet adapter addressable",13,10,0          ;adapter is mmio addressable
+czEthernetNotAddressable db     "Ethernet adapter not addressable",13,10,0      ;adapter is not mmio addressable
 czExtendedMem           db      "Extended memory: ",0                           ;extended memory from BIOS
 czIntel                 db      "Intel",0                                       ;vendor name string
 czKB                    db      "KB",0                                          ;Kilobytes
