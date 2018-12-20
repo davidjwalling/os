@@ -565,12 +565,8 @@ struc                   PCI
 .configdata             equ     $                                               ;data read from port 0CFCh
 .configdata_lo          resw    1                                               ;low-order data
 .configdata_hi          resw    1                                               ;high-order data
-.bar0                   resd    1                                               ;base address register 0
-.bar1                   resd    1                                               ;base address register 1
-.bar2                   resd    1                                               ;base address register 2
-.bar3                   resd    1                                               ;base address register 3
-.bar4                   resd    1                                               ;base address register 4
-.bar5                   resd    1                                               ;base address register 5
+.vendorstr              resd    1                                               ;vendor name const string addr
+.chipstr                resd    1                                               ;chip name const string addr
 EPCILEN                 equ     ($-.configdata)
 endstruc
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -696,8 +692,6 @@ wdConsoleHeapSize       resd    1                                               
 wdBaseMemSize           resd    1                                               ;base memory size (int 12h)
 wdExtendedMemSize       resd    1                                               ;extended memory size (int 12h)
 wdROMMemSize            resd    1                                               ;ROM memory size
-wdConsolePCIVendorStr   resd    1                                               ;PCI vendor name string addr
-wdConsolePCIChipStr     resd    1                                               ;PCI device name string addr
 wbConsoleColumn         resb    1                                               ;console column
 wbConsoleRow            resb    1                                               ;console row
 wbConsoleShift          resb    1                                               ;console shift flags
@@ -716,6 +710,7 @@ wzConsoleOutBuffer      resb    80                                              
 wzBaseMemSize           resb    11                                              ;CMOS base memory bytes     zz,zzz,zz9\0
 wzROMMemSize            resb    11                                              ;ROM base memory bytes      zz,zzz,zz9\0
 wzExtendedMemSize       resb    11                                              ;CMOS extended memory bytes zz,zzz,zz9\0
+wzConsolePCIIdent       resb    9                                               ;PCI ident zzz.zz.z\0
 wsConsoleMemRoot        resb    EMEMROOTLEN                                     ;kernel base memory map
 wsConsoleDateTime       resb    EDATETIMELEN                                    ;date-time buffer
 wsConsolePCI            resb    EPCILEN                                         ;PCI context
@@ -5722,7 +5717,7 @@ ConPCIProbe             push    ebx                                             
 ;
 ;       Interpret PCI data value and display finding.
 ;
-                        cmp     eax,0FFFFFFFFh                                  ;function defined?
+                        cmp     eax,-1                                          ;function defined?
                         jne     .20                                             ;yes, branch
                         cmp     byte [ebx+PCI.function],0                       ;function zero?
                         je      .40                                             ;yes, skip to next device
@@ -5733,17 +5728,15 @@ ConPCIProbe             push    ebx                                             
 ;       Determine the vendor and chip.
 ;       Write vendor and chip to console.
 ;
-.20                     mov     edx,wzConsoleToken                              ;output buffer
+.20                     mov     edx,wzConsolePCIIdent                           ;output buffer
                         call    ConBuildPCIIdent                                ;build PCI bus, device, function ident
-
-                        putConsoleString wzConsoleToken                         ;display bus as decimal
-
                         call    ConInterpretPCIData                             ;update flags based on data
 
+                        putConsoleString wzConsolePCIIdent                      ;display bus as decimal
                         putConsoleString czSpace                                ;space delimiter
-                        putConsoleString [wdConsolePCIVendorStr]                ;display vendor string
+                        putConsoleString [ebx+PCI.vendorstr]                    ;display vendor string
                         putConsoleString czSpace                                ;space delimiter
-                        putConsoleString [wdConsolePCIChipStr]                  ;display chip string
+                        putConsoleString [ebx+PCI.chipstr]                      ;display chip string
                         putConsoleString czNewLine                              ;display new line
 ;
 ;       Next function.
@@ -5764,7 +5757,7 @@ ConPCIProbe             push    ebx                                             
 ;
 ;       Routine:        ConInitPCIContext
 ;
-;       Description:    This routine zeros a PCI structure.
+;       Description:    This routine initializes a PCI structure.
 ;
 ;       In:             DS:EBX  PCI structure address
 ;
@@ -5840,7 +5833,7 @@ ConReadPCIConfigData    mov     dh,EPCIPORTCONFIGADDRHI                         
 ;                       Function code values.
 ;
 ;       In:             DS:EBX  PCI structure address
-;                       DS:EDX  output buffer address
+;                       DS:EDX  output buffer address 999.99.9\0
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ConBuildPCIIdent        push    edi                                             ;save non-volatile regs
@@ -5941,8 +5934,8 @@ ConInterpretPCIData     mov     eax,czApple
                         jmp     .40                                             ;continue
 .30                     mov     eax,czOther                                     ;other
                         mov     edx,czOther                                     ;other
-.40                     mov     [wdConsolePCIVendorStr],eax                     ;save vendor string
-                        mov     [wdConsolePCIChipStr],edx                       ;save chip string
+.40                     mov     [ebx+PCI.vendorstr],eax                         ;save vendor string
+                        mov     [ebx+PCI.chipstr],edx                           ;save chip string
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5978,7 +5971,7 @@ ConNextPCIDevice        inc     byte [ebx+PCI.device]                           
                         jb      .10                                             ;no, continue
                         mov     byte [ebx+PCI.device],0                         ;zero device
                         inc     byte [ebx+PCI.bus]                              ;next bus
-                        cmp     byte [ebx+PCI.bus],32                           ;at limit?
+                        cmp     byte [ebx+PCI.bus],8                            ;at limit?
                         jb      .10                                             ;no, continue
                         mov     byte [ebx+PCI.bus],0                            ;zero bus
 .10                     ret                                                     ;return
