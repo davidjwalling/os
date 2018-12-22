@@ -2610,22 +2610,16 @@ PutConsoleChar          push    ecx                                             
 ;                       ES      CGA selector
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-PutConsoleHexByte       push    ebx                                             ;save non-volatile regs
-                        mov     bl,al                                           ;save byte value
+PutConsoleHexByte       push    eax                                             ;save non-volatile regs
                         shr     al,4                                            ;hi-order nybble
-                        or      al,030h                                         ;apply ASCII zone
-                        cmp     al,03ah                                         ;numeric?
-                        jb      .10                                             ;yes, skip ahead
-                        add     al,7                                            ;add ASCII offset for alpha
-.10                     call    SetConsoleChar                                  ;display ASCII character
-                        mov     al,bl                                           ;byte value
-                        and     al,0fh                                          ;lo-order nybble
-                        or      al,30h                                          ;apply ASCII zone
-                        cmp     al,03ah                                         ;numeric?
+                        call    .10                                             ;make ASCII and store
+                        pop     eax                                             ;byte value
+                        and     al,0Fh                                          ;lo-order nybble
+.10                     or      al,030h                                         ;apply ASCII zone
+                        cmp     al,03Ah                                         ;numeric?
                         jb      .20                                             ;yes, skip ahead
                         add     al,7                                            ;add ASCII offset for alpha
 .20                     call    SetConsoleChar                                  ;display ASCII character
-                        pop     ebx                                             ;restore non-volatile regs
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -2826,7 +2820,7 @@ GetMessage              push    ebx                                             
                         mov     [ebx],ecx                                       ;... in lo-order dword
                         mov     [ebx+4],ecx                                     ;... in hi-order dword
                         add     ebx,8                                           ;next queue element
-                        and     ebx,03fch                                       ;at end of queue?
+                        and     ebx,03FCh                                       ;at end of queue?
                         jnz     .10                                             ;no, skip ahead
                         mov     bl,8                                            ;reset to 1st entry
 .10                     mov     [MQHead],ebx                                    ;save new head ptr
@@ -2858,7 +2852,7 @@ PutMessage              push    ds                                              
                         mov     [eax],edx                                       ;store lo-order data
                         mov     [eax+4],ecx                                     ;store hi-order data
                         add     eax,8                                           ;next queue element adr
-                        and     eax,03fch                                       ;at end of queue?
+                        and     eax,03FCh                                       ;at end of queue?
                         jnz     .10                                             ;no, skip ahead
                         mov     al,8                                            ;reset to top of queue
 .10                     mov     [MQTail],eax                                    ;save new tail ptr
@@ -3216,17 +3210,15 @@ section                 conmque                                                 
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 concode vstart=05000h                                   ;labels relative to 5000h
 ConCode                 call    ConInitializeData                               ;initialize console variables
-
                         clearConsoleScreen                                      ;clear the console screen
                         putConsoleString czTitle                                ;display startup message
 .10                     putConsoleString czPrompt                               ;display input prompt
                         placeCursor                                             ;set CRT cursor location
                         getConsoleString wzConsoleInBuffer,79,1,13              ;accept keyboard input
-                        putConsoleString czNewLine                              ;newline
+                        call    ConPutNewLine                                   ;newline
                         putConsoleString wzConsoleInBuffer                      ;print entered command
-                        putConsoleString czNewLine                              ;new line
+                        call    ConPutNewLine                                   ;new line
                         putConsoleString czUnknownCommand                       ;display error message
-
                         jmp     .10                                             ;next command
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -3254,6 +3246,15 @@ ConInitializeData       push    ecx                                             
                         pop     es                                              ;restore non-volatile regs
                         pop     edi                                             ;
                         pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConPutNewLine
+;
+;       Description:    Write a new-line to the console.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConPutNewLine           putConsoleString czNewLine                              ;write value to console
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;

@@ -2446,22 +2446,16 @@ PutConsoleChar          push    ecx                                             
 ;                       ES      CGA selector
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-PutConsoleHexByte       push    ebx                                             ;save non-volatile regs
-                        mov     bl,al                                           ;save byte value
+PutConsoleHexByte       push    eax                                             ;save non-volatile regs
                         shr     al,4                                            ;hi-order nybble
-                        or      al,030h                                         ;apply ASCII zone
-                        cmp     al,03ah                                         ;numeric?
-                        jb      .10                                             ;yes, skip ahead
-                        add     al,7                                            ;add ASCII offset for alpha
-.10                     call    SetConsoleChar                                  ;display ASCII character
-                        mov     al,bl                                           ;byte value
-                        and     al,0fh                                          ;lo-order nybble
-                        or      al,30h                                          ;apply ASCII zone
-                        cmp     al,03ah                                         ;numeric?
+                        call    .10                                             ;make ASCII and store
+                        pop     eax                                             ;byte value
+                        and     al,0Fh                                          ;lo-order nybble
+.10                     or      al,030h                                         ;apply ASCII zone
+                        cmp     al,03Ah                                         ;numeric?
                         jb      .20                                             ;yes, skip ahead
                         add     al,7                                            ;add ASCII offset for alpha
 .20                     call    SetConsoleChar                                  ;display ASCII character
-                        pop     ebx                                             ;restore non-volatile regs
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -2967,7 +2961,6 @@ section                 conmque                                                 
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 concode vstart=05000h                                   ;labels relative to 5000h
 ConCode                 call    ConInitializeData                               ;initialize console variables
-
                         clearConsoleScreen                                      ;clear the console screen
                         putConsoleString czTitle                                ;display startup message
 .10                     putConsoleString czPrompt                               ;display input prompt

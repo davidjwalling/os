@@ -2014,10 +2014,9 @@ ReportInterrupt         push    ds                                              
 ;
 ;       Addressability to registers at the time of the interrupt is now established as:
 ;
-;                       [EBP+60]        EFLAGS
-;                       [EBP+56]        CS
-;                       [EBP+52]        EIP
-;                       [EBP+48]        EIP hi-order
+;                       [EBP+56]        EFLAGS
+;                       [EBP+52]        CS
+;                       [EBP+48]        EIP
 ;                       [EBP+44]        interrupt number (0-31)
 ;                       [EBP+40]        error message address
 ;                       [EBP+36]        DS
@@ -2200,7 +2199,7 @@ ReportInterrupt         push    ds                                              
                         mov     esi,czIntCS                                     ;label
                         call    SetConsoleString                                ;draw label
                         xor     eax,eax                                         ;zero register
-                        mov     ax,[ebp+56]                                     ;CS
+                        mov     ax,[ebp+52]                                     ;CS
                         mov     cl,46                                           ;column
                         mov     ch,14                                           ;row
                         call    PutConsoleHexWord                               ;draw ASCII hex word
@@ -2211,7 +2210,7 @@ ReportInterrupt         push    ds                                              
                         mov     ch,11                                           ;row
                         mov     esi,czIntEFLAGS                                 ;label
                         call    SetConsoleString                                ;draw label
-                        mov     eax,[ebp+60]                                    ;EFLAGS
+                        mov     eax,[ebp+56]                                    ;EFLAGS
                         mov     cl,55                                           ;column
                         mov     ch,11                                           ;row
                         call    PutConsoleHexDword                              ;draw ASCII hex doubleword
@@ -2233,7 +2232,7 @@ ReportInterrupt         push    ds                                              
                         mov     ch,14                                           ;row
                         mov     esi,czIntEIP                                    ;label
                         call    SetConsoleString                                ;draw label
-                        mov     eax,[ebp+52]                                    ;EIP lo-order 32-bits
+                        mov     eax,[ebp+48]                                    ;EIP lo-order 32-bits
                         mov     cl,55                                           ;column
                         mov     ch,14                                           ;row
                         call    PutConsoleHexDword                              ;draw ASCII hex doubleword
@@ -4174,22 +4173,16 @@ PutConsoleChar          push    ecx                                             
 ;                       ES      CGA selector
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-PutConsoleHexByte       push    ebx                                             ;save non-volatile regs
-                        mov     bl,al                                           ;save byte value
+PutConsoleHexByte       push    eax                                             ;save non-volatile regs
                         shr     al,4                                            ;hi-order nybble
-                        or      al,030h                                         ;apply ASCII zone
-                        cmp     al,03ah                                         ;numeric?
-                        jb      .10                                             ;yes, skip ahead
-                        add     al,7                                            ;add ASCII offset for alpha
-.10                     call    SetConsoleChar                                  ;display ASCII character
-                        mov     al,bl                                           ;byte value
-                        and     al,0fh                                          ;lo-order nybble
-                        or      al,30h                                          ;apply ASCII zone
-                        cmp     al,03ah                                         ;numeric?
+                        call    .10                                             ;make ASCII and store
+                        pop     eax                                             ;byte value
+                        and     al,0Fh                                          ;lo-order nybble
+.10                     or      al,030h                                         ;apply ASCII zone
+                        cmp     al,03Ah                                         ;numeric?
                         jb      .20                                             ;yes, skip ahead
                         add     al,7                                            ;add ASCII offset for alpha
 .20                     call    SetConsoleChar                                  ;display ASCII character
-                        pop     ebx                                             ;restore non-volatile regs
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -4460,8 +4453,8 @@ HexadecimalToUnsigned   push    esi                                             
                         jz      .30                                             ;yes, branch
                         cmp     al,'9'                                          ;hexadecimal?
                         jna     .20                                             ;no, skip ahead
-                        sub     al,37h                                          ;'A' = 41h, less 37h = 0Ah
-.20                     and     eax,0fh                                         ;remove ascii zone
+                        sub     al,037h                                         ;'A' = 41h, less 37h = 0Ah
+.20                     and     eax,00Fh                                        ;remove ascii zone
                         shl     edx,4                                           ;previous total x 16
                         add     edx,eax                                         ;add prior value x 16
                         jmp     .10                                             ;next
@@ -4511,7 +4504,7 @@ UnsignedToDecimalString push    ebx                                             
                         mov     eax,edx                                         ;10^1 remainder
                         call    .40                                             ;store
                         xor     al,al                                           ;null terminator
-                        stosb
+                        stosb                                                   ;store in output buffer
                         pop     es                                              ;restore non-volatile regs
                         pop     edi                                             ;
                         pop     ecx                                             ;
@@ -4531,7 +4524,7 @@ UnsignedToDecimalString push    ebx                                             
                         test    al,al                                           ;zero?
                         jz      .50                                             ;yes, branch
                         or      bh,00010000b                                    ;non-zero found
-.40                     or      al,30h                                          ;ASCII zone
+.40                     or      al,030h                                         ;ASCII zone
                         stosb                                                   ;store digit
                         ret                                                     ;return
 .50                     test    bh,00000001b                                    ;trim leading zeros?
@@ -4556,9 +4549,9 @@ UnsignedToHexadecimal   push    edi                                             
                         mov     cl,8                                            ;nybble count
 .10                     rol     edx,4                                           ;next hi-order nybble in bits 0-3
                         mov     al,dl                                           ;????bbbb
-                        and     al,0fh                                          ;mask out bits 4-7
-                        or      al,30h                                          ;mask in ascii zone
-                        cmp     al,3ah                                          ;A through F?
+                        and     al,00Fh                                         ;mask out bits 4-7
+                        or      al,030h                                         ;mask in ascii zone
+                        cmp     al,03Ah                                         ;A through F?
                         jb      .20                                             ;no, skip ahead
                         add     al,7                                            ;41h through 46h
 .20                     stosb                                                   ;store hexnum
@@ -4603,7 +4596,7 @@ GetMessage              push    ebx                                             
                         mov     [ebx],ecx                                       ;... in lo-order dword
                         mov     [ebx+4],ecx                                     ;... in hi-order dword
                         add     ebx,8                                           ;next queue element
-                        and     ebx,03fch                                       ;at end of queue?
+                        and     ebx,03FCh                                       ;at end of queue?
                         jnz     .10                                             ;no, skip ahead
                         mov     bl,8                                            ;reset to 1st entry
 .10                     mov     [MQHead],ebx                                    ;save new head ptr
@@ -4635,7 +4628,7 @@ PutMessage              push    ds                                              
                         mov     [eax],edx                                       ;store lo-order data
                         mov     [eax+4],ecx                                     ;store hi-order data
                         add     eax,8                                           ;next queue element adr
-                        and     eax,03fch                                       ;at end of queue?
+                        and     eax,03FCh                                       ;at end of queue?
                         jnz     .10                                             ;no, skip ahead
                         mov     al,8                                            ;reset to top of queue
 .10                     mov     [MQTail],eax                                    ;save new tail ptr
@@ -5154,26 +5147,24 @@ section                 conmque                                                 
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 concode vstart=05000h                                   ;labels relative to 5000h
 ConCode                 call    ConInitializeData                               ;initialize console variables
-
                         clearConsoleScreen                                      ;clear the console screen
                         putConsoleString czTitle                                ;display startup message
-                        putConsoleString czROMMem                               ;ROM memory label
-                        putConsoleString wzROMMemSize                           ;ROM memory amount
-                        putConsoleString czKB                                   ;Kilobytes
-                        putConsoleString czNewLine                              ;new line
                         putConsoleString czBaseMem                              ;base memory label
                         putConsoleString wzBaseMemSize                          ;base memory size
                         putConsoleString czKB                                   ;Kilobytes
-                        putConsoleString czNewLine                              ;new line
+                        call    ConPutNewLine                                   ;new line
+                        putConsoleString czROMMem                               ;ROM memory label
+                        putConsoleString wzROMMemSize                           ;ROM memory amount
+                        putConsoleString czKB                                   ;Kilobytes
+                        call    ConPutNewLine                                   ;new line
                         putConsoleString czExtendedMem                          ;extended memory label
                         putConsoleString wzExtendedMemSize                      ;extended memory size
                         putConsoleString czKB                                   ;Kilobytes
-                        putConsoleString czNewLine                              ;new line
+                        call    ConPutNewLine                                   ;new line
 .10                     putConsoleString czPrompt                               ;display input prompt
                         placeCursor                                             ;set CRT cursor location
                         getConsoleString wzConsoleInBuffer,79,1,13              ;accept keyboard input
-                        putConsoleString czNewLine                              ;newline
-
+                        call    ConPutNewLine                                   ;newline
                         mov     edx,wzConsoleInBuffer                           ;console input buffer
                         mov     ebx,wzConsoleToken                              ;token buffer
                         call    ConTakeToken                                    ;handle console input
@@ -5181,9 +5172,7 @@ ConCode                 call    ConInitializeData                               
                         call    ConDetermineCommand                             ;determine command number
                         cmp     eax,ECONJMPTBLCNT                               ;valid command number?
                         jb      .20                                             ;yes, branch
-
                         putConsoleString czUnknownCommand                       ;display error message
-
                         jmp     .10                                             ;next command
 .20                     shl     eax,2                                           ;index into jump table
                         mov     edx,tConJmpTbl                                  ;jump table base address
@@ -5268,6 +5257,15 @@ ConInitializeData       push    ecx                                             
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;       Routine:        ConPutNewLine
+;
+;       Description:    Write a new-line to the console.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConPutNewLine           putConsoleString czNewLine                              ;write value to console
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;       Routine:        ConTakeToken
 ;
 ;       Description:    This routine extracts the next token from the given source buffer.
@@ -5331,9 +5329,7 @@ ConDetermineCommand     push    ebx                                             
                         push    ecx                                             ;
                         push    esi                                             ;
                         push    edi                                             ;
-
                         upperCaseString                                         ;upper-case string at EDX
-
                         mov     esi,tConCmdTbl                                  ;commands table
                         xor     edi,edi                                         ;intialize command number
                         cld                                                     ;forward strings
@@ -5342,9 +5338,7 @@ ConDetermineCommand     push    ebx                                             
                         jecxz   .20                                             ;branch if end of table
                         mov     ebx,esi                                         ;table entry address
                         add     esi,ecx                                         ;next table entry address
-
                         compareMemory                                           ;compare byte arrays at EDX, EBX
-
                         jecxz   .20                                             ;branch if equal
                         inc     edi                                             ;increment command nbr
                         jmp     .10                                             ;repeat
@@ -5373,7 +5367,7 @@ ConClear                clearConsoleScreen                                      
 ConDate                 readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
                         putDateString     wsConsoleDateTime,wzConsoleOutBuffer  ;format date string
                         putConsoleString  wzConsoleOutBuffer                    ;write string to console
-                        putConsoleString  czNewLine                             ;write newline to console
+                        call    ConPutNewLine                                   ;write newline to console
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5385,7 +5379,7 @@ ConDate                 readRealTimeClock wsConsoleDateTime                     
 ConDay                  readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
                         putDayString      wsConsoleDateTime,wzConsoleOutBuffer  ;format day string
                         putConsoleString  wzConsoleOutBuffer                    ;write string to console
-                        putConsoleString  czNewLine                             ;write newline to console
+                        call    ConPutNewLine                                   ;write newline to console
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5421,16 +5415,13 @@ ConFree                 push    ebx                                             
                         cmp     byte [wzConsoleToken],0                         ;token found?
                         je      .10                                             ;no, branch
                         mov     edx,wzConsoleToken                              ;first param as token address
-
                         hexadecimalToUnsigned                                   ;convert string token to unsigned
-
                         test    eax,eax                                         ;valid parameter?
                         jz      .10                                             ;no, branch
 ;
 ;       Free memory block
 ;
                         freeMemory eax                                          ;free memory
-
                         cmp     eax,-1                                          ;memory freed?
                         je      .10                                             ;no, branch
 ;
@@ -5455,7 +5446,7 @@ ConFree                 push    ebx                                             
 ConHour                 readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
                         putHourString     wsConsoleDateTime,wzConsoleOutBuffer  ;format hour string
                         putConsoleString  wzConsoleOutBuffer                    ;write string to console
-                        putConsoleString  czNewLine                             ;write newline to console
+                        call    ConPutNewLine                                   ;write newline to console
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5491,16 +5482,13 @@ ConMalloc               push    ebx                                             
                         cmp     byte [wzConsoleToken],0                         ;token found?
                         je      .10                                             ;no, branch
                         mov     edx,wzConsoleToken                              ;first param as token address
-
                         decimalToUnsigned                                       ;convert string token to unsigned
-
                         test    eax,eax                                         ;valid parameter?
                         jz      .10                                             ;no, branch
 ;
 ;       Allocate memory block
 ;
                         allocateMemory eax                                      ;allocate memory
-
                         test    eax,eax                                         ;memory allocated?
                         jz      .10                                             ;no, branch
 ;
@@ -5508,11 +5496,9 @@ ConMalloc               push    ebx                                             
 ;
                         mov     edx,wzConsoleOutBuffer                          ;output buffer address
                         mov     ecx,eax                                         ;memory address
-
                         unsignedToHexadecimal                                   ;convert memory address to hex
                         putConsoleString wzConsoleOutBuffer                     ;display memory address
-                        putConsoleString czNewLine                              ;display new line
-
+                        call    ConPutNewLine                                   ;display new line
 .10                     pop     edi                                             ;restore non-volatile regs
                         pop     esi                                             ;
                         pop     ecx                                             ;
@@ -5539,9 +5525,7 @@ ConMem                  push    ebx                                             
                         cmp     byte [wzConsoleToken],0                         ;token found?
                         je      .10                                             ;no, branch
                         mov     edx,wzConsoleToken                              ;first param as token address
-
                         hexadecimalToUnsigned                                   ;convert string token to unsigned
-
                         mov     [wdConsoleMemBase],eax                          ;save console memory address
 ;
 ;       Setup source address and row count.
@@ -5556,9 +5540,7 @@ ConMem                  push    ebx                                             
                         mov     edi,wzConsoleOutBuffer                          ;output buffer address
                         mov     edx,edi                                         ;output buffer address
                         mov     ecx,esi                                         ;console memory address
-
                         unsignedToHexadecimal                                   ;convert unsigned address to hex string
-
                         add     edi,8                                           ;end of memory addr hexnum
                         mov     al,' '                                          ;ascii space
                         stosb                                                   ;store delimiter
@@ -5606,7 +5588,7 @@ ConMem                  push    ebx                                             
 ;       Display constructed output buffer and newline.
 ;
                         putConsoleString wzConsoleOutBuffer                     ;display constructed output
-                        putConsoleString czNewLine                              ;display new line
+                        call    ConPutNewLine                                   ;display new line
 ;
 ;       Repeat until all lines displayed and preserve source address.
 ;
@@ -5627,7 +5609,7 @@ ConMem                  push    ebx                                             
 ConMinute               readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
                         putMinuteString   wsConsoleDateTime,wzConsoleOutBuffer  ;format minute string
                         putConsoleString  wzConsoleOutBuffer                    ;write string to console
-                        putConsoleString  czNewLine                             ;write newline to console
+                        call    ConPutNewLine                                   ;write newline to console
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5639,7 +5621,7 @@ ConMinute               readRealTimeClock wsConsoleDateTime                     
 ConMonth                readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
                         putMonthString    wsConsoleDateTime,wzConsoleOutBuffer  ;format month string
                         putConsoleString  wzConsoleOutBuffer                    ;write string to console
-                        putConsoleString  czNewLine                             ;write newline to console
+                        call    ConPutNewLine                                   ;write newline to console
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5651,7 +5633,7 @@ ConMonth                readRealTimeClock wsConsoleDateTime                     
 ConMonthName            readRealTimeClock  wsConsoleDateTime                    ;read RTC data into structure
                         putMonthNameString wsConsoleDateTime,wzConsoleOutBuffer ;format month name string
                         putConsoleString   wzConsoleOutBuffer                   ;write string to console
-                        putConsoleString   czNewLine                            ;write newline to console
+                        call    ConPutNewLine                                   ;write newline to console
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5663,7 +5645,7 @@ ConMonthName            readRealTimeClock  wsConsoleDateTime                    
 ConSecond               readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
                         putSecondString   wsConsoleDateTime,wzConsoleOutBuffer  ;format second string
                         putConsoleString  wzConsoleOutBuffer                    ;write string to console
-                        putConsoleString  czNewLine                             ;write newline to console
+                        call    ConPutNewLine                                   ;write newline to console
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5675,7 +5657,7 @@ ConSecond               readRealTimeClock wsConsoleDateTime                     
 ConTime                 readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
                         putTimeString     wsConsoleDateTime,wzConsoleOutBuffer  ;format time string
                         putConsoleString  wzConsoleOutBuffer                    ;write string to console
-                        putConsoleString  czNewLine                             ;write newline to console
+                        call    ConPutNewLine                                   ;write newline to console
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5696,7 +5678,7 @@ ConVersion              putConsoleString czTitle                                
 ConWeekday              readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
                         putWeekdayString  wsConsoleDateTime,wzConsoleOutBuffer  ;format weekday string
                         putConsoleString  wzConsoleOutBuffer                    ;write string to console
-                        putConsoleString  czNewLine                             ;write newline to console
+                        call    ConPutNewLine                                   ;write newline to console
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5708,7 +5690,7 @@ ConWeekday              readRealTimeClock wsConsoleDateTime                     
 ConWeekdayName          readRealTimeClock    wsConsoleDateTime                          ;read RTC data into structure
                         putWeekdayNameString wsConsoleDateTime,wzConsoleOutBuffer       ;format day name string
                         putConsoleString     wzConsoleOutBuffer                         ;write string to console
-                        putConsoleString     czNewLine                                  ;write newline to console
+                        call    ConPutNewLine                                           ;write newline to console
                         ret                                                             ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5720,7 +5702,7 @@ ConWeekdayName          readRealTimeClock    wsConsoleDateTime                  
 ConYear                 readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
                         putYearString     wsConsoleDateTime,wzConsoleOutBuffer  ;format year string
                         putConsoleString  wzConsoleOutBuffer                    ;write string to console
-                        putConsoleString  czNewLine                             ;write newline to console
+                        call    ConPutNewLine                                   ;write newline to console
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5731,13 +5713,9 @@ ConYear                 readRealTimeClock wsConsoleDateTime                     
 ;-----------------------------------------------------------------------------------------------------------------------
 ConYearIsLeap           readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
                         isLeapYear        wsConsoleDateTime                     ;indicate if year is leap year
-
                         jecxz   .10                                             ;branch if not leap
-
                         putConsoleString  czYearIsLeap                          ;display year is leap message
-
                         jmp     .20                                             ;continue
-
 .10                     putConsoleString  czYearIsNotLeap                       ;display year is not leap mesage
 .20                     ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -5809,13 +5787,13 @@ tConCmdTbl              equ     $                                               
 ;       Constants
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-czBaseMem               db      "Base memory: ",0                               ;base memory from BIOS
-czExtendedMem           db      "Extended memory: ",0                           ;extended memory from BIOS
+czBaseMem               db      "Base memory (RTC):     ",0                     ;base memory from BIOS
+czExtendedMem           db      " Extended (RTC):       ",0                     ;extended memory from BIOS
 czKB                    db      "KB",0                                          ;Kilobytes
 czNewLine               db      13,10,0                                         ;new line string
 czOK                    db      "ok",13,10,0                                    ;ok string
 czPrompt                db      ":",0                                           ;prompt string
-czROMMem                db      "Base memory below EBDA (Int 12h): ",0          ;memory reported by ROM
+czROMMem                db      " Below EBDA (Int 12h): ",0                     ;memory reported by ROM
 czTitle                 db      "Custom Operating System 1.0",13,10,0           ;version string
 czUnknownCommand        db      "Unknown command",13,10,0                       ;unknown command response string
 czYearIsLeap            db      "The year is a leap year.",13,10,0              ;leap year message
