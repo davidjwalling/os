@@ -364,6 +364,7 @@ EASCIILINEFEED          equ     00Ah                                            
 EASCIIRETURN            equ     00Dh                                            ;carriage return
 EASCIIESCAPE            equ     01Bh                                            ;escape
 EASCIISPACE             equ     020h                                            ;space
+EASCIIDASH              equ     02Dh                                            ;dash or minus
 EASCIIPERIOD            equ     02Eh                                            ;period
 EASCIIUPPERA            equ     041h                                            ;'A'
 EASCIIUPPERZ            equ     05Ah                                            ;'Z'
@@ -2912,6 +2913,7 @@ tsvc                    tsvce   AllocateMemory                                  
                         tsvce   PutDateString                                   ;put MM/DD/YYYY string
                         tsvce   PutDayString                                    ;put DD string
                         tsvce   PutHourString                                   ;put hh string
+                        tsvce   PutMACString                                    ;put MAC address string
                         tsvce   PutMinuteString                                 ;put mm string
                         tsvce   PutMonthString                                  ;put MM string
                         tsvce   PutMonthNameString                              ;put name(MM) string
@@ -2988,6 +2990,10 @@ maxtsvc                 equ     ($-tsvc)/4                                      
                         mov     al,ePlaceCursor                                 ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
+%macro                  putConsoleString 0
+                        mov     al,ePutConsoleString                            ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
 %macro                  putConsoleString 1
                         mov     edx,%1                                          ;string address
                         mov     al,ePutConsoleString                            ;function code
@@ -3013,6 +3019,11 @@ maxtsvc                 equ     ($-tsvc)/4                                      
                         mov     ebx,%1                                          ;DATETIME addr
                         mov     edx,%2                                          ;output buffer addr
                         mov     al,ePutHourString                               ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putMACString 1
+                        mov     edx,%1                                          ;output buffer address
+                        mov     al,ePutMACString                                ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
 %macro                  putMinuteString 2
@@ -4250,22 +4261,16 @@ PutConsoleChar          push    ecx                                             
 ;                       ES      CGA selector
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-PutConsoleHexByte       push    ebx                                             ;save non-volatile regs
-                        mov     bl,al                                           ;save byte value
+PutConsoleHexByte       push    eax                                             ;save non-volatile regs
                         shr     al,4                                            ;hi-order nybble
-                        or      al,030h                                         ;apply ASCII zone
-                        cmp     al,03ah                                         ;numeric?
-                        jb      .10                                             ;yes, skip ahead
-                        add     al,7                                            ;add ASCII offset for alpha
-.10                     call    SetConsoleChar                                  ;display ASCII character
-                        mov     al,bl                                           ;byte value
-                        and     al,0fh                                          ;lo-order nybble
-                        or      al,30h                                          ;apply ASCII zone
-                        cmp     al,03ah                                         ;numeric?
+                        call    .10                                             ;make ASCII and store
+                        pop     eax                                             ;byte value
+                        and     al,0Fh                                          ;lo-order nybble
+.10                     or      al,030h                                         ;apply ASCII zone
+                        cmp     al,03Ah                                         ;numeric?
                         jb      .20                                             ;yes, skip ahead
                         add     al,7                                            ;add ASCII offset for alpha
 .20                     call    SetConsoleChar                                  ;display ASCII character
-                        pop     ebx                                             ;restore non-volatile regs
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -4472,12 +4477,36 @@ Yield                   sti                                                     
 ;
 ;       Data-Type Conversion Helper Routines
 ;
+;       PutMACString
+;       ByteToHex
 ;       DecimalToUnsigned
 ;       HexadecimalToUnsigned
 ;       UnsignedToDecimalString
 ;       UnsignedToHexadecimal
 ;
 ;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ByteToHex
+;
+;       Description:    This routine creates an ASCIIZ string representing the hexadecimal value of 8-bit binary input.
+;
+;       Input:          DS:ESI  source address of byte
+;                       ES:EDI  target address of ASCIIZ string
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ByteToHex               lodsb                                                   ;input byte
+                        push    eax                                             ;save input byte
+                        shr     al,4                                            ;hi-order nybble
+                        call    .10                                             ;make ASCII and store
+                        pop     eax                                             ;input byte
+                        and     al,00Fh                                         ;lo-order nybble
+.10                     or      al,030h                                         ;ASCII numeral zone
+                        cmp     al,03Ah                                         ;'A' through 'F'?
+                        jb      .20                                             ;no, branch
+                        add     al,7                                            ;ajdust for 'A' through 'F'
+.20                     stosb                                                   ;store to output buffer
+                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        DecimalToUnsigned
@@ -4536,13 +4565,41 @@ HexadecimalToUnsigned   push    esi                                             
                         jz      .30                                             ;yes, branch
                         cmp     al,'9'                                          ;hexadecimal?
                         jna     .20                                             ;no, skip ahead
-                        sub     al,37h                                          ;'A' = 41h, less 37h = 0Ah
-.20                     and     eax,0fh                                         ;remove ascii zone
+                        sub     al,037h                                         ;'A' = 41h, less 37h = 0Ah
+.20                     and     eax,00Fh                                        ;remove ascii zone
                         shl     edx,4                                           ;previous total x 16
                         add     edx,eax                                         ;add prior value x 16
                         jmp     .10                                             ;next
 .30                     mov     eax,edx                                         ;result
                         pop     esi                                             ;restore non-volatile regs
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutMACString
+;
+;       Description:    This routine creates an ASCIIZ string representing the MAC address at the source address
+;
+;       Input:          ECX     source address of byte
+;                       EDX     target address of ASCIIZ string
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutMACString            push    ecx                                             ;save non-volatile regs
+                        push    esi                                             ;
+                        push    edi                                             ;
+                        mov     edi,edx                                         ;output buffer address
+                        mov     esi,ecx                                         ;source buffer address
+                        xor     ecx,ecx                                         ;zero ecx
+                        mov     cl,5                                            ;bytes that precede dashes
+.10                     call    ByteToHex                                       ;store hexadecimal ASCII
+                        mov     al,EASCIIDASH                                   ;delimiter
+                        stosb                                                   ;store delimiter
+                        loop    .10                                             ;next
+                        call    ByteToHex                                       ;store hexadecimal ASCII
+                        xor     al,al                                           ;terminator
+                        stosb                                                   ;store terminator
+                        pop     edi                                             ;restore non-volatile regs
+                        pop     esi                                             ;
+                        pop     ecx                                             ;
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -4587,7 +4644,7 @@ UnsignedToDecimalString push    ebx                                             
                         mov     eax,edx                                         ;10^1 remainder
                         call    .40                                             ;store
                         xor     al,al                                           ;null terminator
-                        stosb
+                        stosb                                                   ;store in output buffer
                         pop     es                                              ;restore non-volatile regs
                         pop     edi                                             ;
                         pop     ecx                                             ;
@@ -4607,7 +4664,7 @@ UnsignedToDecimalString push    ebx                                             
                         test    al,al                                           ;zero?
                         jz      .50                                             ;yes, branch
                         or      bh,00010000b                                    ;non-zero found
-.40                     or      al,30h                                          ;ASCII zone
+.40                     or      al,030h                                         ;ASCII zone
                         stosb                                                   ;store digit
                         ret                                                     ;return
 .50                     test    bh,00000001b                                    ;trim leading zeros?
@@ -4632,9 +4689,9 @@ UnsignedToHexadecimal   push    edi                                             
                         mov     cl,8                                            ;nybble count
 .10                     rol     edx,4                                           ;next hi-order nybble in bits 0-3
                         mov     al,dl                                           ;????bbbb
-                        and     al,0fh                                          ;mask out bits 4-7
-                        or      al,30h                                          ;mask in ascii zone
-                        cmp     al,3ah                                          ;A through F?
+                        and     al,00Fh                                         ;mask out bits 4-7
+                        or      al,030h                                         ;mask in ascii zone
+                        cmp     al,03Ah                                         ;A through F?
                         jb      .20                                             ;no, skip ahead
                         add     al,7                                            ;41h through 46h
 .20                     stosb                                                   ;store hexnum
@@ -4679,7 +4736,7 @@ GetMessage              push    ebx                                             
                         mov     [ebx],ecx                                       ;... in lo-order dword
                         mov     [ebx+4],ecx                                     ;... in hi-order dword
                         add     ebx,8                                           ;next queue element
-                        and     ebx,03fch                                       ;at end of queue?
+                        and     ebx,03FCh                                       ;at end of queue?
                         jnz     .10                                             ;no, skip ahead
                         mov     bl,8                                            ;reset to 1st entry
 .10                     mov     [MQHead],ebx                                    ;save new head ptr
@@ -4711,7 +4768,7 @@ PutMessage              push    ds                                              
                         mov     [eax],edx                                       ;store lo-order data
                         mov     [eax+4],ecx                                     ;store hi-order data
                         add     eax,8                                           ;next queue element adr
-                        and     eax,03fch                                       ;at end of queue?
+                        and     eax,03FCh                                       ;at end of queue?
                         jnz     .10                                             ;no, skip ahead
                         mov     al,8                                            ;reset to top of queue
 .10                     mov     [MQTail],eax                                    ;save new tail ptr
@@ -5233,12 +5290,12 @@ ConCode                 call    ConInitializeData                               
 
                         clearConsoleScreen                                      ;clear the console screen
                         putConsoleString czTitle                                ;display startup message
-                        putConsoleString czROMMem                               ;ROM memory label
-                        putConsoleString wzROMMemSize                           ;ROM memory amount
-                        putConsoleString czKB                                   ;Kilobytes
-                        putConsoleString czNewLine                              ;new line
                         putConsoleString czBaseMem                              ;base memory label
                         putConsoleString wzBaseMemSize                          ;base memory size
+                        putConsoleString czKB                                   ;Kilobytes
+                        putConsoleString czNewLine                              ;new line
+                        putConsoleString czROMMem                               ;ROM memory label
+                        putConsoleString wzROMMemSize                           ;ROM memory amount
                         putConsoleString czKB                                   ;Kilobytes
                         putConsoleString czNewLine                              ;new line
                         putConsoleString czExtendedMem                          ;extended memory label
@@ -5394,7 +5451,7 @@ ConInitializeNetwork    push    ebx                                             
 ;
 .40                     call    ConNextPCIDevice                                ;next device, bus.
                         jb      .10                                             ;continue if no overflow
-                        jmp     .990                                            ;done, ETHER not found
+                        jmp     .60                                             ;done, ETHER not found
 ;
 ;       Set hardware flag and save selector.
 ;
@@ -5408,108 +5465,49 @@ ConInitializeNetwork    push    ebx                                             
 ;
                         mov     eax,[esi+ETHER.selector]                        ;ethernet adapter PCI selector
                         mov     ecx,eax
-                        mov     edx,wzConsoleToken
-
-                        unsignedToHexadecimal
-                        putConsoleString czEthernetSelector
-                        putConsoleString wzConsoleToken
-                        putConsoleString czNewLine
+                        mov     edx,czEthernetSelector
+                        call    ConPutLabeledHexValue
 
                         mov     eax,[esi+ETHER.selector]                        ;ethernet adapter PCI selector
                         xor     al,al                                           ;register 0
                         call    ConReadPCIRegister                              ;EAX = device id | vendor id
                         mov     [esi+ETHER.devicevendor],eax                    ;save device id | vendor id
                         mov     ecx,eax                                         ;vendor id
-                        mov     edx,wzConsoleToken                              ;string output buffer addr
-
-                        unsignedToHexadecimal                                   ;vendor id as string
-                        putConsoleString czEthernetDeviceVendor                 ;vendor id label
-                        putConsoleString wzConsoleToken                         ;vendor id string
-                        putConsoleString czNewLine                              ;new line
+                        mov     edx,czEthernetDeviceVendor                      ;string output buffer addr
+                        call    ConPutLabeledHexValue
 
                         mov     eax,[esi+ETHER.selector]
-                        mov     al,04h
+                        mov     al,004h
                         call    ConReadPCIRegister
                         mov     [esi+ETHER.statuscommand],eax
                         mov     ecx,eax
-                        mov     edx,wzConsoleToken
-
-                        unsignedToHexadecimal                                   ;vendor id as string
-                        putConsoleString czEthernetStatusCommand                ;vendor id label
-                        putConsoleString wzConsoleToken                         ;vendor id string
-                        putConsoleString czNewLine                              ;new line
+                        mov     edx,czEthernetStatusCommand
+                        call    ConPutLabeledHexLine
 
                         mov     eax,[esi+ETHER.selector]
-                        mov     al,08h
-                        call    ConReadPCIRegister
-                        mov     [esi+ETHER.classrev],eax
-                        mov     ecx,eax
-                        mov     edx,wzConsoleToken
-
-                        unsignedToHexadecimal                                   ;vendor id as string
-                        putConsoleString czEthernetClassRev                     ;vendor id label
-                        putConsoleString wzConsoleToken                         ;vendor id string
-                        putConsoleString czNewLine                              ;new line
-
-                        mov     eax,[esi+ETHER.selector]
-                        mov     al,0Ch
-                        call    ConReadPCIRegister
-                        mov     [esi+ETHER.misc],eax
-                        mov     ecx,eax
-                        mov     edx,wzConsoleToken
-
-                        unsignedToHexadecimal                                   ;vendor id as string
-                        putConsoleString czEthernetMisc                         ;vendor id label
-                        putConsoleString wzConsoleToken                         ;vendor id string
-                        putConsoleString czNewLine                              ;new line
-
-                        mov     eax,[esi+ETHER.selector]
-                        mov     al,10h
+                        mov     al,010h
                         call    ConReadPCIRegister
                         mov     [esi+ETHER.mmio],eax
                         mov     ecx,eax
-                        mov     edx,wzConsoleToken
-
-                        unsignedToHexadecimal                                   ;vendor id as string
-                        putConsoleString czEthernetMemoryAddr                   ;ethernet I/O memory address label
-                        putConsoleString wzConsoleToken                         ;vendor id string
-                        putConsoleString czNewLine                              ;new line
+                        mov     edx,czEthernetMemoryAddr
+                        call    ConPutLabeledHexValue
 
                         mov     eax,[esi+ETHER.selector]
-                        mov     al,14h
+                        mov     al,018h
                         call    ConReadPCIRegister
-                        mov     [esi+ETHER.flash],eax
-                        mov     ecx,eax
-                        mov     edx,wzConsoleToken
-
-                        unsignedToHexadecimal                                   ;vendor id as string
-                        putConsoleString czEthernetFlash                        ;ethernet I/O memory address label
-                        putConsoleString wzConsoleToken                         ;vendor id string
-                        putConsoleString czNewLine                              ;new line
-
-                        mov     eax,[esi+ETHER.selector]
-                        mov     al,18h
-                        call    ConReadPCIRegister
+                        and     eax,-8                                          ;mask out bits 2:0
                         mov     [esi+ETHER.port],eax
                         mov     ecx,eax
-                        mov     edx,wzConsoleToken
+                        mov     edx,czEthernetPort
+                        call    ConPutLabeledHexValue
 
-                        unsignedToHexadecimal                                   ;vendor id as string
-                        putConsoleString czEthernetPort                         ;ethernet I/O memory address label
-                        putConsoleString wzConsoleToken                         ;vendor id string
-                        putConsoleString czNewLine                              ;new line
-
-                        mov     eax,[esi+ETHER.selector]                          ;ethernet device PCI selector
+                        mov     eax,[esi+ETHER.selector]                         ;ethernet device PCI selector
                         mov     al,03Ch                                         ;interrupt number port addr
                         call    ConReadPCIRegister
                         mov     [esi+ETHER.irq],al                              ;save IRQ
                         movzx   ecx,al                                          ;convert to dword
-                        mov     edx,wzConsoleToken                              ;string output address
-
-                        unsignedToHexadecimal                                   ;convert unsigned to ASCII hex string
-                        putConsoleString czEthernetIRQ                          ;ethernet I/O port label
-                        putConsoleString wzConsoleToken                         ;output string to console
-                        putConsoleString czNewLine                              ;output newline to console
+                        mov     edx,czEthernetIRQ                               ;prompt string
+                        call    ConPutLabeledDecLine                            ;write PCI value to console
 ;
 ;       Read MAC address from MMIO
 ;
@@ -5520,91 +5518,54 @@ ConInitializeNetwork    push    ebx                                             
                         mov     [esi+ETHER.mac],eax                             ;save
                         mov     ax,[ecx+4]                                      ;MAC address hi-order word
                         mov     [esi+ETHER.mac+4],ax                            ;save
-
-                        lea     eax,[esi+ETHER.mac]
-                        mov     edx,wzConsoleToken
-                        call    .PutMAC
-
-                        putConsoleString czEthernetMAC
-                        putConsoleString wzConsoleToken
-                        putConsoleString czNewLine
-
-.60                     jmp     .990
-
-.PutMAC                 push    ecx
-                        push    esi
-                        push    edi
-                        mov     esi,eax
-                        mov     edi,edx
-                        xor     ecx,ecx
-                        mov     cl,5
-                        cld
-.PutMAC_10              call    .PutMACByte
-                        mov     al,'-'
-                        stosb
-                        loop    .PutMAC_10
-                        call    .PutMACByte
-                        xor     al,al
-                        stosb
-                        pop     edi
-                        pop     esi
-                        pop     ecx
-                        ret
-
-.PutMACByte             lodsb
-                        mov     ah,al
-                        shr     al,4
-                        or      al,030h
-                        cmp     al,03Ah
-                        jb      .ByteToHex_20
-                        add     al,7
-.ByteToHex_20           stosb
-                        mov     al,ah
-                        and     al,00Fh
-                        or      al,030h
-                        cmp     al,03Ah
-                        jb      .ByteToHex_30
-                        add     al,7
-.ByteToHex_30           stosb
-                        ret
-
+                        lea     ecx,[esi+ETHER.mac]                             ;address of MAC bytes
+                        putMACString wzConsoleToken                             ;output MAC ASCIIZ string
+                        mov     edx,czEthernetMAC                               ;label string
+                        call    ConPutLabeledLine                               ;put labeled string
 ;
-;       Enable transmission of packets
+;       Restore and return.
 ;
-
-;
-;       Setup read base address (RDBAL) (2800h)
-;
-
-;
-;       Setup receive descriptor table length (2808h)
-;
-
-;
-;       Enable receipt of packets
-;
-                        pushf
-                        cli
-                        mov     edx,[esi+ETHER.mmio]                            ;memory i/o address
-                        add     edx,0100h                                       ;RCTL register address
-                        mov     eax,[edx]                                       ;RCTL value
-                        or      eax,00000002h                                   ;enable
-                        mov     [edx],eax                                       ;store RCTL value
-                        popf
-;
-;       Enable board interrupt
-;
-                        mov     edx,[esi+ETHER.mmio]                            ;memory i/o address
-                        add     edx,2818h                                       ;add descriptor tail offset
-                        mov     eax,2                                           ;buffer number
-                        mov     [edx],eax                                       ;store buffer number
-
-
-.990                    pop     edi                                             ;restore non-volatile regs
+.60                     pop     edi                                             ;restore non-volatile regs
                         pop     esi                                             ;
                         pop     ecx                                             ;
                         pop     ebx                                             ;
                         ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;       In:             ECX     binary value
+;                       EDX     prompt string address
+;-----------------------------------------------------------------------------------------------------------------------
+ConPutLabeledDecLine    call    ConPutLabeledDecValue
+                        call    ConPutNewLine
+                        ret
+ConPutLabeledDecValue   push    ebx
+                        push    edx
+                        mov     edx,wzConsoleToken
+                        unsignedToDecimalString
+                        pop     edx
+                        mov     bh,1
+                        call    ConPutLabeledString
+                        pop     ebx
+                        ret
+ConPutLabeledHexLine    call    ConPutLabeledHexValue
+                        call    ConPutNewLine
+                        ret
+ConPutLabeledHexValue   push    edx                                             ;save prompt string address
+                        mov     edx,wzConsoleToken                              ;output buffer address
+                        unsignedToHexadecimal                                   ;convert binary to ASCII hex
+                        pop     edx                                             ;prompt string address
+                        call    ConPutLabeledString                             ;output labeled string to console
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;       In:             EDX     prompt string address
+;-----------------------------------------------------------------------------------------------------------------------
+ConPutLabeledLine       call    ConPutLabeledString
+                        call    ConPutNewLine
+                        ret
+ConPutLabeledString     putConsoleString                                        ;put prompt string
+                        putConsoleString wzConsoleToken                         ;put value string
+                        ret                                                     ;return
+ConPutNewLine           putConsoleString czNewLine
+                        ret
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        ConReadPCIRegister
@@ -6477,21 +6438,16 @@ tConCmdTbl              equ     $                                               
 ;-----------------------------------------------------------------------------------------------------------------------
 czApple                 db      "Apple",0                                       ;vendor name string
 czAurealAD1881          db      "Aureal AD1881 SOUNDMAX",0                      ;soundmax string
-czBaseMem               db      "Base memory: ",0                               ;base memory from BIOS
-
+czBaseMem               db      "Base memory (RTC):     ",0                     ;base memory from BIOS
 czEthernetAdapterFound  db      "Ethernet adapter found",13,10,0                ;adapter found message
-czEthernetSelector      db      "Selector: ",0
-czEthernetDeviceVendor  db      "Device|Vendor: ",0
-czEthernetStatusCommand db      "Status|Command: ",0
-czEthernetClassRev      db      "Class|Rev: ",0
-czEthernetMisc          db      "BIST|Hdr|Latency|Cache: ",0
-czEthernetMemoryAddr    db      "Memory Mapped I/O Address: ",0                 ;ethernet I/O memory address
-czEthernetFlash         db      "Flash: ",0                                     ;ethernet flash base address
-czEthernetPort          db      "I/O port: ",0                                  ;ethernet I/O port address
-czEthernetIRQ           db      "IRQ: ",0                                       ;ethernet IRQ
-czEthernetMAC           db      "MAC: ",0                                       ;MAC address
-
-czExtendedMem           db      "Extended memory: ",0                           ;extended memory from BIOS
+czEthernetDeviceVendor  db      " Device: ",0                                   ;PCI device label
+czEthernetIRQ           db      " IRQ:    ",0                                   ;ethernet IRQ
+czEthernetMAC           db      " MAC Address:  ",0                             ;MAC address
+czEthernetMemoryAddr    db      "     MMIO:     ",0                             ;ethernet I/O memory address
+czEthernetPort          db      " Port:   ",0                                   ;ethernet I/O port address
+czEthernetSelector      db      " PCI Selector: ",0                             ;PCI selector label
+czEthernetStatusCommand db      " Status: ",0                                   ;PCI status label
+czExtendedMem           db      " Extended (RTC):       ",0                     ;extended memory from BIOS
 czIntel                 db      "Intel",0                                       ;vendor name string
 czKB                    db      "KB",0                                          ;Kilobytes
 czNewLine               db      13,10,0                                         ;new line string
@@ -6504,7 +6460,7 @@ czPIIX3PCItoIDEBridge   db      "PIIX3 PCI-to-ISA Bridge",0                     
 czPIIX4PowerMgmt        db      "PIIX4/4E/4M Power Management Controller",0     ;power management controller string
 czPrompt                db      ":",0                                           ;prompt string
 czPro1000MT             db      "Pro/1000 MT Ethernet Adapter",0                ;Intel Pro/1000 MT Ethernet adapter strg
-czROMMem                db      "Base memory below EBDA (Int 12h): ",0          ;memory reported by ROM
+czROMMem                db      " Below EBDA (Int 12h): ",0                     ;memory reported by ROM
 czSpace                 db      " ",0                                           ;space delimiter
 czTitle                 db      "Custom Operating System 1.0",13,10,0           ;version string
 czUnknownCommand        db      "Unknown command",13,10,0                       ;unknown command response string
