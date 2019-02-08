@@ -9,14 +9,14 @@
      9                                  ;                       or an entire floppy disk image is generated. Real mode BIOS interrupts are used to display
     10                                  ;                       the message and poll for a keypress.
     11                                  ;
-    12                                  ;       Revised:        July 4, 2018
+    12                                  ;       Revised:        December 25, 2018
     13                                  ;
     14                                  ;       Assembly:       nasm os.asm -f bin -o os.dat -l os.dat.lst -DBUILDBOOT
     15                                  ;                       nasm os.asm -f bin -o os.dsk -l os.dsk.lst -DBUILDDISK
     16                                  ;
     17                                  ;       Assembler:      Netwide Assembler (NASM) 2.13.03, Feb 7 2018
     18                                  ;
-    19                                  ;       Notice:         Copyright (C) 2010-2018 David J. Walling. All Rights Reserved.
+    19                                  ;       Notice:         Copyright (C) 2010-2019 David J. Walling. All Rights Reserved.
     20                                  ;
     21                                  ;=======================================================================================================================
     22                                  ;-----------------------------------------------------------------------------------------------------------------------
@@ -173,7 +173,7 @@
    173                                  ;       BIOS Interrupts and Functions                                           EBIOS...
    174                                  ;
    175                                  ;       Basic Input/Output System (BIOS) functions are grouped and accessed by issuing an interrupt call. Each
-   176                                  ;       BIOS interrupt supports several funtions. The function code is typically passed in the AH register.
+   176                                  ;       BIOS interrupt supports several functions. The function code is typically passed in the AH register.
    177                                  ;
    178                                  ;-----------------------------------------------------------------------------------------------------------------------
    179                                  EBIOSINTVIDEO           equ     010h                                            ;video services interrupt
