@@ -8,7 +8,7 @@
 ;                       The boot sector searches the disk for the loader program, loads it into memory and runs it. The
 ;                       loader program in this sample simply displays a greeting.
 ;
-;       Revised:        July 4, 2018
+;       Revised:        January 1, 2019
 ;
 ;       Assembly:       nasm os.asm -f bin -o os.dat -l os.dat.lst -DBUILDBOOT
 ;                       nasm os.asm -f bin -o os.dsk -l os.dsk.lst -DBUILDDISK
@@ -16,7 +16,7 @@
 ;
 ;       Assembler:      Netwide Assembler (NASM) 2.13.03, Feb 7 2018
 ;
-;       Notice:         Copyright (C) 2010-2018 David J. Walling. All Rights Reserved.
+;       Notice:         Copyright (C) 2010-2019 David J. Walling. All Rights Reserved.
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -175,7 +175,7 @@ EKEYBCMDRESET           equ     0FEh                                            
 ;       BIOS Interrupts and Functions                                           EBIOS...
 ;
 ;       Basic Input/Output System (BIOS) functions are grouped and accessed by issuing an interrupt call. Each
-;       BIOS interrupt supports several funtions. The function code is typically passed in the AH register.
+;       BIOS interrupt supports several functions. The function code is typically passed in the AH register.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 EBIOSINTVIDEO           equ     010h                                            ;video services interrupt

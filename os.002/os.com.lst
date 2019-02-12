@@ -8,7 +8,7 @@
      8                                  ;                       The boot sector searches the disk for the loader program, loads it into memory and runs it. The
      9                                  ;                       loader program in this sample simply displays a greeting.
     10                                  ;
-    11                                  ;       Revised:        July 4, 2018
+    11                                  ;       Revised:        January 1, 2019
     12                                  ;
     13                                  ;       Assembly:       nasm os.asm -f bin -o os.dat -l os.dat.lst -DBUILDBOOT
     14                                  ;                       nasm os.asm -f bin -o os.dsk -l os.dsk.lst -DBUILDDISK
@@ -16,7 +16,7 @@
     16                                  ;
     17                                  ;       Assembler:      Netwide Assembler (NASM) 2.13.03, Feb 7 2018
     18                                  ;
-    19                                  ;       Notice:         Copyright (C) 2010-2018 David J. Walling. All Rights Reserved.
+    19                                  ;       Notice:         Copyright (C) 2010-2019 David J. Walling. All Rights Reserved.
     20                                  ;
     21                                  ;=======================================================================================================================
     22                                  ;-----------------------------------------------------------------------------------------------------------------------
@@ -175,7 +175,7 @@
    175                                  ;       BIOS Interrupts and Functions                                           EBIOS...
    176                                  ;
    177                                  ;       Basic Input/Output System (BIOS) functions are grouped and accessed by issuing an interrupt call. Each
-   178                                  ;       BIOS interrupt supports several funtions. The function code is typically passed in the AH register.
+   178                                  ;       BIOS interrupt supports several functions. The function code is typically passed in the AH register.
    179                                  ;
    180                                  ;-----------------------------------------------------------------------------------------------------------------------
    181                                  EBIOSINTVIDEO           equ     010h                                            ;video services interrupt

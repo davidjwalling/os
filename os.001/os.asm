@@ -9,7 +9,7 @@
 ;                       or an entire floppy disk image is generated. Real mode BIOS interrupts are used to display
 ;                       the message and poll for a keypress.
 ;
-;       Revised:        December 25, 2018
+;       Revised:        January 1, 2019
 ;
 ;       Assembly:       nasm os.asm -f bin -o os.dat -l os.dat.lst -DBUILDBOOT
 ;                       nasm os.asm -f bin -o os.dsk -l os.dsk.lst -DBUILDDISK
