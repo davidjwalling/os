@@ -8,7 +8,7 @@
      8                                  ;                       floppy disk. This utility can be useful in creating floppy boot diskettes from native DOS or
      9                                  ;                       within a DOS VM.
     10                                  ;
-    11                                  ;       Revised:        July 4, 2018
+    11                                  ;       Revised:        January 1, 2019
     12                                  ;
     13                                  ;       Assembly:       nasm os.asm -f bin -o os.dat     -l os.dat.lst     -DBUILDBOOT
     14                                  ;                       nasm os.asm -f bin -o os.dsk     -l os.dsk.lst     -DBUILDDISK
@@ -17,7 +17,7 @@
     17                                  ;
     18                                  ;       Assembler:      Netwide Assembler (NASM) 2.13.03, Feb 7 2018
     19                                  ;
-    20                                  ;       Notice:         Copyright (C) 2010-2018 David J. Walling. All Rights Reserved.
+    20                                  ;       Notice:         Copyright (C) 2010-2019 David J. Walling. All Rights Reserved.
     21                                  ;
     22                                  ;=======================================================================================================================
     23                                  ;-----------------------------------------------------------------------------------------------------------------------
@@ -184,7 +184,7 @@
    184                                  ;       BIOS Interrupts and Functions                                           EBIOS...
    185                                  ;
    186                                  ;       Basic Input/Output System (BIOS) functions are grouped and accessed by issuing an interrupt call. Each
-   187                                  ;       BIOS interrupt supports several funtions. The function code is typically passed in the AH register.
+   187                                  ;       BIOS interrupt supports several functions. The function code is typically passed in the AH register.
    188                                  ;
    189                                  ;-----------------------------------------------------------------------------------------------------------------------
    190                                  EBIOSINTVIDEO           equ     010h                                            ;video services interrupt
@@ -716,7 +716,7 @@
    712                                  ;
    713                                  ;-----------------------------------------------------------------------------------------------------------------------
    714                                  czPrepMsg10             db      13,10,"CustomOS Boot-Diskette Preparation Program"
-   715                                                          db      13,10,"Copyright (C) 2010-2018 David J. Walling. All rights reserved."
+   715                                                          db      13,10,"Copyright (C) 2010-2019 David J. Walling. All rights reserved."
    716                                                          db      13,10
    717                                                          db      13,10,"This program overwrites the boot sector of a diskette with startup code that"
    718                                                          db      13,10,"will load the operating system into memory when the computer is restarted."
