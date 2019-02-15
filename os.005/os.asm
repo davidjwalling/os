@@ -7,7 +7,7 @@
 ;       Description:    In this sample, the kernel is expanded to include a keyboard interupt handler. This handler
 ;                       updates data visible on the console in an operator information area.
 ;
-;       Revised:        July 4, 2018
+;       Revised:        January 1, 2019
 ;
 ;       Assembly:       nasm os.asm -f bin -o os.dat     -l os.dat.lst     -DBUILDBOOT
 ;                       nasm os.asm -f bin -o os.dsk     -l os.dsk.lst     -DBUILDDISK
@@ -16,7 +16,7 @@
 ;
 ;       Assembler:      Netwide Assembler (NASM) 2.13.03, Feb 7 2018
 ;
-;       Notice:         Copyright (C) 2010-2018 David J. Walling. All Rights Reserved.
+;       Notice:         Copyright (C) 2010-2019 David J. Walling. All Rights Reserved.
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -288,14 +288,8 @@ EX86DESCLEN             equ     8                                               
 ;       ...11CR.                Code (C:1=Conforming,R:1=Readable)
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-EX86ACCLDT              equ     10000010b                                       ;local descriptor table
-EX86ACCTASK             equ     10000101b                                       ;task gate
-EX86ACCTSS              equ     10001001b                                       ;task-state segment
-EX86ACCGATE             equ     10001100b                                       ;call gate
 EX86ACCINT              equ     10001110b                                       ;interrupt gate
 EX86ACCTRAP             equ     10001111b                                       ;trap gate
-EX86ACCDATA             equ     10010011b                                       ;upward writable data
-EX86ACCCODE             equ     10011011b                                       ;non-conforming readable code
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Firmware-Defined Values
@@ -306,7 +300,7 @@ EX86ACCCODE             equ     10011011b                                       
 ;       BIOS Interrupts and Functions                                           EBIOS...
 ;
 ;       Basic Input/Output System (BIOS) functions are grouped and accessed by issuing an interrupt call. Each
-;       BIOS interrupt supports several funtions. The function code is typically passed in the AH register.
+;       BIOS interrupt supports several functions. The function code is typically passed in the AH register.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 EBIOSINTVIDEO           equ     010h                                            ;video services interrupt
@@ -524,6 +518,9 @@ wbClockDays             resb    1                                               
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ECONDATA                equ     ($)
+wdConsolePanel          resd    1                                               ;console panel definition address
+wdConsoleInput          resd    1                                               ;console field input address
+wzConsoleInBuffer       resb    80                                              ;command input buffer
 wbConsoleColumn         resb    1                                               ;console column
 wbConsoleRow            resb    1                                               ;console row
 wbConsoleShift          resb    1                                               ;console shift flags
@@ -1049,7 +1046,7 @@ Prep                    mov     si,czPrepMsg10                                  
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 czPrepMsg10             db      13,10,"CustomOS Boot-Diskette Preparation Program"
-                        db      13,10,"Copyright (C) 2010-2018 David J. Walling. All rights reserved."
+                        db      13,10,"Copyright (C) 2010-2019 David J. Walling. All rights reserved."
                         db      13,10
                         db      13,10,"This program overwrites the boot sector of a diskette with startup code that"
                         db      13,10,"will load the operating system into memory when the computer is restarted."
@@ -1576,8 +1573,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  dividebyzero                                    ;divide by zero
-                        push    0                                               ;store interrupt nbr
-                        push    czIntDivideByZero                               ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1585,8 +1580,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  singlestep                                      ;single step
-                        push    1                                               ;store interrupt nbr
-                        push    czIntSingleStep                                 ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1594,8 +1587,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  nmi                                             ;non-maskable
-                        push    2                                               ;store interrupt nbr
-                        push    czIntNonMaskable                                ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1603,8 +1594,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  break                                           ;break
-                        push    3                                               ;store interrupt nbr
-                        push    czIntBreak                                      ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1612,8 +1601,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  into                                            ;into
-                        push    4                                               ;store interrupt nbr
-                        push    czIntInto                                       ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1621,8 +1608,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  bounds                                          ;bounds
-                        push    5                                               ;store interrupt nbr
-                        push    czIntBounds                                     ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1630,8 +1615,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  badopcode                                       ;bad opcode interrupt
-                        push    6                                               ;store interrupt nbr
-                        push    czIntBadOpCode                                  ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1639,8 +1622,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  nocoproc                                        ;no coprocessor interrupt
-                        push    7                                               ;store interrupt nbr
-                        push    czIntNoCoprocessor                              ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1648,8 +1629,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  doublefault                                     ;doublefault interrupt
-                        push    8                                               ;store interrupt nbr
-                        push    czIntDoubleFault                                ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1657,8 +1636,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  operand                                         ;operand interrupt
-                        push    9                                               ;store interrupt nbr
-                        push    czIntOperand                                    ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1666,8 +1643,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  badtss                                          ;bad TSS interrupt
-                        push    10                                              ;store interrupt nbr
-                        push    czIntBadTSS                                     ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1675,8 +1650,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  notpresent                                      ;not present interrupt
-                        push    11                                              ;store interrupt nbr
-                        push    czIntNotPresent                                 ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1684,8 +1657,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  stacklimit                                      ;stack limit interrupt
-                        push    12                                              ;store interrupt nbr
-                        push    czIntStackLimit                                 ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1693,8 +1664,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  protection                                      ;protection fault interrupt
-                        push    13                                              ;store interrupt nbr
-                        push    czIntProtection                                 ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1702,8 +1671,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int14                                           ;(reserved)
-                        push    14                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1711,8 +1678,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int15                                           ;(reserved)
-                        push    15                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1720,8 +1685,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  coproccalc                                      ;coprocessor calculation
-                        push    16                                              ;store interrupt nbr
-                        push    czIntCoprocessorCalc                            ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1729,8 +1692,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int17                                           ;(reserved)
-                        push    17                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1738,8 +1699,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int18                                           ;(reserved)
-                        push    18                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1747,8 +1706,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int19                                           ;(reserved)
-                        push    19                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1756,8 +1713,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int20                                           ;(reserved)
-                        push    20                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1765,8 +1720,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int21                                           ;(reserved)
-                        push    21                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1774,8 +1727,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int22                                           ;(reserved)
-                        push    22                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1783,8 +1734,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int23                                           ;(reserved)
-                        push    23                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1792,8 +1741,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int24                                           ;(reserved)
-                        push    24                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1801,8 +1748,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int25                                           ;(reserved)
-                        push    25                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1810,8 +1755,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int26                                           ;(reserved)
-                        push    26                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1819,8 +1762,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int27                                           ;(reserved)
-                        push    27                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1828,8 +1769,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int28                                           ;(reserved)
-                        push    28                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1837,8 +1776,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int29                                           ;(reserved)
-                        push    29                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1846,8 +1783,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int30                                           ;(reserved)
-                        push    30                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1855,8 +1790,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int31                                           ;(reserved)
-                        push    31                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1865,34 +1798,8 @@ section                 kernel  vstart=0h                                       
 ;       Description:    This routine will be used to respond to processor interrupts that are not otherwise handled.
 ;                       At this stage, we simply restore the stack and return from the interrupt.
 ;
-;       In:             [ESP+4]         interrupt number (0-31)                 stored by push instruction
-;                       [ESP+0]         error message address                   stored by push instructions
-;
 ;-----------------------------------------------------------------------------------------------------------------------
-ReportInterrupt         pop     eax                                             ;error message address
-                        pop     eax                                             ;interrupt number
-                        iretd                                                   ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Processor Interrupt Name Strings
-;
-;-----------------------------------------------------------------------------------------------------------------------
-czIntDivideByZero       db      "Division by zero",0
-czIntSingleStep         db      "Single step",0
-czIntNonMaskable        db      "Non-maskable interrupt",0
-czIntBreak              db      "Break",0
-czIntInto               db      "Into",0
-czIntBounds             db      "Bounds",0
-czIntBadOpCode          db      "Bad Operation Code",0
-czIntNoCoprocessor      db      "No Coprocessor",0
-czIntDoubleFault        db      "Double Fault",0
-czIntOperand            db      "Operand",0
-czIntBadTSS             db      "Bad Task State Segment",0
-czIntNotPresent         db      "Not Present",0
-czIntStackLimit         db      "Stack Limit",0
-czIntProtection         db      "General Protection Fault",0
-czIntCoprocessorCalc    db      "Coprocessor Calculation",0
-czIntReserved           db      "Reserved",0
+ReportInterrupt         iretd                                                   ;return
 ;=======================================================================================================================
 ;
 ;       Hardware Device Interupts
@@ -2321,9 +2228,7 @@ svc90                   iretd                                                   
 ;       These tsvce macros expand to define an address vector table for the service request interrupt (int 30h).
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-tsvc                    tsvce   ClearConsoleScreen                              ;clear console screen
-                        tsvce   PlaceCursor                                     ;place the cursor at the current loc
-                        tsvce   PutConsoleString                                ;tty output asciiz string
+tsvc                    tsvce   PlaceCursor                                     ;place the cursor at the current loc
 maxtsvc                 equ     ($-tsvc)/4                                      ;function out of range
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -2332,17 +2237,8 @@ maxtsvc                 equ     ($-tsvc)/4                                      
 ;       These macros provide positional parameterization of service request calls.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-%macro                  clearConsoleScreen 0
-                        mov     al,eClearConsoleScreen                          ;function code
-                        int     _svc                                            ;invoke OS service
-%endmacro
 %macro                  placeCursor 0
                         mov     al,ePlaceCursor                                 ;function code
-                        int     _svc                                            ;invoke OS service
-%endmacro
-%macro                  putConsoleString 1
-                        mov     edx,%1                                          ;string address
-                        mov     al,ePutConsoleString                            ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
 ;=======================================================================================================================
@@ -2354,85 +2250,11 @@ maxtsvc                 equ     ($-tsvc)/4                                      
 ;
 ;       Console Helper Routines
 ;
-;       FirstConsoleColumn
-;       NextConsoleColumn
-;       NextConsoleRow
-;       PutConsoleChar
 ;       PutConsoleHexByte
 ;       PutConsoleOIAChar
 ;       PutConsoleOIAShift
-;       PutConsoleString
 ;
 ;=======================================================================================================================
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        FirstConsoleColumn
-;
-;       Description:    This routine resets the console column to start of the row.
-;
-;       In:             DS      OS data selector
-;
-;-----------------------------------------------------------------------------------------------------------------------
-FirstConsoleColumn      xor     al,al                                           ;zero column
-                        mov     [wbConsoleColumn],al                            ;save column
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        NextConsoleColumn
-;
-;       Description:    This routine advances the console position one column. The columnn is reset to zero and the row
-;                       incremented if the end of the current row is reached.
-;
-;       In:             DS      OS data selector
-;
-;-----------------------------------------------------------------------------------------------------------------------
-NextConsoleColumn       mov     al,[wbConsoleColumn]                            ;current column
-                        inc     al                                              ;increment column
-                        mov     [wbConsoleColumn],al                            ;save column
-                        cmp     al,ECONCOLS                                     ;end of row?
-                        jb      .10                                             ;no, skip ahead
-                        call    FirstConsoleColumn                              ;reset column to start of row
-                        call    NextConsoleRow                                  ;line feed to next row
-.10                     ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        NextConsoleRow
-;
-;       Description:    This routine advances the console position one line. Scroll the screen one row if needed.
-;
-;       In:             DS      OS data selector
-;
-;-----------------------------------------------------------------------------------------------------------------------
-NextConsoleRow          mov     al,[wbConsoleRow]                               ;current row
-                        inc     al                                              ;increment row
-                        mov     [wbConsoleRow],al                               ;save row
-                        cmp     al,ECONROWS                                     ;end of screen?
-                        jb      .10                                             ;no, skip ahead
-                        call    ScrollConsoleRow                                ;scroll up one row
-                        mov     al,[wbConsoleRow]                               ;row
-                        dec     al                                              ;decrement row
-                        mov     [wbConsoleRow],al                               ;save row
-.10                     ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        PutConsoleChar
-;
-;       Description:    This routine writes one ASCII character to the console screen.
-;
-;       In:             AL      ASCII character
-;                       DS      OS data selector
-;
-;-----------------------------------------------------------------------------------------------------------------------
-PutConsoleChar          push    ecx                                             ;save non-volatile regs
-                        push    es                                              ;
-                        push    EGDTCGA                                         ;load CGA selector ...
-                        pop     es                                              ;... into extra segment reg
-                        mov     cl,[wbConsoleColumn]                            ;column
-                        mov     ch,[wbConsoleRow]                               ;row
-                        call    SetConsoleChar                                  ;put character at row, column
-                        pop     es                                              ;restore non-volatile regs
-                        pop     ecx                                             ;
-                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        PutConsoleHexByte
@@ -2580,109 +2402,15 @@ PutConsoleOIAShift      push    ecx                                             
                         pop     es                                              ;restore non-volatile regs
                         pop     ecx                                             ;
                         ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        PutConsoleString
-;
-;       Description:    This routine writes a sequence of ASCII characters to the console until null and updates the
-;                       console position as needed.
-;
-;       In:             EDX     source address
-;                       DS      OS data selector
-;
-;-----------------------------------------------------------------------------------------------------------------------
-PutConsoleString        push    esi                                             ;save non-volatile regs
-                        mov     esi,edx                                         ;source address
-                        cld                                                     ;forward strings
-.10                     lodsb                                                   ;ASCII character
-                        or      al,al                                           ;end of string?
-                        jz      .40                                             ;yes, skip ahead
-                        cmp     al,EASCIIRETURN                                 ;carriage return?
-                        jne     .20                                             ;no, skip ahead
-                        call    FirstConsoleColumn                              ;move to start of row
-                        jmp     .10                                             ;next character
-.20                     cmp     al,EASCIILINEFEED                               ;line feed?
-                        jne     .30                                             ;no, skip ahead
-                        call    NextConsoleRow                                  ;move to next row
-                        jmp     .10                                             ;next character
-.30                     call    PutConsoleChar                                  ;output character to console
-                        call    NextConsoleColumn                               ;advance to next column
-                        jmp     .10                                             ;next character
-.40                     pop     esi                                             ;restore non-volatile regs
-                        ret                                                     ;return
 ;=======================================================================================================================
 ;
 ;       Memory-Mapped Video Routines
 ;
 ;       These routines read and/or write directly to CGA video memory (B800:0)
 ;
-;       ClearConsoleScreen
-;       ScrollConsoleRow
 ;       SetConsoleChar
 ;
 ;=======================================================================================================================
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ClearConsoleScreen
-;
-;       Description:    This routine clears the console (CGA) screen.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ClearConsoleScreen      push    ecx                                             ;save non-volatile regs
-                        push    edi                                             ;
-                        push    ds                                              ;
-                        push    es                                              ;
-                        push    EGDTOSDATA                                      ;load OS Data selector ...
-                        pop     ds                                              ;... into DS register
-                        push    EGDTCGA                                         ;load CGA selector ...
-                        pop     es                                              ;... into ES register
-                        mov     eax,ECONCLEARDWORD                              ;initializtion value
-                        mov     ecx,ECONROWDWORDS*(ECONROWS)                    ;double-words to clear
-                        xor     edi,edi                                         ;target offset
-                        cld                                                     ;forward strings
-                        rep     stosd                                           ;reset screen body
-                        mov     eax,ECONOIADWORD                                ;OIA attribute and space
-                        mov     ecx,ECONROWDWORDS                               ;double-words per row
-                        rep     stosd                                           ;reset OIA line
-                        xor     al,al                                           ;zero register
-                        mov     [wbConsoleRow],al                               ;reset console row
-                        mov     [wbConsoleColumn],al                            ;reset console column
-                        call    PlaceCursor                                     ;place cursor at current position
-                        pop     es                                              ;restore non-volatile regs
-                        pop     ds                                              ;
-                        pop     edi                                             ;
-                        pop     ecx                                             ;
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ScrollConsoleRow
-;
-;       Description:    This routine scrolls the console (text) screen up one row.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ScrollConsoleRow        push    ecx                                             ;save non-volatile regs
-                        push    esi                                             ;
-                        push    edi                                             ;
-                        push    ds                                              ;
-                        push    es                                              ;
-                        push    EGDTCGA                                         ;load CGA video selector ...
-                        pop     ds                                              ;... into DS
-                        push    EGDTCGA                                         ;load CGA video selector ...
-                        pop     es                                              ;... into ES
-                        mov     ecx,ECONROWDWORDS*(ECONROWS-1)                  ;double-words to move
-                        mov     esi,ECONROWBYTES                                ;ESI = source (line 2)
-                        xor     edi,edi                                         ;EDI = target (line 1)
-                        cld                                                     ;forward strings
-                        rep     movsd                                           ;move 24 lines up
-                        mov     eax,ECONCLEARDWORD                              ;attribute and ASCII space
-                        mov     ecx,ECONROWDWORDS                               ;double-words per row
-                        rep     stosd                                           ;clear bottom row
-                        pop     es                                              ;restore non-volatile regs
-                        pop     ds                                              ;
-                        pop     edi                                             ;
-                        pop     esi                                             ;
-                        pop     ecx                                             ;
-                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        SetConsoleChar
@@ -2960,50 +2688,149 @@ section                 conmque                                                 
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 concode vstart=05000h                                   ;labels relative to 5000h
-ConCode                 call    ConInitializeData                               ;initialize console variables
-                        clearConsoleScreen                                      ;clear the console screen
-                        putConsoleString czTitle                                ;display startup message
-.10                     putConsoleString czPrompt                               ;display input prompt
-                        placeCursor                                             ;set CRT cursor location
-
-.20                     sti                                                     ;enable interrupts
-                        hlt                                                     ;halt until interrupt
-                        jmp     .20                                             ;continue halt loop
-;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Routine:        ConInitializeData
+;       Initialize console work areas to low values.
 ;
-;       Description:    This routine initializes console task variables.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConInitializeData       push    ecx                                             ;save non-volatile regs
-                        push    edi                                             ;
-                        push    es                                              ;
-;
-;       Initialize console work areas.
-;
-                        push    EGDTOSDATA                                      ;load OS data selector ...
-                        pop     es                                              ;... into extra segment register
-                        mov     edi,ECONDATA                                    ;OS console data address
+ConCode                 mov     edi,ECONDATA                                    ;OS console data address
                         xor     al,al                                           ;initialization value
                         mov     ecx,ECONDATALEN                                 ;size of OS console data
                         cld                                                     ;forward strings
                         rep     stosb                                           ;initialize data
 ;
-;       Restore and return.
+;       Initialize the active panel variables.
 ;
-                        pop     es                                              ;restore non-volatile regs
-                        pop     edi                                             ;
-                        pop     ecx                                             ;
-                        ret                                                     ;return
+                        mov     eax,czPnlCon001                                 ;initial console panel
+                        mov     [wdConsolePanel],eax                            ;save panel template address
+;
+;       Address the console screen memory.
+;
+                        push    EGDTCGA                                         ;load CGA video selector...
+                        pop     es                                              ;...into extra segment reg
+;
+;       Initialize the Operator Information Area (OIA) (This is done once).
+;
+                        mov     edi,ECONROWS*ECONROWBYTES                       ;target offset
+                        mov     ecx,ECONROWDWORDS                               ;double-words per row
+                        mov     eax,ECONOIADWORD                                ;OIA attribute and space
+                        rep     stosd                                           ;reset OIA
+;
+;       Clear the console rows. (This is done after every attention key).
+;
+.20                     xor     edi,edi                                         ;target offset
+                        mov     ecx,ECONROWS*ECONROWDWORDS                      ;double-words to clear
+                        mov     eax,ECONCLEARDWORD                              ;initialization value
+                        rep     stosd                                           ;reset screen body
+;
+;       Reset the input field row and column. Address the panel template.
+;
+                        xor     eax,eax                                         ;zero register
+                        mov     [wdConsoleInput],eax                            ;zero input addr
+                        mov     [wbConsoleRow],al                               ;zero console row
+                        mov     [wbConsoleColumn],al                            ;zero console column
+;
+;       Load the field address. Exit loop if address is null.
+;
+                        mov     esi,[wdConsolePanel]                            ;panel template
+.30                     lodsd                                                   ;field value addr
+                        test    eax,eax                                         ;end of panel?
+                        jz      .70                                             ;yes, exit loop
+                        mov     ebx,eax                                         ;field value addr
+;
+;       Load the field row, column, color and length.
+;
+                        lodsb                                                   ;attributes
+                        mov     ch,al                                           ;row
+                        lodsb                                                   ;column
+                        mov     cl,al                                           ;column
+                        lodsb                                                   ;color
+                        mov     dh,al                                           ;color
+                        lodsb                                                   ;length
+                        mov     dl,al                                           ;length
+;
+;       Test the row high-bit for input field indication
+;
+                        test    ch,080h                                         ;input field?
+                        jz      .40                                             ;no, branch
+                        and     ch,07Fh                                         ;clear input field indicator
+;
+;       Save the row and column if this is the first input field
+;
+                        mov     al,[wbConsoleRow]                               ;console row
+                        or      al,[wbConsoleColumn]                            ;already have an input field?
+                        jnz     .40                                             ;yes, branch
+                        mov     [wbConsoleRow],ch                               ;update console row
+                        mov     [wbConsoleColumn],cl                            ;update console column
+;
+;       Compute the target offset.
+;
+.40                     movzx   eax,ch                                          ;row
+                        mov     ah,ECONCOLS                                     ;columns per row
+                        mul     ah                                              ;row offset
+                        add     al,cl                                           ;add column
+                        adc     ah,0                                            ;handle overflow
+                        shl     eax,1                                           ;two-bytes per column
+                        mov     edi,eax                                         ;target offset
+;
+;       Display the field contents
+;
+                        xchg    ebx,esi                                         ;swap panel and field addr
+                        movzx   ecx,dl                                          ;length
+                        mov     ah,dh                                           ;color
+.50                     lodsb                                                   ;character
+                        test    al,al                                           ;end of value?
+                        jz      .60                                             ;yes, branch
+                        stosw                                                   ;store character and color
+                        loop    .50                                             ;next character
+.60                     xchg    ebx,esi                                         ;swap panel and field addr
+                        jmp     short .30                                       ;next field
+;
+;       Place the cursor if we have an input field
+;
+.70                     mov     ah,[wbConsoleRow]                               ;field row
+                        mov     al,[wbConsoleColumn]                            ;field column
+                        or      al,ah                                           ;input field?
+                        jz      .80                                             ;no, branch
+                        placeCursor                                             ;position the cursor
+;
+;       Enter halt loop
+;
+.80                     sti                                                     ;enable interrupts
+                        hlt                                                     ;halt until interrupt
+                        jmp     .80                                             ;continue halt loop
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Constants
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-czNewLine               db      13,10,0                                         ;new line string
-czPrompt                db      ":",0                                           ;prompt string
-czTitle                 db      "Custom Operating System 1.0",13,10,0           ;version string
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Panels
+;
+;       Notes:          1.      Each field MUST have an address of a constant or an input field.
+;                       2.      The constant text or input field MUST be at least the length of the field.
+;                       3.      Field constant text or field values MUST be comprised of printable characters.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+czPnlCon001             dd      czFldPnlIdCon001                                ;field text
+                        db      00,00,02h,06                                    ;flags+row, col, attr, length
+                        dd      czFldTitleCon001
+                        db      00,30,07h,20
+                        dd      czFldDatTmCon001
+                        db      00,63,02h,17
+                        dd      czFldPrmptCon001
+                        db      23,00,07h,01
+                        dd      wzConsoleInBuffer
+                        db      128+23,01,0Fh,79
+                        dd      0                                               ;end of panel
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Strings
+;
+;-----------------------------------------------------------------------------------------------------------------------
+czFldPnlIdCon001        db      "CON001"                                        ;main console panel id
+czFldTitleCon001        db      "CustomOS Version 1.0"                          ;main console panel title
+czFldDatTmCon001        db      "DD-MMM-YYYY HH:MM"                             ;panel date and time template
+czFldPrmptCon001        db      ":"                                             ;command prompt
                         times   4096-($-$$) db 0h                               ;zero fill to end of section
 %endif
 %ifdef BUILDDISK
