@@ -1490,7 +1490,7 @@ section                 idt                                                     
 ;       signals the CPU on an interrupt request line (IRQ). Software interrupts occur when directly called by other code
 ;       using the INT instruction. Each interrupt handler routine is defined by using our "menter" macro, which simply
 ;       establishes a label defining the offset address of the entry point from the start of the kernel section. This
-;       label is referenced in the "mint" and "mint" macros found in the IDT to specify the address of the handlers.
+;       label is referenced in the "mint" and "mtrap" macros found in the IDT to specify the address of the handlers.
 ;
 ;=======================================================================================================================
 section                 kernel  vstart=0h                                       ;data offsets relative to 0

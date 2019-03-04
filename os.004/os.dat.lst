@@ -1494,7 +1494,7 @@
   1490                                  ;       signals the CPU on an interrupt request line (IRQ). Software interrupts occur when directly called by other code
   1491                                  ;       using the INT instruction. Each interrupt handler routine is defined by using our "menter" macro, which simply
   1492                                  ;       establishes a label defining the offset address of the entry point from the start of the kernel section. This
-  1493                                  ;       label is referenced in the "mint" and "mint" macros found in the IDT to specify the address of the handlers.
+  1493                                  ;       label is referenced in the "mint" and "mtrap" macros found in the IDT to specify the address of the handlers.
   1494                                  ;
   1495                                  ;=======================================================================================================================
   1496                                  section                 kernel  vstart=0h                                       ;data offsets relative to 0
