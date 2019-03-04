@@ -44,7 +44,7 @@
 ;       Conventions
 ;
 ;       Alignment:      In this document, columns are numbered beginning with 1.
-;                       Logical tabs are set after each eight columns.
+;                       Logical tabs are set after every eight columns.
 ;                       Tabs are simulated using SPACE characters.
 ;                       For comments that span an entire line, comment text begins in column 9.
 ;                       Assembly instructions (mnemonics) begin in column 25.
@@ -874,7 +874,8 @@ Loader                  push    cs                                              
 ;       However, some hypervisor BIOS implementations have been seen to implement the "wait" as simply a fast
 ;       iteration of the keyboard status function call (INT 16h, AH=1), causing a max CPU condition. So, instead,
 ;       we will use the keyboard status call and iterate over a halt (HLT) instruction until a key is pressed.
-;       By convention, we enable maskable interrupts with STI before issuing HLT, so as not to catch fire.
+;       The STI instruction enables maskable interrupts, including the keyboard. The CPU assures that the
+;       instruction immediately following STI will be executed before any interrupt is serviced.
 ;
 .30                     mov     ah,EBIOSFNKEYSTATUS                             ;keyboard status function
                         int     EBIOSINTKEYBOARD                                ;call BIOS keyboard interrupt
