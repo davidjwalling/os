@@ -39,7 +39,7 @@
     39                                  ;       Conventions
     40                                  ;
     41                                  ;       Alignment:      In this document, columns are numbered beginning with 1.
-    42                                  ;                       Logical tabs are set after each eight columns.
+    42                                  ;                       Logical tabs are set after every eight columns.
     43                                  ;                       Tabs are simulated using SPACE characters.
     44                                  ;                       For comments that span an entire line, comment text begins in column 9.
     45                                  ;                       Assembly instructions (mnemonics) begin in column 25.
@@ -674,81 +674,82 @@
    674                                  ;       However, some hypervisor BIOS implementations have been seen to implement the "wait" as simply a fast
    675                                  ;       iteration of the keyboard status function call (INT 16h, AH=1), causing a max CPU condition. So, instead,
    676                                  ;       we will use the keyboard status call and iterate over a halt (HLT) instruction until a key is pressed.
-   677                                  ;       By convention, we enable maskable interrupts with STI before issuing HLT, so as not to catch fire.
-   678                                  ;
-   679 0000000A B401                    .30                     mov     ah,EBIOSFNKEYSTATUS                             ;keyboard status function
-   680 0000000C CD16                                            int     EBIOSINTKEYBOARD                                ;call BIOS keyboard interrupt
-   681 0000000E 7504                                            jnz     .40                                             ;exit if key pressed
-   682 00000010 FB                                              sti                                                     ;enable maskable interrupts
-   683 00000011 F4                                              hlt                                                     ;wait for interrupt
-   684 00000012 EBF6                                            jmp     .30                                             ;repeat until keypress
-   685                                  ;
-   686                                  ;       Now that a key has been pressed, we signal the system to restart by driving the B0 line on the 8042
-   687                                  ;       keyboard controller low (OUT 64h,0feh). The restart may take some microseconds to kick in, so we issue
-   688                                  ;       HLT until the system resets.
-   689                                  ;
-   690 00000014 B0FE                    .40                     mov     al,EKEYBCMDRESET                                ;8042 pulse output port pin
-   691 00000016 E664                                            out     EKEYBPORTSTAT,al                                ;drive B0 low to restart
-   692 00000018 FB                      .50                     sti                                                     ;enable maskable interrupts
-   693 00000019 F4                                              hlt                                                     ;stop until reset, int, nmi
-   694 0000001A EBFC                                            jmp     .50                                             ;loop until restart kicks in
-   695                                  ;-----------------------------------------------------------------------------------------------------------------------
-   696                                  ;
-   697                                  ;       Routine:        PutTTYString
-   698                                  ;
-   699                                  ;       Description:    This routine sends a NUL-terminated string of characters to the TTY output device. We use the
-   700                                  ;                       TTY output function of the BIOS video interrupt, passing the address of the string in DS:SI
-   701                                  ;                       and the BIOS teletype function code in AH. After a return from the BIOS interrupt, we repeat
-   702                                  ;                       for the next string character until a NUL is found. Note that we clear the direction flag (DF)
-   703                                  ;                       with CLD before the first LODSB. The direction flag is not guaranteed to be preseved between
-   704                                  ;                       calls within the OS. However, the "int" instruction does store the EFLAGS register on the
-   705                                  ;                       stack and restores it on return. Therefore, clearing the direction flag before subsequent calls
-   706                                  ;                       to LODSB is not needed.
-   707                                  ;
-   708                                  ;       In:             DS:SI   address of string
-   709                                  ;
-   710                                  ;       Out:            DF      0
-   711                                  ;                       ZF      1
-   712                                  ;                       AL      0
-   713                                  ;
-   714                                  ;-----------------------------------------------------------------------------------------------------------------------
-   715 0000001C FC                      PutTTYString            cld                                                     ;forward strings
-   716 0000001D AC                      .10                     lodsb                                                   ;load next byte at DS:SI in AL
-   717 0000001E 84C0                                            test    al,al                                           ;end of string?
-   718 00000020 7406                                            jz      .20                                             ;... yes, exit our loop
-   719 00000022 B40E                                            mov     ah,EBIOSFNTTYOUTPUT                             ;BIOS teletype function
-   720 00000024 CD10                                            int     EBIOSINTVIDEO                                   ;call BIOS display interrupt
-   721 00000026 EBF5                                            jmp     .10                                             ;repeat until done
-   722 00000028 C3                      .20                     ret                                                     ;return
-   723                                  ;-----------------------------------------------------------------------------------------------------------------------
-   724                                  ;
-   725                                  ;       Loader Data
-   726                                  ;
-   727                                  ;       Our only "data" is the string displayed when system starts. It ends with ASCII carriage-return (13) and line-
-   728                                  ;       feed (10) values. The remainder of the boot sector is filled with NUL. The boot sector finally ends with the
-   729                                  ;       required two-byte signature checked by the BIOS. Note that recent versions of NASM will issue a warning if
-   730                                  ;       the calculated address for the end-of-sector signature produces a negative value for "1024-($-$$)". This will
-   731                                  ;       indicate if we have added too much data and exceeded the length of the sector. Note also that since we are at
-   732                                  ;       the end of a "file" (os.com) and not the boot sector, there is no end-of-sector marker (0x55 0xaa) here.
-   733                                  ;
-   734                                  ;-----------------------------------------------------------------------------------------------------------------------
-   735 00000029 5374617274696E6720-     czStartingMsg           db      "Starting OS",13,10,0                           ;starting message
-   735 00000032 4F530D0A00         
-   736 00000037 00<rept>                                        times   1024-($-$$) db 0h                               ;zero fill to end of sector
-   737                                  %endif
-   738                                  %ifdef BUILDDISK
-   739                                  ;-----------------------------------------------------------------------------------------------------------------------
-   740                                  ;
-   741                                  ;       Free Disk Space                                                         @disk: 004600   @mem:  n/a
-   742                                  ;
-   743                                  ;       Following the convention introduced by DOS, we use the value 'F6' to indicate unused floppy disk storage.
-   744                                  ;
-   745                                  ;-----------------------------------------------------------------------------------------------------------------------
-   746                                  section                 unused                                                  ;unused disk space
-   747                                                          times   EBOOTDISKBYTES-04600h db 0F6h                   ;fill to end of disk image
-   748                                  %endif
-   749                                  ;=======================================================================================================================
-   750                                  ;
-   751                                  ;       End of Program Code
-   752                                  ;
-   753                                  ;=======================================================================================================================
+   677                                  ;       The STI instruction enables maskable interrupts, including the keyboard. The CPU assures that the
+   678                                  ;       instruction immediately following STI will be executed before any interrupt is serviced.
+   679                                  ;
+   680 0000000A B401                    .30                     mov     ah,EBIOSFNKEYSTATUS                             ;keyboard status function
+   681 0000000C CD16                                            int     EBIOSINTKEYBOARD                                ;call BIOS keyboard interrupt
+   682 0000000E 7504                                            jnz     .40                                             ;exit if key pressed
+   683 00000010 FB                                              sti                                                     ;enable maskable interrupts
+   684 00000011 F4                                              hlt                                                     ;wait for interrupt
+   685 00000012 EBF6                                            jmp     .30                                             ;repeat until keypress
+   686                                  ;
+   687                                  ;       Now that a key has been pressed, we signal the system to restart by driving the B0 line on the 8042
+   688                                  ;       keyboard controller low (OUT 64h,0feh). The restart may take some microseconds to kick in, so we issue
+   689                                  ;       HLT until the system resets.
+   690                                  ;
+   691 00000014 B0FE                    .40                     mov     al,EKEYBCMDRESET                                ;8042 pulse output port pin
+   692 00000016 E664                                            out     EKEYBPORTSTAT,al                                ;drive B0 low to restart
+   693 00000018 FB                      .50                     sti                                                     ;enable maskable interrupts
+   694 00000019 F4                                              hlt                                                     ;stop until reset, int, nmi
+   695 0000001A EBFC                                            jmp     .50                                             ;loop until restart kicks in
+   696                                  ;-----------------------------------------------------------------------------------------------------------------------
+   697                                  ;
+   698                                  ;       Routine:        PutTTYString
+   699                                  ;
+   700                                  ;       Description:    This routine sends a NUL-terminated string of characters to the TTY output device. We use the
+   701                                  ;                       TTY output function of the BIOS video interrupt, passing the address of the string in DS:SI
+   702                                  ;                       and the BIOS teletype function code in AH. After a return from the BIOS interrupt, we repeat
+   703                                  ;                       for the next string character until a NUL is found. Note that we clear the direction flag (DF)
+   704                                  ;                       with CLD before the first LODSB. The direction flag is not guaranteed to be preseved between
+   705                                  ;                       calls within the OS. However, the "int" instruction does store the EFLAGS register on the
+   706                                  ;                       stack and restores it on return. Therefore, clearing the direction flag before subsequent calls
+   707                                  ;                       to LODSB is not needed.
+   708                                  ;
+   709                                  ;       In:             DS:SI   address of string
+   710                                  ;
+   711                                  ;       Out:            DF      0
+   712                                  ;                       ZF      1
+   713                                  ;                       AL      0
+   714                                  ;
+   715                                  ;-----------------------------------------------------------------------------------------------------------------------
+   716 0000001C FC                      PutTTYString            cld                                                     ;forward strings
+   717 0000001D AC                      .10                     lodsb                                                   ;load next byte at DS:SI in AL
+   718 0000001E 84C0                                            test    al,al                                           ;end of string?
+   719 00000020 7406                                            jz      .20                                             ;... yes, exit our loop
+   720 00000022 B40E                                            mov     ah,EBIOSFNTTYOUTPUT                             ;BIOS teletype function
+   721 00000024 CD10                                            int     EBIOSINTVIDEO                                   ;call BIOS display interrupt
+   722 00000026 EBF5                                            jmp     .10                                             ;repeat until done
+   723 00000028 C3                      .20                     ret                                                     ;return
+   724                                  ;-----------------------------------------------------------------------------------------------------------------------
+   725                                  ;
+   726                                  ;       Loader Data
+   727                                  ;
+   728                                  ;       Our only "data" is the string displayed when system starts. It ends with ASCII carriage-return (13) and line-
+   729                                  ;       feed (10) values. The remainder of the boot sector is filled with NUL. The boot sector finally ends with the
+   730                                  ;       required two-byte signature checked by the BIOS. Note that recent versions of NASM will issue a warning if
+   731                                  ;       the calculated address for the end-of-sector signature produces a negative value for "1024-($-$$)". This will
+   732                                  ;       indicate if we have added too much data and exceeded the length of the sector. Note also that since we are at
+   733                                  ;       the end of a "file" (os.com) and not the boot sector, there is no end-of-sector marker (0x55 0xaa) here.
+   734                                  ;
+   735                                  ;-----------------------------------------------------------------------------------------------------------------------
+   736 00000029 5374617274696E6720-     czStartingMsg           db      "Starting OS",13,10,0                           ;starting message
+   736 00000032 4F530D0A00         
+   737 00000037 00<rept>                                        times   1024-($-$$) db 0h                               ;zero fill to end of sector
+   738                                  %endif
+   739                                  %ifdef BUILDDISK
+   740                                  ;-----------------------------------------------------------------------------------------------------------------------
+   741                                  ;
+   742                                  ;       Free Disk Space                                                         @disk: 004600   @mem:  n/a
+   743                                  ;
+   744                                  ;       Following the convention introduced by DOS, we use the value 'F6' to indicate unused floppy disk storage.
+   745                                  ;
+   746                                  ;-----------------------------------------------------------------------------------------------------------------------
+   747                                  section                 unused                                                  ;unused disk space
+   748                                                          times   EBOOTDISKBYTES-04600h db 0F6h                   ;fill to end of disk image
+   749                                  %endif
+   750                                  ;=======================================================================================================================
+   751                                  ;
+   752                                  ;       End of Program Code
+   753                                  ;
+   754                                  ;=======================================================================================================================
