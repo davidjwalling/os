@@ -43,7 +43,7 @@
 ;       Conventions
 ;
 ;       Alignment:      In this document, columns are numbered beginning with 1.
-;                       Logical tabs are set after each eight columns.
+;                       Logical tabs are set after every eight columns.
 ;                       Tabs are simulated using SPACE characters.
 ;                       For comments that span an entire line, comment text begins in column 9.
 ;                       Assembly instructions (mnemonics) begin in column 25.
@@ -1236,7 +1236,8 @@ LoaderExit              call    PutTTYString                                    
 ;       However, some hypervisor BIOS implementations have been seen to implement the "wait" as simply a fast
 ;       iteration of the keyboard status function call (INT 16h, AH=1), causing a max CPU condition. So, instead,
 ;       we will use the keyboard status call and iterate over a halt (HLT) instruction until a key is pressed.
-;       By convention, we enable maskable interrupts with STI before issuing HLT, so as not to catch fire.
+;       The STI instruction enables maskable interrupts, including the keyboard. The CPU assures that the
+;       instruction immediately following STI will be executed before any interrupt is serviced.
 ;
 .30                     mov     ah,EBIOSFNKEYSTATUS                             ;keyboard status function
                         int     EBIOSINTKEYBOARD                                ;call BIOS keyboard interrupt
@@ -1429,54 +1430,54 @@ section                 gdt                                                     
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 idt                                                     ;interrupt descriptor table
-                        mint    dividebyzero                                    ;00 divide by zero
-                        mint    singlestep                                      ;01 single step
-                        mint    nmi                                             ;02 non-maskable
-                        mint    break                                           ;03 break
-                        mint    into                                            ;04 into
-                        mint    bounds                                          ;05 bounds
-                        mint    badopcode                                       ;06 bad op code
-                        mint    nocoproc                                        ;07 no coprocessor
-                        mint    doublefault                                     ;08 double-fault
-                        mint    operand                                         ;09 operand
-                        mint    badtss                                          ;0a bad TSS
-                        mint    notpresent                                      ;0b not-present
-                        mint    stacklimit                                      ;0c stack limit
-                        mint    protection                                      ;0d general protection fault
-                        mint    int14                                           ;0e (reserved)
-                        mint    int15                                           ;0f (reserved)
-                        mint    coproccalc                                      ;10 (reserved)
-                        mint    int17                                           ;11 (reserved)
-                        mint    int18                                           ;12 (reserved)
-                        mint    int19                                           ;13 (reserved)
-                        mint    int20                                           ;14 (reserved)
-                        mint    int21                                           ;15 (reserved)
-                        mint    int22                                           ;16 (reserved)
-                        mint    int23                                           ;17 (reserved)
-                        mint    int24                                           ;18 (reserved)
-                        mint    int25                                           ;19 (reserved)
-                        mint    int26                                           ;1a (reserved)
-                        mint    int27                                           ;1b (reserved)
-                        mint    int28                                           ;1c (reserved)
-                        mint    int29                                           ;1d (reserved)
-                        mint    int30                                           ;1e (reserved)
-                        mint    int31                                           ;1f (reserved)
-                        mtrap   clocktick                                       ;20 IRQ0 clock tick
-                        mtrap   keyboard                                        ;21 IRQ1 keyboard
-                        mtrap   iochannel                                       ;22 IRQ2 second 8259A cascade
-                        mtrap   com2                                            ;23 IRQ3 com2
-                        mtrap   com1                                            ;24 IRQ4 com1
-                        mtrap   lpt2                                            ;25 IRQ5 lpt2
-                        mtrap   diskette                                        ;26 IRQ6 diskette
-                        mtrap   lpt1                                            ;27 IRQ7 lpt1
-                        mtrap   rtclock                                         ;28 IRQ8 real-time clock
-                        mtrap   retrace                                         ;29 IRQ9 CGA vertical retrace
-                        mtrap   irq10                                           ;2a IRQA (reserved)
-                        mtrap   irq11                                           ;2b IRQB (reserved)
-                        mtrap   ps2mouse                                        ;2c IRQC ps/2 mouse
-                        mtrap   coprocessor                                     ;2d IRQD coprocessor
-                        mtrap   fixeddisk                                       ;2e IRQE fixed disk
-                        mtrap   irq15                                           ;2f IRQF (reserved)
+                        mtrap   dividebyzero                                    ;00 divide by zero
+                        mtrap   singlestep                                      ;01 single step
+                        mtrap   nmi                                             ;02 non-maskable
+                        mtrap   break                                           ;03 break
+                        mtrap   into                                            ;04 into
+                        mtrap   bounds                                          ;05 bounds
+                        mtrap   badopcode                                       ;06 bad op code
+                        mtrap   nocoproc                                        ;07 no coprocessor
+                        mtrap   doublefault                                     ;08 double-fault
+                        mtrap   operand                                         ;09 operand
+                        mtrap   badtss                                          ;0a bad TSS
+                        mtrap   notpresent                                      ;0b not-present
+                        mtrap   stacklimit                                      ;0c stack limit
+                        mtrap   protection                                      ;0d general protection fault
+                        mtrap   int14                                           ;0e (reserved)
+                        mtrap   int15                                           ;0f (reserved)
+                        mtrap   coproccalc                                      ;10 (reserved)
+                        mtrap   int17                                           ;11 (reserved)
+                        mtrap   int18                                           ;12 (reserved)
+                        mtrap   int19                                           ;13 (reserved)
+                        mtrap   int20                                           ;14 (reserved)
+                        mtrap   int21                                           ;15 (reserved)
+                        mtrap   int22                                           ;16 (reserved)
+                        mtrap   int23                                           ;17 (reserved)
+                        mtrap   int24                                           ;18 (reserved)
+                        mtrap   int25                                           ;19 (reserved)
+                        mtrap   int26                                           ;1a (reserved)
+                        mtrap   int27                                           ;1b (reserved)
+                        mtrap   int28                                           ;1c (reserved)
+                        mtrap   int29                                           ;1d (reserved)
+                        mtrap   int30                                           ;1e (reserved)
+                        mtrap   int31                                           ;1f (reserved)
+                        mint    clocktick                                       ;20 IRQ0 clock tick
+                        mint    keyboard                                        ;21 IRQ1 keyboard
+                        mint    iochannel                                       ;22 IRQ2 second 8259A cascade
+                        mint    com2                                            ;23 IRQ3 com2
+                        mint    com1                                            ;24 IRQ4 com1
+                        mint    lpt2                                            ;25 IRQ5 lpt2
+                        mint    diskette                                        ;26 IRQ6 diskette
+                        mint    lpt1                                            ;27 IRQ7 lpt1
+                        mint    rtclock                                         ;28 IRQ8 real-time clock
+                        mint    retrace                                         ;29 IRQ9 CGA vertical retrace
+                        mint    irq10                                           ;2a IRQA (reserved)
+                        mint    irq11                                           ;2b IRQB (reserved)
+                        mint    ps2mouse                                        ;2c IRQC ps/2 mouse
+                        mint    coprocessor                                     ;2d IRQD coprocessor
+                        mint    fixeddisk                                       ;2e IRQE fixed disk
+                        mint    irq15                                           ;2f IRQF (reserved)
                         mtrap   svc                                             ;30 OS services
                         times   2048-($-$$) db 0h                               ;zero fill to end of section
 ;=======================================================================================================================
@@ -1489,7 +1490,7 @@ section                 idt                                                     
 ;       signals the CPU on an interrupt request line (IRQ). Software interrupts occur when directly called by other code
 ;       using the INT instruction. Each interrupt handler routine is defined by using our "menter" macro, which simply
 ;       establishes a label defining the offset address of the entry point from the start of the kernel section. This
-;       label is referenced in the "mint" and "mtrap" macros found in the IDT to specify the address of the handlers.
+;       label is referenced in the "mint" and "mint" macros found in the IDT to specify the address of the handlers.
 ;
 ;=======================================================================================================================
 section                 kernel  vstart=0h                                       ;data offsets relative to 0
@@ -1765,6 +1766,10 @@ ReportInterrupt         iretd                                                   
                         push    edx                                             ;
                         push    ds                                              ;
 ;
+;       End the interrupt.
+;
+                        call    PutPrimaryEndOfInt                              ;send EOI to primary PIC
+;
 ;       Update the clock tick count and the elapsed days as needed.
 ;
                         push    EGDTOSDATA                                      ;load OS data selector ...
@@ -1798,9 +1803,9 @@ irq0.15                 mov     dh,EFDCPORTHI                                   
                         mov     dl,EFDCPORTLOOUT                                ;FDC digital output register
                         out     dx,al                                           ;turn motor off
 ;
-;       Signal the end of the hardware interrupt.
+;       Enable maskable interrupts.
 ;
-irq0.20                 call    PutPrimaryEndOfInt                              ;send end-of-interrupt to PIC
+irq0.20                 sti                                                     ;enable maskable interrupts
 ;
 ;       Restore and return.
 ;
@@ -1856,13 +1861,16 @@ irq0.20                 call    PutPrimaryEndOfInt                              
                         menter  diskette                                        ;floppy disk interrupt
                         push    eax                                             ;save non-volatile regs
                         push    ds                                              ;
+                        call    PutPrimaryEndOfInt                              ;end the interrupt
                         push    EGDTOSDATA                                      ;load OS data selector ...
                         pop     ds                                              ;... into DS register
                         mov     al,[wbFDCStatus]                                ;AL = FDC calibration status
                         or      al,10000000b                                    ;set IRQ flag
                         mov     [wbFDCStatus],al                                ;update FDC calibration status
+                        sti                                                     ;enable maskable interrupts
                         pop     ds                                              ;restore non-volatile regs
-                        jmp     hwint                                           ;end primary PIC interrupt
+                        pop     eax                                             ;
+                        iretd                                                   ;return from interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       IRQ7    Parallel Port 1 Hardware Interrupt
@@ -1943,7 +1951,8 @@ irq0.20                 call    PutPrimaryEndOfInt                              
 hwwint                  call    PutSecondaryEndOfInt                            ;send EOI to secondary PIC
                         jmp     hwint90                                         ;skip ahead
 hwint                   call    PutPrimaryEndOfInt                              ;send EOI to primary PIC
-hwint90                 pop     eax                                             ;restore modified regs
+hwint90                 sti                                                     ;enable maskable interrupts
+                        pop     eax                                             ;restore modified regs
                         iretd                                                   ;return from interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -2037,8 +2046,7 @@ PlaceCursor             push    ecx                                             
 ;       Description:    This routine sends a non-specific end-of-interrupt signal to the primary PIC.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-PutPrimaryEndOfInt      sti                                                     ;enable maskable interrupts
-                        mov     al,EPICEOI                                      ;non-specific end-of-interrupt
+PutPrimaryEndOfInt      mov     al,EPICEOI                                      ;non-specific end-of-interrupt
                         out     EPICPORTPRI,al                                  ;send EOI to primary PIC
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -2048,8 +2056,7 @@ PutPrimaryEndOfInt      sti                                                     
 ;       Description:    This routine sends a non-specific end-of-interrupt signal to the secondary PIC.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-PutSecondaryEndOfInt    sti                                                     ;enable maskable interrupts
-                        mov     al,EPICEOI                                      ;non-specific end-of-interrupt
+PutSecondaryEndOfInt    mov     al,EPICEOI                                      ;non-specific end-of-interrupt
                         out     EPICPORTSEC,al                                  ;send EOI to secondary PIC
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
