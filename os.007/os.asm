@@ -3130,7 +3130,7 @@ ConCode                 mov     edi,ECONDATA                                    
                         mov     [wbConsoleRow],al                               ;zero console row
                         mov     [wbConsoleColumn],al                            ;zero console column
 ;
-;       Load the field address from the pandel. Exit loop if address is null.
+;       Load the field address from the panel. Exit loop if address is null.
 ;
                         mov     ebx,[wdConsolePanel]                            ;first field template addr
 .30                     mov     esi,[ebx]                                       ;field value addr

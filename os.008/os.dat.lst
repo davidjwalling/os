@@ -3640,7 +3640,7 @@
   3636                                                          mov     [wbConsoleRow],al                               ;zero console row
   3637                                                          mov     [wbConsoleColumn],al                            ;zero console column
   3638                                  ;
-  3639                                  ;       Load the field address from the pandel. Exit loop if address is null.
+  3639                                  ;       Load the field address from the panel. Exit loop if address is null.
   3640                                  ;
   3641                                                          mov     ebx,[wdConsolePanel]                            ;first field template addr
   3642                                  .30                     mov     esi,[ebx]                                       ;field value addr

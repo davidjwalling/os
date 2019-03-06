@@ -465,7 +465,6 @@ wbClockDays             resb    1                                               
 ;-----------------------------------------------------------------------------------------------------------------------
 ECONDATA                equ     ($)
 wdConsolePanel          resd    1                                               ;console panel definition address
-wdConsoleInput          resd    1                                               ;console field input address
 wzConsoleInBuffer       resb    80                                              ;command input buffer
 wbConsoleColumn         resb    1                                               ;console column
 wbConsoleRow            resb    1                                               ;console row
@@ -2223,39 +2222,33 @@ ConCode                 mov     edi,ECONDATA                                    
                         mov     eax,ECONCLEARDWORD                              ;initialization value
                         rep     stosd                                           ;reset screen body
 ;
-;       Reset the input field row and column. Address the panel template.
+;       Reset the input field input address, row and column.
 ;
                         xor     eax,eax                                         ;zero register
-                        mov     [wdConsoleInput],eax                            ;zero input addr
                         mov     [wbConsoleRow],al                               ;zero console row
                         mov     [wbConsoleColumn],al                            ;zero console column
 ;
-;       Load the field address. Exit loop if address is null.
+;       Load the field address from the panel. Exit loop if address is null.
 ;
-                        mov     esi,[wdConsolePanel]                            ;panel template
-.30                     lodsd                                                   ;field value addr
-                        test    eax,eax                                         ;end of panel?
+                        mov     ebx,[wdConsolePanel]                            ;first field template addr
+.30                     mov     esi,[ebx]                                       ;field value addr
+                        test    esi,esi                                         ;end of panel?
                         jz      .70                                             ;yes, exit loop
-                        mov     ebx,eax                                         ;field value addr
 ;
 ;       Load the field row, column, color and length.
 ;
-                        lodsb                                                   ;attributes
-                        mov     ch,al                                           ;row
-                        lodsb                                                   ;column
-                        mov     cl,al                                           ;column
-                        lodsb                                                   ;color
-                        mov     dh,al                                           ;color
-                        lodsb                                                   ;length
-                        mov     dl,al                                           ;length
+                        mov     ch,[ebx+4]                                      ;row
+                        mov     cl,[ebx+5]                                      ;column
+                        mov     dh,[ebx+6]                                      ;color
+                        mov     dl,[ebx+7]                                      ;length
 ;
-;       Test the row high-bit for input field indication
+;       Test the row high-bit for input field indication.
 ;
                         test    ch,080h                                         ;input field?
                         jz      .40                                             ;no, branch
                         and     ch,07Fh                                         ;clear input field indicator
 ;
-;       Save the row and column if this is the first input field
+;       Save the row and column if this is the first input field.
 ;
                         mov     al,[wbConsoleRow]                               ;console row
                         or      al,[wbConsoleColumn]                            ;already have an input field?
@@ -2273,25 +2266,22 @@ ConCode                 mov     edi,ECONDATA                                    
                         shl     eax,1                                           ;two-bytes per column
                         mov     edi,eax                                         ;target offset
 ;
-;       Display the field contents
+;       Display the field contents.
 ;
-                        xchg    ebx,esi                                         ;swap panel and field addr
                         movzx   ecx,dl                                          ;length
                         mov     ah,dh                                           ;color
-.50                     lodsb                                                   ;character
+.50                     lodsb                                                   ;field character
                         test    al,al                                           ;end of value?
                         jz      .60                                             ;yes, branch
                         stosw                                                   ;store character and color
                         loop    .50                                             ;next character
-.60                     xchg    ebx,esi                                         ;swap panel and field addr
+.60                     add     ebx,8                                           ;next field addr
                         jmp     short .30                                       ;next field
 ;
-;       Place the cursor if we have an input field
+;       Place the cursor at the input field.
 ;
 .70                     mov     ah,[wbConsoleRow]                               ;field row
                         mov     al,[wbConsoleColumn]                            ;field column
-                        or      al,ah                                           ;input field?
-                        jz      .80                                             ;no, branch
                         placeCursor                                             ;position the cursor
 ;
 ;       Enter halt loop
@@ -2322,7 +2312,7 @@ czPnlCon001             dd      czFldPnlIdCon001                                
                         dd      czFldPrmptCon001
                         db      23,00,07h,01
                         dd      wzConsoleInBuffer
-                        db      128+23,01,0Fh,79
+                        db      128+23,01,07h,79
                         dd      0                                               ;end of panel
 ;-----------------------------------------------------------------------------------------------------------------------
 ;

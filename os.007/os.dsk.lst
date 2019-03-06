@@ -3307,7 +3307,7 @@
   3130 00000047 A2AD080000                                      mov     [wbConsoleRow],al                               ;zero console row
   3131 0000004C A2AC080000                                      mov     [wbConsoleColumn],al                            ;zero console column
   3132                                  ;
-  3133                                  ;       Load the field address from the pandel. Exit loop if address is null.
+  3133                                  ;       Load the field address from the panel. Exit loop if address is null.
   3134                                  ;
   3135 00000051 8B1D00080000                                    mov     ebx,[wdConsolePanel]                            ;first field template addr
   3136 00000057 8B33                    .30                     mov     esi,[ebx]                                       ;field value addr

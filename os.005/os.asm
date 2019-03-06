@@ -324,7 +324,6 @@ EBIOSFNKEYSTATUS        equ     001h                                            
 ;       ASCII                                                                   EASCII...
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-EASCIILINEFEED          equ     00Ah                                            ;line feed
 EASCIIRETURN            equ     00Dh                                            ;carriage return
 EASCIIESCAPE            equ     01Bh                                            ;escape
 EASCIISPACE             equ     020h                                            ;space
