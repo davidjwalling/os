@@ -7,7 +7,7 @@
 ;       Description:    In this sample program, an "int6" command is added to generate an invalid opcode interrupt.
 ;                       The interrupt handler displays the contents of registers at the time of the interrupt.
 ;
-;       Revised:        July 4, 2018
+;       Revised:        January 1, 2019
 ;
 ;       Assembly:       nasm os.asm -f bin -o os.dat     -l os.dat.lst     -DBUILDBOOT
 ;                       nasm os.asm -f bin -o os.dsk     -l os.dsk.lst     -DBUILDDISK
@@ -16,7 +16,7 @@
 ;
 ;       Assembler:      Netwide Assembler (NASM) 2.13.03, Feb 7 2018
 ;
-;       Notice:         Copyright (C) 2010-2018 David J. Walling. All Rights Reserved.
+;       Notice:         Copyright (C) 2010-2019 David J. Walling. All Rights Reserved.
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -43,7 +43,7 @@
 ;       Conventions
 ;
 ;       Alignment:      In this document, columns are numbered beginning with 1.
-;                       Logical tabs are set after each eight columns.
+;                       Logical tabs are set after every eight columns.
 ;                       Tabs are simulated using SPACE characters.
 ;                       For comments that span an entire line, comment text begins in column 9.
 ;                       Assembly instructions (mnemonics) begin in column 25.
@@ -290,14 +290,8 @@ EX86DESCLEN             equ     8                                               
 ;       ...11CR.                Code (C:1=Conforming,R:1=Readable)
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-EX86ACCLDT              equ     10000010b                                       ;local descriptor table
-EX86ACCTASK             equ     10000101b                                       ;task gate
-EX86ACCTSS              equ     10001001b                                       ;task-state segment
-EX86ACCGATE             equ     10001100b                                       ;call gate
 EX86ACCINT              equ     10001110b                                       ;interrupt gate
 EX86ACCTRAP             equ     10001111b                                       ;trap gate
-EX86ACCDATA             equ     10010011b                                       ;upward writable data
-EX86ACCCODE             equ     10011011b                                       ;non-conforming readable code
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Firmware-Defined Values
@@ -308,7 +302,7 @@ EX86ACCCODE             equ     10011011b                                       
 ;       BIOS Interrupts and Functions                                           EBIOS...
 ;
 ;       Basic Input/Output System (BIOS) functions are grouped and accessed by issuing an interrupt call. Each
-;       BIOS interrupt supports several funtions. The function code is typically passed in the AH register.
+;       BIOS interrupt supports several functions. The function code is typically passed in the AH register.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 EBIOSINTVIDEO           equ     010h                                            ;video services interrupt
@@ -558,6 +552,11 @@ wbClockDays             resb    1                                               
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ECONDATA                equ     ($)
+wdConsolePanel          resd    1                                               ;console panel definition address
+wdConsoleField          resd    1                                               ;console field definition address
+wdConsoleInput          resd    1                                               ;console field input address
+wzConsoleInBuffer       resb    80                                              ;command input buffer
+wzConsoleToken          resb    80                                              ;token buffer
 wbConsoleColumn         resb    1                                               ;console column
 wbConsoleRow            resb    1                                               ;console row
 wbConsoleShift          resb    1                                               ;console shift flags
@@ -570,8 +569,6 @@ wbConsoleScan3          resb    1                                               
 wbConsoleScan4          resb    1                                               ;scan code
 wbConsoleScan5          resb    1                                               ;scan code
 wbConsoleChar           resb    1                                               ;ASCII code
-wzConsoleInBuffer       resb    80                                              ;command input buffer
-wzConsoleToken          resb    80                                              ;token buffer
 ECONDATALEN             equ     ($-ECONDATA)                                    ;size of console data area
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1085,7 +1082,7 @@ Prep                    mov     si,czPrepMsg10                                  
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 czPrepMsg10             db      13,10,"CustomOS Boot-Diskette Preparation Program"
-                        db      13,10,"Copyright (C) 2010-2018 David J. Walling. All rights reserved."
+                        db      13,10,"Copyright (C) 2010-2019 David J. Walling. All rights reserved."
                         db      13,10
                         db      13,10,"This program overwrites the boot sector of a diskette with startup code that"
                         db      13,10,"will load the operating system into memory when the computer is restarted."
@@ -1339,7 +1336,8 @@ LoaderExit              call    PutTTYString                                    
 ;       However, some hypervisor BIOS implementations have been seen to implement the "wait" as simply a fast
 ;       iteration of the keyboard status function call (INT 16h, AH=1), causing a max CPU condition. So, instead,
 ;       we will use the keyboard status call and iterate over a halt (HLT) instruction until a key is pressed.
-;       By convention, we enable maskable interrupts with STI before issuing HLT, so as not to catch fire.
+;       The STI instruction enables maskable interrupts, including the keyboard. The CPU assures that the
+;       instruction immediately following STI will be executed before any interrupt is serviced.
 ;
 .30                     mov     ah,EBIOSFNKEYSTATUS                             ;keyboard status function
                         int     EBIOSINTKEYBOARD                                ;call BIOS keyboard interrupt
@@ -1532,54 +1530,54 @@ section                 gdt                                                     
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 idt                                                     ;interrupt descriptor table
-                        mint    dividebyzero                                    ;00 divide by zero
-                        mint    singlestep                                      ;01 single step
-                        mint    nmi                                             ;02 non-maskable
-                        mint    break                                           ;03 break
-                        mint    into                                            ;04 into
-                        mint    bounds                                          ;05 bounds
-                        mint    badopcode                                       ;06 bad op code
-                        mint    nocoproc                                        ;07 no coprocessor
-                        mint    doublefault                                     ;08 double-fault
-                        mint    operand                                         ;09 operand
-                        mint    badtss                                          ;0a bad TSS
-                        mint    notpresent                                      ;0b not-present
-                        mint    stacklimit                                      ;0c stack limit
-                        mint    protection                                      ;0d general protection fault
-                        mint    int14                                           ;0e (reserved)
-                        mint    int15                                           ;0f (reserved)
-                        mint    coproccalc                                      ;10 (reserved)
-                        mint    int17                                           ;11 (reserved)
-                        mint    int18                                           ;12 (reserved)
-                        mint    int19                                           ;13 (reserved)
-                        mint    int20                                           ;14 (reserved)
-                        mint    int21                                           ;15 (reserved)
-                        mint    int22                                           ;16 (reserved)
-                        mint    int23                                           ;17 (reserved)
-                        mint    int24                                           ;18 (reserved)
-                        mint    int25                                           ;19 (reserved)
-                        mint    int26                                           ;1a (reserved)
-                        mint    int27                                           ;1b (reserved)
-                        mint    int28                                           ;1c (reserved)
-                        mint    int29                                           ;1d (reserved)
-                        mint    int30                                           ;1e (reserved)
-                        mint    int31                                           ;1f (reserved)
-                        mtrap   clocktick                                       ;20 IRQ0 clock tick
-                        mtrap   keyboard                                        ;21 IRQ1 keyboard
-                        mtrap   iochannel                                       ;22 IRQ2 second 8259A cascade
-                        mtrap   com2                                            ;23 IRQ3 com2
-                        mtrap   com1                                            ;24 IRQ4 com1
-                        mtrap   lpt2                                            ;25 IRQ5 lpt2
-                        mtrap   diskette                                        ;26 IRQ6 diskette
-                        mtrap   lpt1                                            ;27 IRQ7 lpt1
-                        mtrap   rtclock                                         ;28 IRQ8 real-time clock
-                        mtrap   retrace                                         ;29 IRQ9 CGA vertical retrace
-                        mtrap   irq10                                           ;2a IRQA (reserved)
-                        mtrap   irq11                                           ;2b IRQB (reserved)
-                        mtrap   ps2mouse                                        ;2c IRQC ps/2 mouse
-                        mtrap   coprocessor                                     ;2d IRQD coprocessor
-                        mtrap   fixeddisk                                       ;2e IRQE fixed disk
-                        mtrap   irq15                                           ;2f IRQF (reserved)
+                        mtrap   dividebyzero                                    ;00 divide by zero
+                        mtrap   singlestep                                      ;01 single step
+                        mtrap   nmi                                             ;02 non-maskable
+                        mtrap   break                                           ;03 break
+                        mtrap   into                                            ;04 into
+                        mtrap   bounds                                          ;05 bounds
+                        mtrap   badopcode                                       ;06 bad op code
+                        mtrap   nocoproc                                        ;07 no coprocessor
+                        mtrap   doublefault                                     ;08 double-fault
+                        mtrap   operand                                         ;09 operand
+                        mtrap   badtss                                          ;0a bad TSS
+                        mtrap   notpresent                                      ;0b not-present
+                        mtrap   stacklimit                                      ;0c stack limit
+                        mtrap   protection                                      ;0d general protection fault
+                        mtrap   int14                                           ;0e (reserved)
+                        mtrap   int15                                           ;0f (reserved)
+                        mtrap   coproccalc                                      ;10 (reserved)
+                        mtrap   int17                                           ;11 (reserved)
+                        mtrap   int18                                           ;12 (reserved)
+                        mtrap   int19                                           ;13 (reserved)
+                        mtrap   int20                                           ;14 (reserved)
+                        mtrap   int21                                           ;15 (reserved)
+                        mtrap   int22                                           ;16 (reserved)
+                        mtrap   int23                                           ;17 (reserved)
+                        mtrap   int24                                           ;18 (reserved)
+                        mtrap   int25                                           ;19 (reserved)
+                        mtrap   int26                                           ;1a (reserved)
+                        mtrap   int27                                           ;1b (reserved)
+                        mtrap   int28                                           ;1c (reserved)
+                        mtrap   int29                                           ;1d (reserved)
+                        mtrap   int30                                           ;1e (reserved)
+                        mtrap   int31                                           ;1f (reserved)
+                        mint    clocktick                                       ;20 IRQ0 clock tick
+                        mint    keyboard                                        ;21 IRQ1 keyboard
+                        mint    iochannel                                       ;22 IRQ2 second 8259A cascade
+                        mint    com2                                            ;23 IRQ3 com2
+                        mint    com1                                            ;24 IRQ4 com1
+                        mint    lpt2                                            ;25 IRQ5 lpt2
+                        mint    diskette                                        ;26 IRQ6 diskette
+                        mint    lpt1                                            ;27 IRQ7 lpt1
+                        mint    rtclock                                         ;28 IRQ8 real-time clock
+                        mint    retrace                                         ;29 IRQ9 CGA vertical retrace
+                        mint    irq10                                           ;2a IRQA (reserved)
+                        mint    irq11                                           ;2b IRQB (reserved)
+                        mint    ps2mouse                                        ;2c IRQC ps/2 mouse
+                        mint    coprocessor                                     ;2d IRQD coprocessor
+                        mint    fixeddisk                                       ;2e IRQE fixed disk
+                        mint    irq15                                           ;2f IRQF (reserved)
                         mtrap   svc                                             ;30 OS services
                         times   2048-($-$$) db 0h                               ;zero fill to end of section
 ;=======================================================================================================================
@@ -2306,6 +2304,10 @@ DrawTextDialogBox       push    ecx                                             
                         push    edx                                             ;
                         push    ds                                              ;
 ;
+;       End the interrupt.
+;
+                        call    PutPrimaryEndOfInt                              ;send EOI to primary PIC
+;
 ;       Update the clock tick count and the elapsed days as needed.
 ;
                         push    EGDTOSDATA                                      ;load OS data selector ...
@@ -2339,9 +2341,9 @@ irq0.15                 mov     dh,EFDCPORTHI                                   
                         mov     dl,EFDCPORTLOOUT                                ;FDC digital output register
                         out     dx,al                                           ;turn motor off
 ;
-;       Signal the end of the hardware interrupt.
+;       Enable maskable interrupts.
 ;
-irq0.20                 call    PutPrimaryEndOfInt                              ;send end-of-interrupt to PIC
+irq0.20                 sti                                                     ;enable maskable interrupts
 ;
 ;       Restore and return.
 ;
@@ -2365,6 +2367,13 @@ irq0.20                 call    PutPrimaryEndOfInt                              
                         push    ecx                                             ;
                         push    esi                                             ;
                         push    ds                                              ;
+;
+;       End the interrupt.
+;
+                        call    PutPrimaryEndOfInt                              ;send EOI to primary PIC
+;
+;       Handle keyboard scan-codes.
+;
                         push    EGDTOSDATA                                      ;load OS data selector ...
                         pop     ds                                              ;... into data segment register
                         xor     al,al                                           ;zero
@@ -2526,7 +2535,13 @@ irq1.130                jmp     irq1.150                                        
 irq1.140                mov     al,EKEYFTIMEOUT                                 ;controller timeout flag
                         or      [wbConsoleStatus],al                            ;set controller timeout flag
 irq1.150                call    PutConsoleOIAChar                               ;update operator info area
-                        call    PutPrimaryEndOfInt                              ;send end-of-interrupt to PIC
+;
+;       Enable maskable interrupts.
+;
+                        sti                                                     ;enable maskable interrupts
+;
+;       Restore and return.
+;
                         pop     ds                                              ;restore non-volatile regs
                         pop     esi                                             ;
                         pop     ecx                                             ;
@@ -2608,13 +2623,16 @@ tscan2shift             db      000h,01Bh,021h,040h,023h,024h,025h,05Eh         
                         menter  diskette                                        ;floppy disk interrupt
                         push    eax                                             ;save non-volatile regs
                         push    ds                                              ;
+                        call    PutPrimaryEndOfInt                              ;end the interrupt
                         push    EGDTOSDATA                                      ;load OS data selector ...
                         pop     ds                                              ;... into DS register
                         mov     al,[wbFDCStatus]                                ;AL = FDC calibration status
                         or      al,10000000b                                    ;set IRQ flag
                         mov     [wbFDCStatus],al                                ;update FDC calibration status
+                        sti                                                     ;enable maskable interrupts
                         pop     ds                                              ;restore non-volatile regs
-                        jmp     hwint                                           ;end primary PIC interrupt
+                        pop     eax                                             ;
+                        iretd                                                   ;return from interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       IRQ7    Parallel Port 1 Hardware Interrupt
@@ -2695,7 +2713,8 @@ tscan2shift             db      000h,01Bh,021h,040h,023h,024h,025h,05Eh         
 hwwint                  call    PutSecondaryEndOfInt                            ;send EOI to secondary PIC
                         jmp     hwint90                                         ;skip ahead
 hwint                   call    PutPrimaryEndOfInt                              ;send EOI to primary PIC
-hwint90                 pop     eax                                             ;restore modified regs
+hwint90                 sti                                                     ;enable maskable interrupts
+                        pop     eax                                             ;restore modified regs
                         iretd                                                   ;return from interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -2722,11 +2741,9 @@ svc90                   iretd                                                   
 ;       These tsvce macros expand to define an address vector table for the service request interrupt (int 30h).
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-tsvc                    tsvce   ClearConsoleScreen                              ;clear console screen
-                        tsvce   CompareMemory                                   ;compare memory
+tsvc                    tsvce   CompareMemory                                   ;compare memory
                         tsvce   GetConsoleString                                ;get string input
                         tsvce   PlaceCursor                                     ;place the cursor at the current loc
-                        tsvce   PutConsoleString                                ;tty output asciiz string
                         tsvce   ResetSystem                                     ;reset system using 8042 chip
                         tsvce   UpperCaseString                                 ;upper-case string
 maxtsvc                 equ     ($-tsvc)/4                                      ;function out of range
@@ -2737,29 +2754,16 @@ maxtsvc                 equ     ($-tsvc)/4                                      
 ;       These macros provide positional parameterization of service request calls.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-%macro                  clearConsoleScreen 0
-                        mov     al,eClearConsoleScreen                          ;function code
-                        int     _svc                                            ;invoke OS service
-%endmacro
 %macro                  compareMemory 0
                         mov     al,eCompareMemory                               ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
-%macro                  getConsoleString 4
-                        mov     edx,%1                                          ;buffer address
-                        mov     ecx,%2                                          ;max characters
-                        mov     bh,%3                                           ;echo indicator
-                        mov     bl,%4                                           ;terminator
+%macro                  getConsoleString 0
                         mov     al,eGetConsoleString                            ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
 %macro                  placeCursor 0
                         mov     al,ePlaceCursor                                 ;function code
-                        int     _svc                                            ;invoke OS service
-%endmacro
-%macro                  putConsoleString 1
-                        mov     edx,%1                                          ;string address
-                        mov     al,ePutConsoleString                            ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
 %macro                  resetSystem 0
@@ -2849,11 +2853,9 @@ UpperCaseString         push    esi                                             
 ;
 ;       Console Helper Routines
 ;
-;       FirstConsoleColumn
 ;       GetConsoleChar
 ;       GetConsoleString
 ;       NextConsoleColumn
-;       NextConsoleRow
 ;       PreviousConsoleColumn
 ;       PutConsoleChar
 ;       PutConsoleHexByte
@@ -2861,22 +2863,9 @@ UpperCaseString         push    esi                                             
 ;       PutConsoleHexWord
 ;       PutConsoleOIAChar
 ;       PutConsoleOIAShift
-;       PutConsoleString
 ;       Yield
 ;
 ;=======================================================================================================================
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        FirstConsoleColumn
-;
-;       Description:    This routine resets the console column to start of the row.
-;
-;       In:             DS      OS data selector
-;
-;-----------------------------------------------------------------------------------------------------------------------
-FirstConsoleColumn      xor     al,al                                           ;zero column
-                        mov     [wbConsoleColumn],al                            ;save column
-                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        GetConsoleChar
@@ -2972,31 +2961,10 @@ GetConsoleString        push    ecx                                             
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 NextConsoleColumn       mov     al,[wbConsoleColumn]                            ;current column
-                        inc     al                                              ;increment column
-                        mov     [wbConsoleColumn],al                            ;save column
-                        cmp     al,ECONCOLS                                     ;end of row?
-                        jb      .10                                             ;no, skip ahead
-                        call    FirstConsoleColumn                              ;reset column to start of row
-                        call    NextConsoleRow                                  ;line feed to next row
-.10                     ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        NextConsoleRow
-;
-;       Description:    This routine advances the console position one line. Scroll the screen one row if needed.
-;
-;       In:             DS      OS data selector
-;
-;-----------------------------------------------------------------------------------------------------------------------
-NextConsoleRow          mov     al,[wbConsoleRow]                               ;current row
-                        inc     al                                              ;increment row
-                        mov     [wbConsoleRow],al                               ;save row
-                        cmp     al,ECONROWS                                     ;end of screen?
-                        jb      .10                                             ;no, skip ahead
-                        call    ScrollConsoleRow                                ;scroll up one row
-                        mov     al,[wbConsoleRow]                               ;row
-                        dec     al                                              ;decrement row
-                        mov     [wbConsoleRow],al                               ;save row
+                        cmp     al,ECONCOLS-1                                   ;end of row?
+                        jnb     .10
+                        inc     al
+                        mov     [wbConsoleColumn],al
 .10                     ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -3010,16 +2978,10 @@ NextConsoleRow          mov     al,[wbConsoleRow]                               
 ;-----------------------------------------------------------------------------------------------------------------------
 PreviousConsoleColumn   mov     al,[wbConsoleColumn]                            ;current column
                         or      al,al                                           ;start of row?
-                        jnz     .10                                             ;no, skip ahead
-                        mov     ah,[wbConsoleRow]                               ;current row
-                        or      ah,ah                                           ;top of screen?
-                        jz      .20                                             ;yes, exit with no change
-                        dec     ah                                              ;decrement row
-                        mov     [wbConsoleRow],ah                               ;save row
-                        mov     al,ECONCOLS                                     ;set maximum column
-.10                     dec     al                                              ;decrement column
-                        mov     [wbConsoleColumn],al                            ;save column
-.20                     ret                                                     ;return
+                        jz      .10
+                        dec     al
+                        mov     [wbConsoleColumn],al
+.10                     ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        PutConsoleChar
@@ -3227,36 +3189,6 @@ PutConsoleOIAShift      push    ecx                                             
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Routine:        PutConsoleString
-;
-;       Description:    This routine writes a sequence of ASCII characters to the console until null and updates the
-;                       console position as needed.
-;
-;       In:             EDX     source address
-;                       DS      OS data selector
-;
-;-----------------------------------------------------------------------------------------------------------------------
-PutConsoleString        push    esi                                             ;save non-volatile regs
-                        mov     esi,edx                                         ;source address
-                        cld                                                     ;forward strings
-.10                     lodsb                                                   ;ASCII character
-                        or      al,al                                           ;end of string?
-                        jz      .40                                             ;yes, skip ahead
-                        cmp     al,EASCIIRETURN                                 ;carriage return?
-                        jne     .20                                             ;no, skip ahead
-                        call    FirstConsoleColumn                              ;move to start of row
-                        jmp     .10                                             ;next character
-.20                     cmp     al,EASCIILINEFEED                               ;line feed?
-                        jne     .30                                             ;no, skip ahead
-                        call    NextConsoleRow                                  ;move to next row
-                        jmp     .10                                             ;next character
-.30                     call    PutConsoleChar                                  ;output character to console
-                        call    NextConsoleColumn                               ;advance to next column
-                        jmp     .10                                             ;next character
-.40                     pop     esi                                             ;restore non-volatile regs
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
 ;       Routine:        Yield
 ;
 ;       Description:    This routine passes control to the next ready task or enter halt.
@@ -3346,74 +3278,10 @@ PutMessage              push    ds                                              
 ;
 ;       These routines read and/or write directly to CGA video memory (B800:0)
 ;
-;       ClearConsoleScreen
-;       ScrollConsoleRow
 ;       SetConsoleChar
 ;       SetConsoleString
 ;
 ;=======================================================================================================================
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ClearConsoleScreen
-;
-;       Description:    This routine clears the console (CGA) screen.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ClearConsoleScreen      push    ecx                                             ;save non-volatile regs
-                        push    edi                                             ;
-                        push    ds                                              ;
-                        push    es                                              ;
-                        push    EGDTOSDATA                                      ;load OS Data selector ...
-                        pop     ds                                              ;... into DS register
-                        push    EGDTCGA                                         ;load CGA selector ...
-                        pop     es                                              ;... into ES register
-                        mov     eax,ECONCLEARDWORD                              ;initializtion value
-                        mov     ecx,ECONROWDWORDS*(ECONROWS)                    ;double-words to clear
-                        xor     edi,edi                                         ;target offset
-                        cld                                                     ;forward strings
-                        rep     stosd                                           ;reset screen body
-                        mov     eax,ECONOIADWORD                                ;OIA attribute and space
-                        mov     ecx,ECONROWDWORDS                               ;double-words per row
-                        rep     stosd                                           ;reset OIA line
-                        xor     al,al                                           ;zero register
-                        mov     [wbConsoleRow],al                               ;reset console row
-                        mov     [wbConsoleColumn],al                            ;reset console column
-                        call    PlaceCursor                                     ;place cursor at current position
-                        pop     es                                              ;restore non-volatile regs
-                        pop     ds                                              ;
-                        pop     edi                                             ;
-                        pop     ecx                                             ;
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ScrollConsoleRow
-;
-;       Description:    This routine scrolls the console (text) screen up one row.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ScrollConsoleRow        push    ecx                                             ;save non-volatile regs
-                        push    esi                                             ;
-                        push    edi                                             ;
-                        push    ds                                              ;
-                        push    es                                              ;
-                        push    EGDTCGA                                         ;load CGA video selector ...
-                        pop     ds                                              ;... into DS
-                        push    EGDTCGA                                         ;load CGA video selector ...
-                        pop     es                                              ;... into ES
-                        mov     ecx,ECONROWDWORDS*(ECONROWS-1)                  ;double-words to move
-                        mov     esi,ECONROWBYTES                                ;ESI = source (line 2)
-                        xor     edi,edi                                         ;EDI = target (line 1)
-                        cld                                                     ;forward strings
-                        rep     movsd                                           ;move 24 lines up
-                        mov     eax,ECONCLEARDWORD                              ;attribute and ASCII space
-                        mov     ecx,ECONROWDWORDS                               ;double-words per row
-                        rep     stosd                                           ;clear bottom row
-                        pop     es                                              ;restore non-volatile regs
-                        pop     ds                                              ;
-                        pop     edi                                             ;
-                        pop     esi                                             ;
-                        pop     ecx                                             ;
-                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        SetConsoleChar
@@ -3513,8 +3381,7 @@ PlaceCursor             push    ecx                                             
 ;       Description:    This routine sends a non-specific end-of-interrupt signal to the primary PIC.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-PutPrimaryEndOfInt      sti                                                     ;enable maskable interrupts
-                        mov     al,EPICEOI                                      ;non-specific end-of-interrupt
+PutPrimaryEndOfInt      mov     al,EPICEOI                                      ;non-specific end-of-interrupt
                         out     EPICPORTPRI,al                                  ;send EOI to primary PIC
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -3524,8 +3391,7 @@ PutPrimaryEndOfInt      sti                                                     
 ;       Description:    This routine sends a non-specific end-of-interrupt signal to the secondary PIC.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-PutSecondaryEndOfInt    sti                                                     ;enable maskable interrupts
-                        mov     al,EPICEOI                                      ;non-specific end-of-interrupt
+PutSecondaryEndOfInt    mov     al,EPICEOI                                      ;non-specific end-of-interrupt
                         out     EPICPORTSEC,al                                  ;send EOI to secondary PIC
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -3729,63 +3595,148 @@ section                 conmque                                                 
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 concode vstart=05000h                                   ;labels relative to 5000h
-ConCode                 call    ConInitializeData                               ;initialize console variables
-                        clearConsoleScreen                                      ;clear the console screen
-                        putConsoleString czTitle                                ;display startup message
-.10                     putConsoleString czPrompt                               ;display input prompt
-                        placeCursor                                             ;set CRT cursor location
-                        getConsoleString wzConsoleInBuffer,79,1,13              ;accept keyboard input
-                        call    ConPutNewLine                                   ;newline
-                        mov     edx,wzConsoleInBuffer                           ;console input buffer
-                        mov     ebx,wzConsoleToken                              ;token buffer
-                        call    ConTakeToken                                    ;handle console input
-                        mov     edx,wzConsoleToken                              ;token buffer
-                        call    ConDetermineCommand                             ;determine command number
-                        cmp     eax,ECONJMPTBLCNT                               ;valid command number?
-                        jb      .20                                             ;yes, branch
-                        putConsoleString czUnknownCommand                       ;display error message
-                        jmp     .10                                             ;next command
-.20                     shl     eax,2                                           ;index into jump table
-                        mov     edx,tConJmpTbl                                  ;jump table base address
-                        mov     eax,[edx+eax]                                   ;command handler routine address
-                        call    eax                                             ;call command handler
-                        jmp     .10                                             ;next command
-;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Routine:        ConInitializeData
+;       Initialize console work areas to low values.
 ;
-;       Description:    This routine initializes console task variables.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConInitializeData       push    ecx                                             ;save non-volatile regs
-                        push    edi                                             ;
-                        push    es                                              ;
-;
-;       Initialize console work areas.
-;
-                        push    EGDTOSDATA                                      ;load OS data selector ...
-                        pop     es                                              ;... into extra segment register
-                        mov     edi,ECONDATA                                    ;OS console data address
+ConCode                 mov     edi,ECONDATA                                    ;OS console data address
                         xor     al,al                                           ;initialization value
                         mov     ecx,ECONDATALEN                                 ;size of OS console data
                         cld                                                     ;forward strings
                         rep     stosb                                           ;initialize data
 ;
-;       Restore and return.
+;       Initialize the active panel variables.
 ;
-                        pop     es                                              ;restore non-volatile regs
-                        pop     edi                                             ;
-                        pop     ecx                                             ;
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
+                        mov     eax,czPnlCon001                                 ;initial console panel
+                        mov     [wdConsolePanel],eax                            ;save panel template address
 ;
-;       Routine:        ConPutNewLine
+;       Address the console screen memory.
 ;
-;       Description:    Write a new-line to the console.
+                        push    EGDTCGA                                         ;load CGA video selector...
+                        pop     es                                              ;...into extra segment reg
 ;
-;-----------------------------------------------------------------------------------------------------------------------
-ConPutNewLine           putConsoleString czNewLine                              ;write value to console
-                        ret                                                     ;return
+;       Initialize the Operator Information Area (OIA) (This is done once).
+;
+                        mov     edi,ECONROWS*ECONROWBYTES                       ;target offset
+                        mov     ecx,ECONROWDWORDS                               ;double-words per row
+                        mov     eax,ECONOIADWORD                                ;OIA attribute and space
+                        rep     stosd                                           ;reset OIA
+;
+;       Clear the console rows. (This is done after every attention key).
+;
+.20                     xor     edi,edi                                         ;target offset
+                        mov     ecx,ECONROWS*ECONROWDWORDS                      ;double-words to clear
+                        mov     eax,ECONCLEARDWORD                              ;initialization value
+                        rep     stosd                                           ;reset screen body
+;
+;       Reset the input field input address, row and column.
+;
+                        xor     eax,eax                                         ;zero register
+                        mov     [wdConsoleField],eax                            ;zero field addr
+                        mov     [wdConsoleInput],eax                            ;zero input addr
+                        mov     [wbConsoleRow],al                               ;zero console row
+                        mov     [wbConsoleColumn],al                            ;zero console column
+;
+;       Load the field address from the pandel. Exit loop if address is null.
+;
+                        mov     ebx,[wdConsolePanel]                            ;first field template addr
+.30                     mov     esi,[ebx]                                       ;field value addr
+                        test    esi,esi                                         ;end of panel?
+                        jz      .70                                             ;yes, exit loop
+;
+;       Load the field row, column, color and length.
+;
+                        mov     ch,[ebx+4]                                      ;row
+                        mov     cl,[ebx+5]                                      ;column
+                        mov     dh,[ebx+6]                                      ;color
+                        mov     dl,[ebx+7]                                      ;length
+;
+;       Test the row high-bit for input field indication.
+;
+                        test    ch,080h                                         ;input field?
+                        jz      .40                                             ;no, branch
+                        and     ch,07Fh                                         ;clear input field indicator
+;
+;       Save the row and column if this is the first input field.
+;
+                        mov     al,[wbConsoleRow]                               ;console row
+                        or      al,[wbConsoleColumn]                            ;already have an input field?
+                        jnz     .40                                             ;yes, branch
+                        mov     [wdConsoleField],ebx                            ;save field template addr
+                        mov     [wdConsoleInput],esi                            ;update console input buffer
+                        mov     [wbConsoleRow],ch                               ;update console row
+                        mov     [wbConsoleColumn],cl                            ;update console column
+;
+;       Clear input field contents.
+;
+                        push    ecx                                             ;save row, col
+                        push    es                                              ;save CGA segment
+                        push    ds                                              ;load OS data ...
+                        pop     es                                              ;... into extra segment reg
+                        mov     edi,esi                                         ;target is field data addr
+                        xor     al,al                                           ;fill byte is NUL
+                        movzx   ecx,dl                                          ;field length
+                        rep     stosb                                           ;fill field with fill byte
+                        pop     es                                              ;restore CGA segment
+                        pop     ecx                                             ;restore row, col
+;
+;       Compute the target offset.
+;
+.40                     movzx   eax,ch                                          ;row
+                        mov     ah,ECONCOLS                                     ;columns per row
+                        mul     ah                                              ;row offset
+                        add     al,cl                                           ;add column
+                        adc     ah,0                                            ;handle overflow
+                        shl     eax,1                                           ;two-bytes per column
+                        mov     edi,eax                                         ;target offset
+;
+;       Display the field contents.
+;
+                        movzx   ecx,dl                                          ;length
+                        mov     ah,dh                                           ;color
+.50                     lodsb                                                   ;field character
+                        test    al,al                                           ;end of value?
+                        jz      .60                                             ;yes, branch
+                        stosw                                                   ;store character and color
+                        loop    .50                                             ;next character
+.60                     add     ebx,8                                           ;next field addr
+                        jmp     short .30                                       ;next field
+;
+;       Place the cursor at the input field.
+;
+.70                     mov     ah,[wbConsoleRow]                               ;field row
+                        mov     al,[wbConsoleColumn]                            ;field column
+                        placeCursor                                             ;position the cursor
+;
+;       Get command.
+;
+                        mov     esi,[wdConsoleField]                            ;input field template addr
+                        mov     edx,[wdConsoleInput]                            ;target buffer addr
+                        xor     ecx,ecx                                         ;zero register
+                        mov     cl,[esi+7]                                      ;maximum chars to accept
+                        mov     bh,1                                            ;echo to terminal
+                        mov     bl,13                                           ;terminating character
+                        getConsoleString                                        ;accept keyboard input
+;
+;       Take the first token entered.
+;
+                        mov     edx,[wdConsoleInput]                            ;console input buffer addr
+                        mov     ebx,wzConsoleToken                              ;token buffer
+                        call    ConTakeToken                                    ;take first command token
+;
+;       Evaluate token
+;
+                        mov     edx,wzConsoleToken                              ;token buffer
+                        call    ConDetermineCommand                             ;determine if this is a command
+                        cmp     eax,ECONJMPTBLCNT                               ;command number in range?
+                        jnb     .80                                             ;no, branch
+                        shl     eax,2                                           ;convert number to array offset
+                        mov     edx,tConJmpTbl                                  ;command handler address table base
+                        mov     eax,[edx+eax]                                   ;command handler address
+                        call    eax                                             ;handler command
+;
+;       Refresh Panel.
+;
+.80                      jmp     .20                                            ;refresh panel
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        ConTakeToken
@@ -3872,15 +3823,6 @@ ConDetermineCommand     push    ebx                                             
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Routine:        ConClear
-;
-;       Description:    This routine handles the CLEAR command and its CLS alias.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConClear                clearConsoleScreen                                      ;clear console screen
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
 ;       Routine:        ConExit
 ;
 ;       Description:    This routine handles the EXIT command and its SHUTDOWN and QUIT aliases.
@@ -3899,13 +3841,29 @@ ConInt6                 ud2                                                     
                         ret                                                     ;return (not executed)
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Routine:        ConVersion
-;
-;       Description:    This routine handles the VERSION command and its alias, VER.
+;       Constants
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-ConVersion              putConsoleString czTitle                                ;display version message
-                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Panels
+;
+;       Notes:          1.      Each field MUST have an address of a constant or an input field.
+;                       2.      The constant text or input field MUST be at least the length of the field.
+;                       3.      Field constant text or field values MUST be comprised of printable characters.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+czPnlCon001             dd      czFldPnlIdCon001                                ;field text
+                        db      00,00,02h,06                                    ;flags+row, col, attr, length
+                        dd      czFldTitleCon001
+                        db      00,30,07h,20
+                        dd      czFldDatTmCon001
+                        db      00,63,02h,17
+                        dd      czFldPrmptCon001
+                        db      23,00,07h,01
+                        dd      wzConsoleInBuffer
+                        db      128+23,01,07h,79
+                        dd      0                                               ;end of panel
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Tables
@@ -3916,13 +3874,9 @@ ConVersion              putConsoleString czTitle                                
                                                                                 ;---------------------------------------
 tConJmpTbl              equ     $                                               ;command jump table
                         dd      ConExit         - ConCode                       ;shutdown command routine offset
-                        dd      ConVersion      - ConCode                       ;version command routine offset
-                        dd      ConClear        - ConCode                       ;clear command routine offset
                         dd      ConExit         - ConCode                       ;exit command routine offset
                         dd      ConInt6         - ConCode                       ;int6 command routine offset
                         dd      ConExit         - ConCode                       ;quit command routine offset
-                        dd      ConClear        - ConCode                       ;cls command routine offset
-                        dd      ConVersion      - ConCode                       ;ver command routine offset
 ECONJMPTBLL             equ     ($-tConJmpTbl)                                  ;table length
 ECONJMPTBLCNT           equ     ECONJMPTBLL/4                                   ;table entries
                                                                                 ;---------------------------------------
@@ -3930,23 +3884,19 @@ ECONJMPTBLCNT           equ     ECONJMPTBLL/4                                   
                                                                                 ;---------------------------------------
 tConCmdTbl              equ     $                                               ;command name table
                         db      9,"SHUTDOWN",0                                  ;shutdown command
-                        db      8,"VERSION",0                                   ;version command
-                        db      6,"CLEAR",0                                     ;clear command
                         db      5,"EXIT",0                                      ;exit command
                         db      5,"INT6",0                                      ;int6 command
                         db      5,"QUIT",0                                      ;quit command
-                        db      4,"CLS",0                                       ;cls command
-                        db      4,"VER",0                                       ;ver command
                         db      0                                               ;end of table
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Constants
+;       Strings
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-czNewLine               db      13,10,0                                         ;new line string
-czPrompt                db      ":",0                                           ;prompt string
-czTitle                 db      "Custom Operating System 1.0",13,10,0           ;version string
-czUnknownCommand        db      "Unknown command",13,10,0                       ;unknown command response string
+czFldPnlIdCon001        db      "CON001"                                        ;main console panel id
+czFldTitleCon001        db      "CustomOS Version 1.0"                          ;main console panel title
+czFldDatTmCon001        db      "DD-MMM-YYYY HH:MM"                             ;panel date and time template
+czFldPrmptCon001        db      ":"                                             ;command prompt
                         times   4096-($-$$) db 0h                               ;zero fill to end of section
 %endif
 %ifdef BUILDDISK
