@@ -2326,6 +2326,7 @@ maxtsvc                 equ     ($-tsvc)/4                                      
 ;       GetConsoleString
 ;       NextConsoleColumn
 ;       PreviousConsoleColumn
+;       PutConsoleChar
 ;       PutConsoleHexByte
 ;       PutConsoleOIAChar
 ;       PutConsoleOIAShift
