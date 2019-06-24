@@ -2,11 +2,12 @@
 ;
 ;       File:           os.asm
 ;
-;       Project:        os.009
+;       Project:        os.013
 ;
-;       Description:    In this sample, the console task is expanded to support the "mem" and "memory" commands.
+;       Description:    In this sample, the console task is expanded to add a "pciprobe" command that searches the
+;                       system for PCI expansion BIOS.
 ;
-;       Revised:        January 1, 2019
+;       Revised:        July 4, 2018
 ;
 ;       Assembly:       nasm os.asm -f bin -o os.dat     -l os.dat.lst     -DBUILDBOOT
 ;                       nasm os.asm -f bin -o os.dsk     -l os.dsk.lst     -DBUILDDISK
@@ -15,7 +16,7 @@
 ;
 ;       Assembler:      Netwide Assembler (NASM) 2.13.03, Feb 7 2018
 ;
-;       Notice:         Copyright (C) 2010-2019 David J. Walling. All Rights Reserved.
+;       Notice:         Copyright (C) 2010-2018 David J. Walling. All Rights Reserved.
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -42,23 +43,20 @@
 ;       Conventions
 ;
 ;       Alignment:      In this document, columns are numbered beginning with 1.
-;                       Logical tabs are set after every eight columns.
-;                       Tabs are simulated using SPACE characters.
-;                       For comments that span an entire line, comment text begins in column 9.
 ;                       Assembly instructions (mnemonics) begin in column 25.
 ;                       Assembly operands begin in column 33.
 ;                       Inline comments begin in column 81.
 ;                       Lines should not extend beyond column 120.
 ;
 ;       Arguments:      Arguments are passed as registers and generally follow this order: EAX, ECX, EDX, EBX.
-;                       However, ECX may be used as the sole parameter if a test for zero is required. EBX and EBP
+;                       However, ECX may be used as the first parameter if a test for zero is required. EBX and EBP
 ;                       may be used as parameters if the routine is considered a "method" of an "object". In this
 ;                       case, EBX or EBP will address the object storage. If the routine is general-purpose string
 ;                       or character-array manipulator, ESI and EDI may be used as parameters to address input and/or
 ;                       ouput buffers, respectively.
 ;
 ;       Code Order:     Routines should appear in the order of their first likely use.
-;                       Negative relative call or jump addresses usually, therefore, indicate reuse.
+;                       Negative relative call or jump addresses indicate reuse.
 ;
 ;       Comments:       A comment that spans the entire line begins with a semicolon in column 1.
 ;                       A comment that accompanies code on a line begins with a semicolon in column 81.
@@ -95,7 +93,7 @@
 ;       Macros:         Macro names are in camel case, beginning with a lower-case letter (getDateString).
 ;                       Macro names describe an action and so DO begin with a verb.
 ;
-;       Memory Use:     Operating system memory allocation is minimized.
+;       Memory Use:     Operating system memory allocation is avoided wherever possible.
 ;                       Buffers are kept to as small a size as practicable.
 ;                       Data and code intermingling is avoided wherever possible.
 ;
@@ -106,7 +104,7 @@
 ;                       setting the carry flag to 1. Routines may prefer the use of ECX as a return value if the
 ;                       value is to be tested for null upon return (using the jecxz instruction).
 ;
-;       Routines:       Routine names are in mixed case and capitalized (GetYear, ReadRealTimeClock).
+;       Routines:       Routine names are in mixed case, capitalized (GetYear, ReadRealTimeClock).
 ;                       Routine names begin with a verb (Get, Read, Load).
 ;                       Routines should have a single entry address and a single exit instruction (ret, iretd, etc.).
 ;                       Routines that serve as wrappers for library functions carry the same name as the library
@@ -147,6 +145,7 @@
 ;       EKEYB...        8042 or "PS/2 Controller" (Keyboard Controller) values
 ;       EPIC...         8259 Programmable Interrupt Controller (PIC) values
 ;       EPIT...         8253 Programmable Interval Timer (PIT) values
+;       ERTC...         Motorola MC 146818 Real-Time Clock (RTC) values
 ;       EX86...         Intel x86 CPU architecture values
 ;
 ;       Firmware-Defined Values
@@ -156,15 +155,18 @@
 ;       Standards-Based Values
 ;
 ;       EASCII...       American Standard Code for Information Interchange (ASCII) values
+;       EPCI...         Peripheral Component Interconnect (PCI) values
 ;
 ;       Operating System Values
 ;
 ;       EBOOT...        Boot sector and loader values
 ;       ECON...         Console values (dimensions and attributes)
 ;       EGDT...         Global Descriptor Table (GDT) selector values
+;       EHWF...         Hardware flags
 ;       EKEYF...        Keyboard status flags
 ;       EKRN...         Kernel values (fixed locations and sizes)
 ;       ELDT...         Local Descriptor Table (LDT) selector values
+;       EMEM...         Memory Management values
 ;       EMSG...         Message identifers
 ;
 ;=======================================================================================================================
@@ -263,6 +265,29 @@ EPICEOI                 equ     020h                                            
 EPITDAYTICKS            equ     01800B0h                                        ;ticks per day
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;       Motorola MC 146818 Real-Time Clock                                      ERTC...
+;
+;       The Motorola MC 146818 was the original real-time clock in PCs.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ERTCREGPORT             equ     070h                                            ;register select port
+ERTCDATAPORT            equ     071h                                            ;data port
+ERTCSECONDREG           equ     000h                                            ;second
+ERTCMINUTEREG           equ     002h                                            ;minute
+ERTCHOURREG             equ     004h                                            ;hour
+ERTCWEEKDAYREG          equ     006h                                            ;weekday
+ERTCDAYREG              equ     007h                                            ;day
+ERTCMONTHREG            equ     008h                                            ;month
+ERTCYEARREG             equ     009h                                            ;year of the century
+ERTCSTATUSREG           equ     00bh                                            ;status
+ERTCBASERAMLO           equ     015h                                            ;base RAM low
+ERTCBASERAMHI           equ     016h                                            ;base RAM high
+ERTCEXTRAMLO            equ     017h                                            ;extended RAM low
+ERTCEXTRAMHI            equ     018h                                            ;extended RAM high
+ERTCCENTURYREG          equ     032h                                            ;century
+ERTCBINARYVALS          equ     00000100b                                       ;values are binary
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;       x86 CPU Architecture                                                    ;EX86...
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -289,8 +314,14 @@ EX86DESCLEN             equ     8                                               
 ;       ...11CR.                Code (C:1=Conforming,R:1=Readable)
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+EX86ACCLDT              equ     10000010b                                       ;local descriptor table
+EX86ACCTASK             equ     10000101b                                       ;task gate
+EX86ACCTSS              equ     10001001b                                       ;task-state segment
+EX86ACCGATE             equ     10001100b                                       ;call gate
 EX86ACCINT              equ     10001110b                                       ;interrupt gate
 EX86ACCTRAP             equ     10001111b                                       ;trap gate
+EX86ACCDATA             equ     10010011b                                       ;upward writable data
+EX86ACCCODE             equ     10011011b                                       ;non-conforming readable code
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Firmware-Defined Values
@@ -301,7 +332,7 @@ EX86ACCTRAP             equ     10001111b                                       
 ;       BIOS Interrupts and Functions                                           EBIOS...
 ;
 ;       Basic Input/Output System (BIOS) functions are grouped and accessed by issuing an interrupt call. Each
-;       BIOS interrupt supports several functions. The function code is typically passed in the AH register.
+;       BIOS interrupt supports several funtions. The function code is typically passed in the AH register.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 EBIOSINTVIDEO           equ     010h                                            ;video services interrupt
@@ -330,6 +361,7 @@ EASCIILINEFEED          equ     00Ah                                            
 EASCIIRETURN            equ     00Dh                                            ;carriage return
 EASCIIESCAPE            equ     01Bh                                            ;escape
 EASCIISPACE             equ     020h                                            ;space
+EASCIIPERIOD            equ     02Eh                                            ;period
 EASCIIUPPERA            equ     041h                                            ;'A'
 EASCIIUPPERZ            equ     05Ah                                            ;'Z'
 EASCIILOWERA            equ     061h                                            ;'a'
@@ -343,6 +375,25 @@ EASCIIBORDSGLLWRRGT     equ     0D9h                                            
 EASCIIBORDSGLUPRLFT     equ     0DAh                                            ;upper-left single border
 EASCIICASE              equ     00100000b                                       ;case bit
 EASCIICASEMASK          equ     11011111b                                       ;case mask
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Peripheral Component Interconnect (PCI)                                 EPCI...
+;
+;-----------------------------------------------------------------------------------------------------------------------
+EPCIPORTCONFIGADDR      equ     0CF8h                                           ;PCI Configuration Address Port
+EPCIPORTCONFIGDATA      equ     0CFCh                                           ;PCI Configuration Data Port
+EPCIVENDORAPPLE         equ     106Bh                                           ;Apple
+EPCIVENDORINTEL         equ     8086h                                           ;Intel
+EPCIVENDORORACLE        equ     80EEh                                           ;Oracle
+EPCIAPPLEUSB            equ     003Fh                                           ;USB Controller
+EPCIINTELPRO1000MT      equ     100Fh                                           ;Pro/1000 MT Ethernet Adapter
+EPCIINTELPCIMEM         equ     1237h                                           ;PCI & Memory
+EPCIINTELAD1881         equ     2415h                                           ;Aureal AD1881 SOUNDMAX
+EPCIINTELPIIX3          equ     7000h                                           ;PIIX3 PCI-to-ISA Bridge (Triton II)
+EPCIINTEL82371AB        equ     7111h                                           ;82371AB/EB PCI Bus Master IDE Cntrlr
+EPCIINTELPIIX4          equ     7113h                                           ;PIIX4/4E/4M Power Mgmt Cntrlr
+EPCIORACLEVBOXGA        equ     0BEEFh                                          ;VirtualBox Graphics Adapter
+EPCIORACLEVBOXDEVICE    equ     0CAFEh                                          ;VirtualBox Device
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Operating System Values
@@ -386,6 +437,10 @@ EGDTLOADERTSS           equ     058h                                            
 EGDTCONSOLELDT          equ     060h                                            ;console local descriptor table selector
 EGDTCONSOLETSS          equ     068h                                            ;console task state segment selector
 ;-----------------------------------------------------------------------------------------------------------------------
+;       Hardware Flags                                                          EHWF...
+;-----------------------------------------------------------------------------------------------------------------------
+EHWETHERNET             equ     80h                                             ;ethernet adapter found
+;-----------------------------------------------------------------------------------------------------------------------
 ;       Keyboard Flags                                                          EKEYF...
 ;-----------------------------------------------------------------------------------------------------------------------
 EKEYFCTRLLEFT           equ     00000001b                                       ;left control
@@ -406,10 +461,19 @@ EKRNCODEBASE            equ     01000h                                          
 EKRNCODESEG             equ     (EKRNCODEBASE >> 4)                             ;kernel code segment (0100:0000)
 EKRNCODELEN             equ     05000h                                          ;kernel code size (1000h to 6000h)
 EKRNCODESRCADR          equ     0500h                                           ;kernel code offset to loader DS:
+EKRNHEAPSIZE            equ     080000000h                                      ;kernel heap size
+EKRNHEAPBASE            equ     010000h                                         ;kernel heap base
 ;-----------------------------------------------------------------------------------------------------------------------
 ;       Local Descriptor Table (LDT) Selectors                                  ELDT...
 ;-----------------------------------------------------------------------------------------------------------------------
 ELDTMQ                  equ     02Ch                                            ;console task message queue
+;-----------------------------------------------------------------------------------------------------------------------
+;       Memory Management Constants                                             EMEM...
+;-----------------------------------------------------------------------------------------------------------------------
+EMEMMINSIZE             equ     256                                             ;minimum heap block size (incl. hdr)
+EMEMFREECODE            equ     "FREE"                                          ;free memory signature
+EMEMUSERCODE            equ     "USER"                                          ;user memory signature
+EMEMWIPEBYTE            equ     000h                                            ;byte value to wipe storage
 ;-----------------------------------------------------------------------------------------------------------------------
 ;       Message Identifiers                                                     EMSG...
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -423,6 +487,58 @@ EMSGKEYCHAR             equ     041020000h                                      
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;       DATETIME
+;
+;       The DATETIME structure stores date and time values from the real-time clock.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+struc                   DATETIME
+.second                 resb    1                                               ;seconds
+.minute                 resb    1                                               ;minutes
+.hour                   resb    1                                               ;hours
+.weekday                resb    1                                               ;day of week
+.day                    resb    1                                               ;day of month
+.month                  resb    1                                               ;month of year
+.year                   resb    1                                               ;year of century
+.century                resb    1                                               ;century
+EDATETIMELEN            equ     ($-.second)
+endstruc
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       MEMBLOCK
+;
+;       The MEMBLOCK structure defines a memory block.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+struc                   MEMBLOCK
+.signature              resd    1                                               ;starting signature
+.bytes                  resd    1                                               ;block size in bytes
+.owner                  resd    1                                               ;owning task
+.reserved               resd    1                                               ;reserved
+.nextcontig             resd    1                                               ;next contiguous block
+.previouscontig         resd    1                                               ;previous contiguous block
+.nextblock              resd    1                                               ;next free/task block
+.previousblock          resd    1                                               ;previous free/task block
+EMEMBLOCKLEN            equ     ($-.signature)
+endstruc
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       MEMROOT
+;
+;       The MEMROOT structure defines starting and ending addresses of memory block chains.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+struc                   MEMROOT
+.firstcontig            resd    1                                               ;first contiguous block
+.lastcontig             resd    1                                               ;last contiguous block
+.firstfree              resd    1                                               ;first free block
+.lastfree               resd    1                                               ;last free block
+.firsttask              resd    1                                               ;first task block
+.lasttask               resd    1                                               ;last task block
+EMEMROOTLEN             equ     ($-.firstcontig)
+endstruc
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;       MQUEUE
 ;
 ;       The MQUEUE structure maps memory used for a message queue.
@@ -432,6 +548,30 @@ struc                   MQUEUE
 MQHead                  resd    1                                               ;000 head ptr
 MQTail                  resd    1                                               ;004 tail ptr
 MQData                  resd    254                                             ;message queue
+endstruc
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       PCI
+;
+;       The PCI structure defines a PCI bus, device and function context.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+struc                   PCI
+.configdata             equ     $                                               ;data read from port 0CFCh
+.configdata_lo          resw    1                                               ;low-order data
+.configdata_hi          resw    1                                               ;high-order data
+.selector               resd    1                                               ;1000 0000 bbbb bbbb dddd dfff 0000 0000
+.bus                    resb    1                                               ;bus identifier (00-FF)
+.device                 resb    1                                               ;device identifier (00-1F)
+.function               resb    1                                               ;function identifer (0-7)
+.register               resb    1                                               ;register identifier (00-FF)
+.bar0                   resd    1                                               ;base address register 0
+.bar1                   resd    1                                               ;base address register 1
+.bar2                   resd    1                                               ;base address register 2
+.bar3                   resd    1                                               ;base address register 3
+.bar4                   resd    1                                               ;base address register 4
+.bar5                   resd    1                                               ;base address register 5
+EPCILEN                 equ     ($-.configdata)
 endstruc
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -453,7 +593,7 @@ struc                   OSDATA
                         resw    1                                               ;40e LPT4 port address
                         resb    2                                               ;410 equipment list flags
                         resb    1                                               ;412 errors in PCjr infrared keybd link
-                        resw    1                                               ;413 memory size (kb) INT 12h
+wwROMMemSize            resw    1                                               ;413 memory size (kb) INT 12h
                         resb    1                                               ;415 mfr error test scratchpad
                         resb    1                                               ;416 PS/2 BIOS control flags
                         resb    1                                               ;417 keyboard flag byte 0
@@ -552,28 +692,20 @@ wbClockDays             resb    1                                               
 ;-----------------------------------------------------------------------------------------------------------------------
 ECONDATA                equ     ($)
 wdConsoleMemBase        resd    1                                               ;console memory address
-wdConsolePanel          resd    1                                               ;console panel definition address
-wdConsoleField          resd    1                                               ;console field definition address
-wdConsoleInput          resd    1                                               ;console field input address
-wzConsoleInBuffer       resb    80                                              ;command input buffer
-wzConsoleToken          resb    80                                              ;token buffer
-wzConsoleOutBuffer      resb    80                                              ;response output buffer
-wzConsoleMemBuf0        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........
-wzConsoleMemBuf1        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBuf2        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBuf3        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBuf4        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........
-wzConsoleMemBuf5        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBuf6        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBuf7        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBuf8        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........
-wzConsoleMemBuf9        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBufA        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBufB        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBufC        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........
-wzConsoleMemBufD        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBufE        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBufF        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
+wdConsoleHeapSize       resd    1                                               ;kernel heap size
+wdBaseMemSize           resd    1                                               ;base memory size (int 12h)
+wdExtendedMemSize       resd    1                                               ;extended memory size (int 12h)
+wdROMMemSize            resd    1                                               ;ROM memory size
+;wdConsolePCISelector   resd    1                                               ;PCI selector (bbbbbbbb dddddfff)
+;wdConsolePCIData       equ     $                                               ;PCI register data value
+;wwConsolePCIVendor     resw    1                                               ;PCI data vendor
+;wwConsolePCIChip       resw    1                                               ;PCI data chip
+wdConsolePCIVendorStr   resd    1                                               ;PCI vendor name string addr
+wdConsolePCIChipStr     resd    1                                               ;PCI device name string addr
+wdConsoleEthernetDevice resd    1                                               ;PCI ethernet adapter selector
+;wdConsoleEthernetMem   resd    1                                               ;PCI ethernet memory mapped i/o address
+;wdConsoleEthernetPort  resd    1                                               ;PCI ethernet i/o port
+;wdConsoleEthernetCtrl  resd    1                                               ;PCI ethernet control register value
 wbConsoleColumn         resb    1                                               ;console column
 wbConsoleRow            resb    1                                               ;console row
 wbConsoleShift          resb    1                                               ;console shift flags
@@ -586,6 +718,19 @@ wbConsoleScan3          resb    1                                               
 wbConsoleScan4          resb    1                                               ;scan code
 wbConsoleScan5          resb    1                                               ;scan code
 wbConsoleChar           resb    1                                               ;ASCII code
+wbConsolePCIBus         resb    1                                               ;PCI bus
+wbConsolePCIDevice      resb    1                                               ;PCI device
+wbConsolePCIFunction    resb    1                                               ;PCI function
+wbConsoleHWFlags        resb    1                                               ;Hardware Flags
+wzConsoleInBuffer       resb    80                                              ;command input buffer
+wzConsoleToken          resb    80                                              ;token buffer
+wzConsoleOutBuffer      resb    80                                              ;response output buffer
+wzBaseMemSize           resb    11                                              ;CMOS base memory bytes     zz,zzz,zz9\0
+wzROMMemSize            resb    11                                              ;ROM base memory bytes      zz,zzz,zz9\0
+wzExtendedMemSize       resb    11                                              ;CMOS extended memory bytes zz,zzz,zz9\0
+wsConsoleMemRoot        resb    EMEMROOTLEN                                     ;kernel base memory map
+wsConsoleDateTime       resb    EDATETIMELEN                                    ;date-time buffer
+wsConsolePCI            resb    EPCILEN                                         ;PCI context
 ECONDATALEN             equ     ($-ECONDATA)                                    ;size of console data area
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1099,7 +1244,7 @@ Prep                    mov     si,czPrepMsg10                                  
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 czPrepMsg10             db      13,10,"CustomOS Boot-Diskette Preparation Program"
-                        db      13,10,"Copyright (C) 2010-2019 David J. Walling. All rights reserved."
+                        db      13,10,"Copyright (C) 2010-2018 David J. Walling. All rights reserved."
                         db      13,10
                         db      13,10,"This program overwrites the boot sector of a diskette with startup code that"
                         db      13,10,"will load the operating system into memory when the computer is restarted."
@@ -1353,8 +1498,7 @@ LoaderExit              call    PutTTYString                                    
 ;       However, some hypervisor BIOS implementations have been seen to implement the "wait" as simply a fast
 ;       iteration of the keyboard status function call (INT 16h, AH=1), causing a max CPU condition. So, instead,
 ;       we will use the keyboard status call and iterate over a halt (HLT) instruction until a key is pressed.
-;       The STI instruction enables maskable interrupts, including the keyboard. The CPU assures that the
-;       instruction immediately following STI will be executed before any interrupt is serviced.
+;       By convention, we enable maskable interrupts with STI before issuing HLT, so as not to catch fire.
 ;
 .30                     mov     ah,EBIOSFNKEYSTATUS                             ;keyboard status function
                         int     EBIOSINTKEYBOARD                                ;call BIOS keyboard interrupt
@@ -1547,54 +1691,54 @@ section                 gdt                                                     
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 idt                                                     ;interrupt descriptor table
-                        mtrap   dividebyzero                                    ;00 divide by zero
-                        mtrap   singlestep                                      ;01 single step
-                        mtrap   nmi                                             ;02 non-maskable
-                        mtrap   break                                           ;03 break
-                        mtrap   into                                            ;04 into
-                        mtrap   bounds                                          ;05 bounds
-                        mtrap   badopcode                                       ;06 bad op code
-                        mtrap   nocoproc                                        ;07 no coprocessor
-                        mtrap   doublefault                                     ;08 double-fault
-                        mtrap   operand                                         ;09 operand
-                        mtrap   badtss                                          ;0a bad TSS
-                        mtrap   notpresent                                      ;0b not-present
-                        mtrap   stacklimit                                      ;0c stack limit
-                        mtrap   protection                                      ;0d general protection fault
-                        mtrap   int14                                           ;0e (reserved)
-                        mtrap   int15                                           ;0f (reserved)
-                        mtrap   coproccalc                                      ;10 (reserved)
-                        mtrap   int17                                           ;11 (reserved)
-                        mtrap   int18                                           ;12 (reserved)
-                        mtrap   int19                                           ;13 (reserved)
-                        mtrap   int20                                           ;14 (reserved)
-                        mtrap   int21                                           ;15 (reserved)
-                        mtrap   int22                                           ;16 (reserved)
-                        mtrap   int23                                           ;17 (reserved)
-                        mtrap   int24                                           ;18 (reserved)
-                        mtrap   int25                                           ;19 (reserved)
-                        mtrap   int26                                           ;1a (reserved)
-                        mtrap   int27                                           ;1b (reserved)
-                        mtrap   int28                                           ;1c (reserved)
-                        mtrap   int29                                           ;1d (reserved)
-                        mtrap   int30                                           ;1e (reserved)
-                        mtrap   int31                                           ;1f (reserved)
-                        mint    clocktick                                       ;20 IRQ0 clock tick
-                        mint    keyboard                                        ;21 IRQ1 keyboard
-                        mint    iochannel                                       ;22 IRQ2 second 8259A cascade
-                        mint    com2                                            ;23 IRQ3 com2
-                        mint    com1                                            ;24 IRQ4 com1
-                        mint    lpt2                                            ;25 IRQ5 lpt2
-                        mint    diskette                                        ;26 IRQ6 diskette
-                        mint    lpt1                                            ;27 IRQ7 lpt1
-                        mint    rtclock                                         ;28 IRQ8 real-time clock
-                        mint    retrace                                         ;29 IRQ9 CGA vertical retrace
-                        mint    irq10                                           ;2a IRQA (reserved)
-                        mint    irq11                                           ;2b IRQB (reserved)
-                        mint    ps2mouse                                        ;2c IRQC ps/2 mouse
-                        mint    coprocessor                                     ;2d IRQD coprocessor
-                        mint    fixeddisk                                       ;2e IRQE fixed disk
-                        mint    irq15                                           ;2f IRQF (reserved)
+                        mint    dividebyzero                                    ;00 divide by zero
+                        mint    singlestep                                      ;01 single step
+                        mint    nmi                                             ;02 non-maskable
+                        mint    break                                           ;03 break
+                        mint    into                                            ;04 into
+                        mint    bounds                                          ;05 bounds
+                        mint    badopcode                                       ;06 bad op code
+                        mint    nocoproc                                        ;07 no coprocessor
+                        mint    doublefault                                     ;08 double-fault
+                        mint    operand                                         ;09 operand
+                        mint    badtss                                          ;0a bad TSS
+                        mint    notpresent                                      ;0b not-present
+                        mint    stacklimit                                      ;0c stack limit
+                        mint    protection                                      ;0d general protection fault
+                        mint    int14                                           ;0e (reserved)
+                        mint    int15                                           ;0f (reserved)
+                        mint    coproccalc                                      ;10 (reserved)
+                        mint    int17                                           ;11 (reserved)
+                        mint    int18                                           ;12 (reserved)
+                        mint    int19                                           ;13 (reserved)
+                        mint    int20                                           ;14 (reserved)
+                        mint    int21                                           ;15 (reserved)
+                        mint    int22                                           ;16 (reserved)
+                        mint    int23                                           ;17 (reserved)
+                        mint    int24                                           ;18 (reserved)
+                        mint    int25                                           ;19 (reserved)
+                        mint    int26                                           ;1a (reserved)
+                        mint    int27                                           ;1b (reserved)
+                        mint    int28                                           ;1c (reserved)
+                        mint    int29                                           ;1d (reserved)
+                        mint    int30                                           ;1e (reserved)
+                        mint    int31                                           ;1f (reserved)
+                        mtrap   clocktick                                       ;20 IRQ0 clock tick
+                        mtrap   keyboard                                        ;21 IRQ1 keyboard
+                        mtrap   iochannel                                       ;22 IRQ2 second 8259A cascade
+                        mtrap   com2                                            ;23 IRQ3 com2
+                        mtrap   com1                                            ;24 IRQ4 com1
+                        mtrap   lpt2                                            ;25 IRQ5 lpt2
+                        mtrap   diskette                                        ;26 IRQ6 diskette
+                        mtrap   lpt1                                            ;27 IRQ7 lpt1
+                        mtrap   rtclock                                         ;28 IRQ8 real-time clock
+                        mtrap   retrace                                         ;29 IRQ9 CGA vertical retrace
+                        mtrap   irq10                                           ;2a IRQA (reserved)
+                        mtrap   irq11                                           ;2b IRQB (reserved)
+                        mtrap   ps2mouse                                        ;2c IRQC ps/2 mouse
+                        mtrap   coprocessor                                     ;2d IRQD coprocessor
+                        mtrap   fixeddisk                                       ;2e IRQE fixed disk
+                        mtrap   irq15                                           ;2f IRQF (reserved)
                         mtrap   svc                                             ;30 OS services
                         times   2048-($-$$) db 0h                               ;zero fill to end of section
 ;=======================================================================================================================
@@ -1916,11 +2060,11 @@ section                 kernel  vstart=0h                                       
 ;       Description:    This routine will be used to respond to processor interrupts that are not otherwise handled.
 ;                       At this stage, we simply restore the stack and return from the interrupt.
 ;
-;       In:             [ESP+16]        EFLAGS                                  stored by interrupt call
-;                       [ESP+12]        CS                                      stored by interrupt call
-;                       [ESP+8]         EIP                                     stored by interrupt call
-;                       [ESP+4]         interrupt number (0-31)                 stored by push instruction
-;                       [ESP+0]         error message address                   stored by push instructions
+;       In:             [esp+16]        eflags                                  stored by interrupt call
+;                       [esp+12]        cs                                      stored by interrupt call
+;                       [esp+8]         eip                                     stored by interrupt call
+;                       [esp+4]         interrupt number (0-31)                 stored by push instruction
+;                       [esp+0]         error message address                   stored by push instructions
 ;
 ;       Out:            N/A             This routine does not exit.
 ;
@@ -1928,25 +2072,25 @@ section                 kernel  vstart=0h                                       
 ReportInterrupt         push    ds                                              ;save DS at time of interrupt
                         push    es                                              ;save ES at time of interrupt
                         pushad                                                  ;save EAX,ECX,EDX,EBX,EBP,ESP,ESI,EDI
-                        mov     ebp,esp                                         ;EBP --> [EDI]
+                        mov     ebp,esp                                         ;ebp --> [EDI]
 ;
 ;       Addressability to registers at the time of the interrupt is now established as:
 ;
-;                       [EBP+56]        EFLAGS
-;                       [EBP+52]        CS
-;                       [EBP+48]        EIP
-;                       [EBP+44]        interrupt number (0-31)
-;                       [EBP+40]        error message address
-;                       [EBP+36]        DS
-;                       [EBP+32]        ES
-;                       [EBP+28]        EAX
-;                       [EBP+24]        ECX
-;                       [EBP+20]        EDX
-;                       [EBP+16]        EBX
-;                       [EBP+12]        ESP
-;                       [EBP+8]         EBP
-;                       [EBP+4]         ESI
-;                       [EBP+0]         EDI
+;                       [ebp+56]        eflags
+;                       [ebp+52]        cs
+;                       [ebp+48]        eip
+;                       [ebp+44]        interrupt number (0-31)
+;                       [ebp+40]        error message address
+;                       [ebp+36]        ds
+;                       [ebp+32]        es
+;                       [ebp+28]        eax
+;                       [ebp+24]        ecx
+;                       [ebp+20]        edx
+;                       [ebp+16]        ebx
+;                       [ebp+12]        esp
+;                       [ebp+8]         ebp
+;                       [ebp+4]         esi
+;                       [ebp+0]         edi
 ;
                         push    cs                                              ;load code selector ...
                         pop     ds                                              ;... into DS
@@ -2150,7 +2294,7 @@ ReportInterrupt         push    ds                                              
                         mov     ch,14                                           ;row
                         mov     esi,czIntEIP                                    ;label
                         call    SetConsoleString                                ;draw label
-                        mov     eax,[ebp+48]                                    ;EIP lo-order 32-bits
+                        mov     eax,[ebp+48]                                    ;EIP
                         mov     cl,55                                           ;column
                         mov     ch,14                                           ;row
                         call    PutConsoleHexDword                              ;draw ASCII hex doubleword
@@ -2321,10 +2465,6 @@ DrawTextDialogBox       push    ecx                                             
                         push    edx                                             ;
                         push    ds                                              ;
 ;
-;       End the interrupt.
-;
-                        call    PutPrimaryEndOfInt                              ;send EOI to primary PIC
-;
 ;       Update the clock tick count and the elapsed days as needed.
 ;
                         push    EGDTOSDATA                                      ;load OS data selector ...
@@ -2358,9 +2498,9 @@ irq0.15                 mov     dh,EFDCPORTHI                                   
                         mov     dl,EFDCPORTLOOUT                                ;FDC digital output register
                         out     dx,al                                           ;turn motor off
 ;
-;       Enable maskable interrupts.
+;       Signal the end of the hardware interrupt.
 ;
-irq0.20                 sti                                                     ;enable maskable interrupts
+irq0.20                 call    PutPrimaryEndOfInt                              ;send end-of-interrupt to PIC
 ;
 ;       Restore and return.
 ;
@@ -2384,13 +2524,6 @@ irq0.20                 sti                                                     
                         push    ecx                                             ;
                         push    esi                                             ;
                         push    ds                                              ;
-;
-;       End the interrupt.
-;
-                        call    PutPrimaryEndOfInt                              ;send EOI to primary PIC
-;
-;       Handle keyboard scan-codes.
-;
                         push    EGDTOSDATA                                      ;load OS data selector ...
                         pop     ds                                              ;... into data segment register
                         xor     al,al                                           ;zero
@@ -2552,13 +2685,7 @@ irq1.130                jmp     irq1.150                                        
 irq1.140                mov     al,EKEYFTIMEOUT                                 ;controller timeout flag
                         or      [wbConsoleStatus],al                            ;set controller timeout flag
 irq1.150                call    PutConsoleOIAChar                               ;update operator info area
-;
-;       Enable maskable interrupts.
-;
-                        sti                                                     ;enable maskable interrupts
-;
-;       Restore and return.
-;
+                        call    PutPrimaryEndOfInt                              ;send end-of-interrupt to PIC
                         pop     ds                                              ;restore non-volatile regs
                         pop     esi                                             ;
                         pop     ecx                                             ;
@@ -2640,16 +2767,13 @@ tscan2shift             db      000h,01Bh,021h,040h,023h,024h,025h,05Eh         
                         menter  diskette                                        ;floppy disk interrupt
                         push    eax                                             ;save non-volatile regs
                         push    ds                                              ;
-                        call    PutPrimaryEndOfInt                              ;end the interrupt
                         push    EGDTOSDATA                                      ;load OS data selector ...
                         pop     ds                                              ;... into DS register
                         mov     al,[wbFDCStatus]                                ;AL = FDC calibration status
                         or      al,10000000b                                    ;set IRQ flag
                         mov     [wbFDCStatus],al                                ;update FDC calibration status
-                        sti                                                     ;enable maskable interrupts
                         pop     ds                                              ;restore non-volatile regs
-                        pop     eax                                             ;
-                        iretd                                                   ;return from interrupt
+                        jmp     hwint                                           ;end primary PIC interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       IRQ7    Parallel Port 1 Hardware Interrupt
@@ -2730,8 +2854,7 @@ tscan2shift             db      000h,01Bh,021h,040h,023h,024h,025h,05Eh         
 hwwint                  call    PutSecondaryEndOfInt                            ;send EOI to secondary PIC
                         jmp     hwint90                                         ;skip ahead
 hwint                   call    PutPrimaryEndOfInt                              ;send EOI to primary PIC
-hwint90                 sti                                                     ;enable maskable interrupts
-                        pop     eax                                             ;restore modified regs
+hwint90                 pop     eax                                             ;restore modified regs
                         iretd                                                   ;return from interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -2758,11 +2881,33 @@ svc90                   iretd                                                   
 ;       These tsvce macros expand to define an address vector table for the service request interrupt (int 30h).
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-tsvc                    tsvce   CompareMemory                                   ;compare memory
+tsvc                    tsvce   AllocateMemory                                  ;allocate memory block
+                        tsvce   ClearConsoleScreen                              ;clear console screen
+                        tsvce   CompareMemory                                   ;compare memory
+                        tsvce   DecimalToUnsigned                               ;convert decimal string to unsigned integer
+                        tsvce   FreeMemory                                      ;free memory block
+                        tsvce   GetBaseMemSize                                  ;get base RAM size in bytes
                         tsvce   GetConsoleString                                ;get string input
+                        tsvce   GetExtendedMemSize                              ;get extended RAM size in bytes
+                        tsvce   GetROMMemSize                                   ;get RAM size as reported by INT 12h
                         tsvce   HexadecimalToUnsigned                           ;convert hexadecimal string to unsigned integer
+                        tsvce   IsLeapYear                                      ;return ecx=1 if leap year
                         tsvce   PlaceCursor                                     ;place the cursor at the current loc
+                        tsvce   PutConsoleString                                ;tty output asciiz string
+                        tsvce   PutDateString                                   ;put MM/DD/YYYY string
+                        tsvce   PutDayString                                    ;put DD string
+                        tsvce   PutHourString                                   ;put hh string
+                        tsvce   PutMinuteString                                 ;put mm string
+                        tsvce   PutMonthString                                  ;put MM string
+                        tsvce   PutMonthNameString                              ;put name(MM) string
+                        tsvce   PutSecondString                                 ;put ss string
+                        tsvce   PutTimeString                                   ;put HH:MM:SS string
+                        tsvce   PutWeekdayString                                ;put weekday string
+                        tsvce   PutWeekdayNameString                            ;put name(weekday) string
+                        tsvce   PutYearString                                   ;put YYYY string
+                        tsvce   ReadRealTimeClock                               ;get real-time clock date and time
                         tsvce   ResetSystem                                     ;reset system using 8042 chip
+                        tsvce   UnsignedToDecimalString                         ;convert unsigned integer to decimal string
                         tsvce   UnsignedToHexadecimal                           ;convert unsigned integer to hexadecimal string
                         tsvce   UpperCaseString                                 ;upper-case string
 maxtsvc                 equ     ($-tsvc)/4                                      ;function out of range
@@ -2773,24 +2918,155 @@ maxtsvc                 equ     ($-tsvc)/4                                      
 ;       These macros provide positional parameterization of service request calls.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+%macro                  allocateMemory 1
+                        mov     ecx,%1                                          ;bytes to allocate
+                        mov     al,eAllocateMemory                              ;allocate memory fn.
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  clearConsoleScreen 0
+                        mov     al,eClearConsoleScreen                          ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
 %macro                  compareMemory 0
                         mov     al,eCompareMemory                               ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
-%macro                  getConsoleString 0
+%macro                  decimalToUnsigned 0
+                        mov     al,eDecimalToUnsigned                           ;function code
+                        int     _svc                                            ;invoke OS servie
+%endmacro
+%macro                  freeMemory 1
+                        mov     edx,%1                                          ;address of memory block
+                        mov     al,eFreeMemory                                  ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  getBaseMemSize 0
+                        mov     al,eGetBaseMemSize                              ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  getConsoleString 4
+                        mov     edx,%1                                          ;buffer address
+                        mov     ecx,%2                                          ;max characters
+                        mov     bh,%3                                           ;echo indicator
+                        mov     bl,%4                                           ;terminator
                         mov     al,eGetConsoleString                            ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  getExtendedMemSize 0
+                        mov     al,eGetExtendedMemSize                          ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  getROMMemSize 0
+                        mov     al,eGetROMMemSize                               ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
 %macro                  hexadecimalToUnsigned 0
                         mov     al,eHexadecimalToUnsigned                       ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
+%macro                  isLeapYear 1
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     al,eIsLeapYear                                  ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
 %macro                  placeCursor 0
                         mov     al,ePlaceCursor                                 ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
+%macro                  putConsoleString 1
+                        mov     edx,%1                                          ;string address
+                        mov     al,ePutConsoleString                            ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putDateString 0
+                        mov     al,ePutDateString                               ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putDateString 2
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     edx,%2                                          ;output buffer addr
+                        mov     al,ePutDateString                               ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putDayString 2
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     edx,%2                                          ;output buffer addr
+                        mov     al,ePutDayString                                ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putHourString 2
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     edx,%2                                          ;output buffer addr
+                        mov     al,ePutHourString                               ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putMinuteString 2
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     edx,%2                                          ;output buffer addr
+                        mov     al,ePutMinuteString                             ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putMonthString 2
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     edx,%2                                          ;output buffer addr
+                        mov     al,ePutMonthString                              ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putMonthNameString 2
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     edx,%2                                          ;output buffer addr
+                        mov     al,ePutMonthNameString                          ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putSecondString 2
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     edx,%2                                          ;output buffer addr
+                        mov     al,ePutSecondString                             ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putTimeString 0
+                        mov     al,ePutTimeString                               ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putTimeString 2
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     edx,%2                                          ;output buffer addr
+                        mov     al,ePutTimeString                               ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putWeekdayString 2
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     edx,%2                                          ;output buffer addr
+                        mov     al,ePutWeekdayString                            ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putWeekdayNameString 2
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     edx,%2                                          ;output buffer addr
+                        mov     al,ePutWeekdayNameString                        ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putYearString 2
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     edx,%2                                          ;output buffer addr
+                        mov     al,ePutYearString                               ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  readRealTimeClock 0
+                        mov     al,eReadRealTimeClock                           ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  readRealTimeClock 1
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     al,eReadRealTimeClock                           ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
 %macro                  resetSystem 0
                         mov     al,eResetSystem                                 ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  unsignedToDecimalString 0
+                        mov     al,eUnsignedToDecimalString                     ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
 %macro                  unsignedToHexadecimal 0
@@ -2806,6 +3082,881 @@ maxtsvc                 equ     ($-tsvc)/4                                      
 ;       Kernel Function Library
 ;
 ;=======================================================================================================================
+;=======================================================================================================================
+;
+;       Date and Time Helper Routines
+;
+;       GetYear
+;       IsLeapYear
+;       PutDateString
+;       PutDayString
+;       PutHourString
+;       PutMinuteString
+;       PutMonthString
+;       PutMonthNameString
+;       PutSecondString
+;       PutTimeString
+;       PutWeekdayString
+;       PutWeekdayNameString
+;       PutYearString
+;
+;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        GetYear
+;
+;       Description:    Return the four-digit year (century * 100 + year of century)
+;
+;       In:             DS:EBX  DATETIME address
+;
+;       Out:            ECX     year
+;
+;-----------------------------------------------------------------------------------------------------------------------
+GetYear                 movzx   ecx,byte [ebx+DATETIME.century]                 ;century
+                        imul    ecx,100                                         ;century * 100
+                        movzx   eax,byte [ebx+DATETIME.year]                    ;year of century
+                        add     ecx,eax                                         ;year (YYYY)
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        IsLeapYear
+;
+;       Description:    This routine returns an indicator if the current year is a leap year.
+;
+;       In:             DS:EBX  DATETIME ADDRESS
+;
+;       Out:            ECX     0 = not a leap year
+;                               1 = leap year
+;
+;-----------------------------------------------------------------------------------------------------------------------
+IsLeapYear              call    GetYear                                         ;ECX = YYYY
+                        mov     eax,ecx                                         ;EAX = YYYY
+                        xor     ecx,ecx                                         ;assume not leap year
+                        test    al,00000011b                                    ;multiple of four?
+                        jnz     .no                                             ;no, branch
+                        mov     dl,100                                          ;divisor
+                        div     dl                                              ;divide by 100
+                        test    ah,ah                                           ;multiple of 100?
+                        jnz     .yes                                            ;yes, branch
+                        test    al,00000011b                                    ;multiple of 400?
+                        jnz     .no                                             ;no, branch
+.yes                    inc     ecx                                             ;indicate leap
+.no                     ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutDateString
+;
+;       Description:    This routine returns an ASCIIZ mm/dd/yyyy string at ds:edx from the date in the DATETIME
+;                       structure at ds:ebx.
+;
+;       In:             DS:EBX  DATETIME address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutDateString           push    ecx                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    es                                              ;
+                        push    ds                                              ;store data selector ...
+                        pop     es                                              ;... in extra segment reg
+                        mov     edi,edx                                         ;output buffer address
+                        mov     cl,10                                           ;divisor
+                        mov     edx,0002F3030h                                  ;ASCIIZ "00/" (reversed)
+                        movzx   eax,byte [ebx+DATETIME.month]                   ;month
+                        div     cl                                              ;AH = rem; AL = quotient
+                        or      eax,edx                                         ;apply ASCII zones and delimiter
+                        cld                                                     ;forward strings
+                        stosd                                                   ;store "mm/"nul
+                        dec     edi                                             ;address of terminator
+                        movzx   eax,byte [ebx+DATETIME.day]                     ;day
+                        div     cl                                              ;AH = rem; AL = quotient
+                        or      eax,edx                                         ;apply ASCII zones and delimiter
+                        stosd                                                   ;store "dd/"nul
+                        dec     edi                                             ;address of terminator
+                        movzx   eax,byte [ebx+DATETIME.century]                 ;century
+                        div     cl                                              ;AH = rem; AL = quotient
+                        or      eax,edx                                         ;apply ASCII zones and delimiter
+                        stosd                                                   ;store "cc/"null
+                        dec     edi                                             ;address of terminator
+                        dec     edi                                             ;address of delimiter
+                        movzx   eax,byte [ebx+DATETIME.year]                    ;year (yy)
+                        div     cl                                              ;AH = rem; AL = quotient
+                        or      eax,edx                                         ;apply ASCII zones and delimiter
+                        stosb                                                   ;store quotient
+                        mov     al,ah                                           ;remainder
+                        stosb                                                   ;store remainder
+                        xor     al,al                                           ;null terminator
+                        stosb                                                   ;store terminator
+                        pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutDayString
+;
+;       Description:    This routine returns an ASCIIZ dd string at ds:edx from the date in the DATETIME
+;                       structure at ds:ebx.
+;
+;       In:             DS:EBX  DATETIME address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutDayString            push    ecx                                             ;save non-volatile regs
+                        movzx   ecx,byte [ebx+DATETIME.day]                     ;day
+                        mov     bh,1                                            ;trim leading zeros; no commas
+                        call    UnsignedToDecimalString                         ;store ASCII decimal string
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutHourString
+;
+;       Description:    This routine returns an ASCIIZ hh string at ds:edx from the date in the DATETIME
+;                       structure at ds:ebx.
+;
+;       In:             DS:EBX  DATETIME address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutHourString           push    ecx                                             ;save non-volatile regs
+                        movzx   ecx,byte [ebx+DATETIME.hour]                    ;hour
+                        mov     bh,1                                            ;trim leading zeros; no commas
+                        call    UnsignedToDecimalString                         ;store ASCII decimal string
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutMinuteString
+;
+;       Description:    This routine returns an ASCIIZ mm string at ds:edx from the date in the DATETIME
+;                       structure at ds:ebx.
+;
+;       In:             DS:EBX  DATETIME address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutMinuteString         push    ecx                                             ;save non-volatile regs
+                        movzx   ecx,byte [ebx+DATETIME.minute]                  ;minute
+                        mov     bh,1                                            ;trim leading zeros; no commas
+                        call    UnsignedToDecimalString                         ;store ASCII decimal string
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutMonthString
+;
+;       Description:    This routine returns an ASCIIZ mm string at ds:edx from the date in the DATETIME
+;                       structure at ds:ebx.
+;
+;       In:             DS:EBX  DATETIME address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutMonthString          push    ecx                                             ;save non-volatile regs
+                        movzx   ecx,byte [ebx+DATETIME.month]                   ;month
+                        mov     bh,1                                            ;trim leading zeros; no commas
+                        call    UnsignedToDecimalString                         ;store ASCII decimal string
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutMonthNameString
+;
+;       Description:    This routine returns an ASCIIZ name(mm) string at ds:edx from the date in the DATETIME
+;                       structure at ds:ebx.
+;
+;       In:             DS:EBX  DATETIME address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutMonthNameString      push    esi                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    ds                                              ;
+                        push    es                                              ;
+                        push    ds                                              ;load data selector ...
+                        pop     es                                              ;... into extra segment
+                        mov     edi,edx                                         ;output buffer address
+                        movzx   eax,byte [ebx+DATETIME.month]                   ;month (1-12)
+                        dec     eax                                             ;month (0-11)
+                        shl     eax,2                                           ;offset into month name lookup table
+                        push    cs                                              ;load code selector ...
+                        pop     ds                                              ;... into data segment
+                        mov     esi,[tMonthNames+eax]                           ;month name address
+                        cld                                                     ;forward strings
+.10                     lodsb                                                   ;name character
+                        stosb                                                   ;store in output buffer
+                        test    al,al                                           ;end of string?
+                        jnz     .10                                             ;no, continue
+                        pop     es                                              ;restore non-volatile regs
+                        pop     ds                                              ;
+                        pop     edi                                             ;
+                        pop     esi                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutSecondString
+;
+;       Description:    This routine returns an ASCIIZ ss string at ds:edx from the date in the DATETIME
+;                       structure at ds:ebx.
+;
+;       In:             DS:EBX  DATETIME address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutSecondString         push    ecx                                             ;save non-volatile regs
+                        movzx   ecx,byte [ebx+DATETIME.second]                  ;second
+                        mov     bh,1                                            ;trim leading zeros; no commas
+                        call    UnsignedToDecimalString                         ;store ASCII decimal string
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutTimeString
+;
+;       Description:    This routine returns an ASCIIZ hh:mm:ss string at ds:edx from the date in the DATETIME
+;                       structure at ds:ebx.
+;
+;       In:             DS:EBX  DATETIME address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutTimeString           push    ecx                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    es                                              ;
+                        push    ds                                              ;store data selector ...
+                        pop     es                                              ;... in extra segment reg
+                        mov     edi,edx                                         ;output buffer address
+                        mov     cl,10                                           ;divisor
+                        mov     edx,003a3030h                                   ;ASCIIZ "00:" (reversed)
+                        movzx   eax,byte [ebx+DATETIME.hour]                    ;hour
+                        div     cl                                              ;ah = rem; al = quotient
+                        or      eax,edx                                         ;apply ASCII zones and delimiter
+                        cld                                                     ;forward strings
+                        stosd                                                   ;store "mm/"nul
+                        dec     edi                                             ;address of terminator
+                        movzx   eax,byte [ebx+DATETIME.minute]                  ;minute
+                        div     cl                                              ;ah = rem; al = quotient
+                        or      eax,edx                                         ;apply ASCII zones and delimiter
+                        stosd                                                   ;store "dd/"nul
+                        dec     edi                                             ;address of terminator
+                        movzx   eax,byte [ebx+DATETIME.second]                  ;second
+                        div     cl                                              ;ah = rem; al = quotient
+                        or      eax,edx                                         ;apply ASCII zones and delimiter
+                        stosb                                                   ;store quotient
+                        mov     al,ah                                           ;remainder
+                        stosb                                                   ;store remainder
+                        xor     al,al                                           ;null terminator
+                        stosb                                                   ;store terminator
+                        pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutWeekdayString
+;
+;       Description:    This routine returns an ASCIIZ weekday string at ds:edx from the date in the DATETIME
+;                       structure at ds:ebx.
+;
+;       In:             DS:EBX  DATETIME address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutWeekdayString        push    ecx                                             ;save non-volatile regs
+                        movzx   ecx,byte [ebx+DATETIME.weekday]                 ;weekday
+                        mov     bh,1                                            ;trim leading zeros; no commas
+                        call    UnsignedToDecimalString                         ;store ASCII decimal string
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutWeekdayNameString
+;
+;       Description:    This routine returns an ASCIIZ name(weekday) string at ds:edx from the date in the DATETIME
+;                       structure at ds:ebx.
+;
+;       In:             DS:EBX  DATETIME address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutWeekdayNameString    push    esi                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    ds                                              ;
+                        push    es                                              ;
+                        push    ds                                              ;load data selector ...
+                        pop     es                                              ;... into extra segment
+                        mov     edi,edx                                         ;output buffer address
+                        movzx   eax,byte [ebx+DATETIME.weekday]                 ;weekday (0-6)
+                        shl     eax,2                                           ;offset into day name lookup table
+                        push    cs                                              ;load code selector ...
+                        pop     ds                                              ;... into data segment
+                        mov     esi,[tDayNames+eax]                             ;day name address
+                        cld                                                     ;forward strings
+.10                     lodsb                                                   ;name character
+                        stosb                                                   ;store in output buffer
+                        test    al,al                                           ;end of string?
+                        jnz     .10                                             ;no, continue
+                        pop     es                                              ;restore non-volatile regs
+                        pop     ds                                              ;
+                        pop     edi                                             ;
+                        pop     esi                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutYearString
+;
+;       Description:    This routine returns an ASCIIZ yyyy string at ds:edx from the date in the DATETIME
+;                       structure at ds:ebx.
+;
+;       In:             DS:EBX  DATETIME address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutYearString           push    ecx                                             ;save non-volatile regs
+                        call    GetYear                                         ;ECX = YYYY
+                        mov     bh,1                                            ;trim leading zeros; no commas
+                        call    UnsignedToDecimalString                         ;store decimal string at DS:EDX
+                        pop     ecx                                             ;restore non-volatile regs
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Day Names
+;
+;-----------------------------------------------------------------------------------------------------------------------
+czSunday                db      "Sunday",0
+czMonday                db      "Monday",0
+czTuesday               db      "Tuesday",0
+czWednesday             db      "Wednesday",0
+czThursday              db      "Thursday",0
+czFriday                db      "Friday",0
+czSaturday              db      "Saturday",0
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Month Names
+;
+;-----------------------------------------------------------------------------------------------------------------------
+czJanuary               db      "January",0
+czFebruary              db      "February",0
+czMarch                 db      "March",0
+czApril                 db      "April",0
+czMay                   db      "May",0
+czJune                  db      "June",0
+czJuly                  db      "July",0
+czAugust                db      "August",0
+czSeptember             db      "September",0
+czOctober               db      "October",0
+czNovember              db      "November",0
+czDecember              db      "December",0
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Day Names Lookup Table
+;
+;-----------------------------------------------------------------------------------------------------------------------
+                        align   4
+tDayNames               equ     $
+                        dd      czSunday
+                        dd      czMonday
+                        dd      czTuesday
+                        dd      czWednesday
+                        dd      czThursday
+                        dd      czFriday
+                        dd      czSaturday
+EDAYNAMESTBLL           equ     ($-tDayNames)
+EDAYNAMESTBLCNT         equ     EDAYNAMESTBLL/4
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Month Names Lookup Table
+;
+;-----------------------------------------------------------------------------------------------------------------------
+                        align   4
+tMonthNames             equ     $
+                        dd      czJanuary
+                        dd      czFebruary
+                        dd      czMarch
+                        dd      czApril
+                        dd      czMay
+                        dd      czJune
+                        dd      czJuly
+                        dd      czAugust
+                        dd      czSeptember
+                        dd      czOctober
+                        dd      czNovember
+                        dd      czDecember
+EMONTHNAMESTBLL         equ     ($-tMonthNames)
+EMONTHNAMESTBLCNT       equ     EMONTHNAMESTBLL/4
+;=======================================================================================================================
+;
+;       Memory Helper Routines
+;
+;       AllocateMemory
+;       FreeMemory
+;
+;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        AllocateMemory
+;
+;       Description:    This routine allocates a memory block for the given task.
+;
+;       In:             ECX     bytes of memory to allocate
+;
+;       Out:            EAX     !0      address of user portion of newly allocated memory block
+;                               0       unable to allocate memory
+;
+;-----------------------------------------------------------------------------------------------------------------------
+AllocateMemory          push    ebx                                             ;save non-volatile regs
+                        push    ecx                                             ;
+                        push    esi                                             ;
+                        push    ds                                              ;
+;
+;       Address kernel memory structures
+;
+                        push    EGDTOSDATA                                      ;load OS data GDT selector ...
+                        pop     ds                                              ;... into data segment reg
+                        mov     esi,wsConsoleMemRoot                            ;memory root structure address
+;
+;       Set requested size to minimum block size if requested size is too small.
+;
+                        cmp     ecx,EMEMMINSIZE                                 ;is requested size too small?
+                        jae     .10                                             ;no, branch
+                        mov     ecx,EMEMMINSIZE                                 ;set requested size to minimum
+.10                     add     ecx,EMEMBLOCKLEN                                ;add header block length
+;
+;       Find the first free memory block large enough to satisfy the request.
+;
+                        mov     eax,[esi+MEMROOT.firstfree]                     ;first free block ptr
+.20                     test    eax,eax                                         ;end of free block chain?
+                        jz      .220                                            ;yes, branch
+                        cmp     ecx,[eax+MEMBLOCK.bytes]                        ;free block big enough?
+                        jbe     .30                                             ;yes, branch
+                        mov     eax,[eax+MEMBLOCK.nextblock]                    ;next free block addr
+                        jmp     .20                                             ;continue
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Address the previous and next free memory blocks.
+;
+.30                     mov     ebx,[eax+MEMBLOCK.previousblock]                ;previous free block addr
+                        mov     edx,[eax+MEMBLOCK.nextblock]                    ;next free block addr
+;
+;       Remove the free memory block from the forward free memory block chain.
+;
+                        test    ebx,ebx                                         ;any previous free memory block?
+                        jz      .40                                             ;no, branch
+                        mov     [ebx+MEMBLOCK.nextblock],edx                    ;remove free block from forwrad chain
+                        jmp     .50                                             ;continue
+.40                     mov     [esi+MEMROOT.firstfree],edx                     ;next free is now also the first free
+;
+;       Remove the free memory block from the reverse free memory block chain.
+;
+.50                     test    edx,edx                                         ;any next free memory block?
+                        jz      .60                                             ;no, branch
+                        mov     [edx+MEMBLOCK.previousblock],ebx                ;remove free block from reverse chain
+                        jmp     .70                                             ;continue
+.60                     mov     [esi+MEMROOT.lastfree],ebx                      ;previous free is now also the last free
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Determine if the free memory block can be split.
+;
+.70                     mov     ebx,[eax+MEMBLOCK.bytes]                        ;size of free memory block
+                        sub     ebx,ecx                                         ;subtract requested memory size
+                        cmp     ebx,EMEMMINSIZE                                 ;remaining block can stand alone?
+                        jb      .150                                            ;no, branch
+;
+;       We know that our block can be split to create a new free memory block. We update the size of our free memory
+;       block to the requested memory size. We update the next contiguous block pointer to point just past the end
+;       of the requested memory size.
+;
+                        mov     [eax+MEMBLOCK.bytes],ecx                        ;shorten memory block size
+                        mov     edx,eax                                         ;memory block address
+                        add     edx,ecx                                         ;address new new next contig block
+                        mov     ecx,[eax+MEMBLOCK.nextcontig]                   ;next contig block address
+                        mov     [eax+MEMBLOCK.nextcontig],edx                   ;update next contig block address
+;
+;       If there is a next contiguous block, we update that memory block's previous contig pointer to point to the new
+;       free block we are splitting off. If there is no next contiguous block, we update the last contig block pointer.
+;
+                        jecxz   .80                                             ;no next contig, branch
+                        mov     [ecx+MEMBLOCK.previouscontig],edx               ;update previous contig pointer
+                        jmp     .90                                             ;continue
+.80                     mov     [esi+MEMROOT.lastcontig],edx                    ;update last contig pointer
+;
+;       Now that the contig block pointers have been updated, we initialize the new free block members.
+;
+.90                     mov     [edx+MEMBLOCK.bytes],ebx                        ;set the block size
+                        mov     [edx+MEMBLOCK.nextcontig],ecx                   ;set the next contig block addr
+                        mov     [edx+MEMBLOCK.previouscontig],eax               ;set the previous contig block addr
+                        mov     ebx,EMEMFREECODE                                ;free memory signature
+                        mov     [edx+MEMBLOCK.signature],ebx                    ;set the block signature
+                        xor     ebx,ebx                                         ;zero register
+                        mov     [edx+MEMBLOCK.reserved],ebx                     ;set reserved
+                        mov     [edx+MEMBLOCK.owner],ebx                        ;set the owner
+;
+;       Find the proper location in the free block chain for the new free block
+;
+                        mov     ebx,[edx+MEMBLOCK.bytes]                        ;free block size
+                        mov     ecx,[esi+MEMROOT.firstfree]                     ;first free block addr
+.100                    jecxz   .110                                            ;branch if at end of chain
+                        cmp     ebx,[ecx+MEMBLOCK.bytes]                        ;new block smaller or equal?
+                        jbe     .110                                            ;yes, branch
+                        mov     ecx,[ecx+MEMBLOCK.nextblock]                    ;next free block addr
+                        jmp     .100                                            ;continue
+;
+;       Having found the proper location for our new free block, we store the address of the following free block, or
+;       zero if our new free block is larger than any other, as our next free block. Then, we take the address of our
+;       next block's previous block or the global last-free block as our new previous block and update the previous
+;       block of hte next block, if there is one.
+;
+.110                    mov     [edx+MEMBLOCK.nextblock],ecx                    ;set the new free block's next ptr
+                        mov     ebx,[esi+MEMROOT.lastfree]                      ;last free block addr
+                        jecxz   .120                                            ;branch if no next block
+                        mov     ebx,[ecx+MEMBLOCK.previousblock]                ;next block's previous block
+                        mov     [ecx+MEMBLOCK.previousblock],edx                ;set the next block's previous block
+                        jmp     .130                                            ;continue
+.120                    mov     [esi+MEMROOT.lastfree],edx                      ;set the new last free block
+;
+;       Store our previous block pointer. If we have a previous free block, update that block's next block pointer to
+;       point to the new block. Since the new block may now be the first or last user block, we update the first and/or
+;       last user block pointers if necessary.
+;
+.130                    mov     [edx+MEMBLOCK.previousblock],ebx                ;set the previous block pointer
+                        test    ebx,ebx                                         ;is there a previous block?
+                        jz      .140                                            ;no, branch
+                        mov     [ebx+MEMBLOCK.nextblock],edx                    ;set the previous block's next ptr
+                        jmp     .150                                            ;continue
+.140                    mov     [esi+MEMROOT.firstfree],edx                     ;set the new first free ptr
+;
+;       Update the newly allocated block's owner and signature.
+;
+.150                    mov     edx,EMEMUSERCODE                                ;user memory signature
+                        mov     [eax+MEMBLOCK.signature],edx                    ;set the block signature
+                        xor     edx,edx                                         ;zero register
+                        str     dx                                              ;load the task state register
+                        mov     [eax+MEMBLOCK.owner],edx                        ;set the block owner
+;
+;       Remove the allocated block from the free block chain and insert it into the user block chain.
+;
+                        mov     ecx,[esi+MEMROOT.firsttask]                     ;first task block
+.160                    jecxz   .180                                            ;branch if at end of chain
+                        cmp     edx,[ecx+MEMBLOCK.owner]                        ;does this block belong to the task?
+                        jb      .180                                            ;branch if block belongs to next task
+                        je      .170                                            ;branch if block belongs to this task
+                        mov     ecx,[ecx+MEMBLOCK.nextblock]                    ;next task block
+                        jmp     .160                                            ;continue
+;
+;       We have found the start of our task's user block chain or the start of the next task's user block chain. If we
+;       have found the next task's chain, then we have no other user memory for this task and we can simply add the
+;       block here. If we are at the start of our task's user block chain, then we need to further seek for the proper
+;       place to insert the block.
+;
+.170                    mov     edx,[eax+MEMBLOCK.bytes]                        ;size of block in bytes
+                        cmp     edx,[ecx+MEMBLOCK.bytes]                        ;less or equal to chain block?
+                        jbe     .180                                            ;yes, branch
+                        mov     ecx,[ecx+MEMBLOCK.nextblock]                    ;next chain block address
+                        test    ecx,ecx                                         ;end of chain?
+                        jz      .180                                            ;yes, branch
+                        mov     edx,[eax+MEMBLOCK.owner]                        ;owning task
+                        cmp     edx,[ecx+MEMBLOCK.owner]                        ;same task?
+                        je      .170                                            ;yes, continue search
+;
+;       We have found the proper place in our task's user-block chain to insert our new user block. It may also be the
+;       end of the user-block chain. To insert our new user block, first we update the next-block pointer. Then, we load
+;       the next-block's previous-block pointer or the global last-user block pointer if we have no next-block. If we
+;       do have a previous-block, we update that block's next-block pointer.
+;
+.180                    mov     [eax+MEMBLOCK.nextblock],ecx                    ;set the next task block
+                        mov     ebx,[esi+MEMROOT.lasttask]                      ;last task block
+                        jecxz   .190                                            ;branch if no next-task block
+                        mov     ebx,[ecx+MEMBLOCK.previousblock]                ;next-task's previous-task block
+                        mov     [ecx+MEMBLOCK.previousblock],eax                ;update next-task block's previous-task
+                        jmp     .200                                            ;continue
+.190                    mov     [esi+MEMROOT.lasttask],eax                      ;new block is the last user-block
+;
+;       Now wes tore our previous-block pointer and, if we have a previous-free block, we update that block's next-
+;       block pointer to point to our block. Since our block may now be the first or last user-block, we update the
+;       global first and/or last user-block pointers if necessary.
+;
+.200                    mov     [eax+MEMBLOCK.previousblock],ebx                ;set the previous task block
+                        test    ebx,ebx                                         ;do we have a previous task block?
+                        jz      .210                                            ;no, branch
+                        mov     [ebx+MEMBLOCK.nextblock],eax                    ;set previous-block's next-task block
+                        jmp     .220                                            ;continue
+.210                    mov     [esi+MEMROOT.firsttask],eax                     ;new block is the first user-block
+;
+;       Restore registers and return to caller.
+;
+.220                    pop     ds                                              ;restore non-volatie regs
+                        pop     esi                                             ;
+                        pop     ecx                                             ;
+                        pop     ebx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        FreeMemory
+;
+;       Description:    This routine frees a memory block for the given task. The address provided in EDX points to the
+;                       memory block header. The memory block must be USER memory, not a FREE memory block. If the block
+;                       is adjacent to a contiguous FREE memory block, then the blocks are merged. The residual FREE
+;                       memory is repositioned in the FREE memory block chain according to size. The user portion of the
+;                       block, following the block header, is reset (wiped) with the memory wipe value.
+;
+;       In:             EDX     memory block to free, relative to EGDTOSDATA
+;
+;       Out:            EAX     -1      invalid memory block
+;                               0       memory block freed
+;
+;-----------------------------------------------------------------------------------------------------------------------
+FreeMemory              push    ebx                                             ;save non-volatile regs
+                        push    ecx                                             ;
+                        push    esi                                             ;
+                        push    edi                                             ;
+                        push    ds                                              ;
+                        push    es                                              ;
+;
+;       Address the root memory structure
+;
+                        push    EGDTOSDATA                                      ;load OS data selector ...
+                        pop     es                                              ;... into extra segment reg
+                        push    EGDTOSDATA                                      ;load OS data selector ...
+                        pop     ds                                              ;... into data segment reg
+                        mov     esi,wsConsoleMemRoot                            ;memory root structure
+                        mov     edi,edx                                         ;memory block address
+;
+;       If the block is FREE, return success. Otherwise, if it is not USER, return with error.
+;
+                        xor     eax,eax                                         ;indicate success
+                        cmp     dword [edi+MEMBLOCK.signature],EMEMFREECODE     ;is the block FREE?
+                        je      .240                                            ;yes, branch
+                        dec     eax                                             ;indicate failure
+                        cmp     dword [edi+MEMBLOCK.signature],EMEMUSERCODE     ;is the block USER?
+                        jne     .240                                            ;no, branch
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Unlink the USER memory block.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Set the block signature. Reset owner.
+;
+                        mov     dword [edi+MEMBLOCK.signature],EMEMFREECODE     ;set FREE block signature
+                        xor     eax,eax                                         ;zero register
+                        mov     [edi+MEMBLOCK.owner],eax                        ;zero block owner
+;
+;       Wipe user area.
+;
+                        push    edi                                             ;save block address
+                        mov     ecx,[edi+MEMBLOCK.bytes]                        ;block size
+                        sub     ecx,EMEMBLOCKLEN                                ;subtract header size
+                        add     edi,EMEMBLOCKLEN                                ;point to user area
+                        mov     al,EMEMWIPEBYTE                                 ;memory wipe byte
+                        rep     stosb                                           ;clear memory
+                        pop     edi                                             ;restore block address
+;
+;       Address the preceding and following USER memory blocks
+;
+                        mov     ebx,[edi+MEMBLOCK.previousblock]                ;previous block pointer
+                        mov     ecx,[edi+MEMBLOCK.nextblock]                    ;next block pointer
+;
+;       If a USER block precedes this block, update that block's next pointer. Otherwise, update the first task
+;       pointer to point to the USER block following this block.
+;
+                        test    ebx,ebx                                         ;is there a previous block?
+                        jz      .10                                             ;no, branch
+                        mov     [ebx+MEMBLOCK.nextblock],ecx                    ;update previous block's next pointer
+                        jmp     .20                                             ;continue
+.10                     mov     [esi+MEMROOT.firsttask],ecx                     ;update first USER pointer
+;
+;       If a USER block follows this block, update that block's previous pointer. Otherwise, update the last task
+;       pointer to point to the USER block preceding this block.
+;
+.20                     jecxz   .30                                             ;branch if no next block
+                        mov     [ecx+MEMBLOCK.previousblock],ebx                ;update next block's previous pointer
+                        jmp     .40                                             ;continue
+.30                     mov     [esi+MEMROOT.lasttask],ebx                      ;update last USER pointer
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Merge with a previous contiguous FREE memory block.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Address the preceding and following contiguous memory blocks.
+;
+.40                     mov     ebx,[edi+MEMBLOCK.previouscontig]               ;previous contiguous block ptr
+                        mov     ecx,[edi+MEMBLOCK.nextcontig]                   ;next contiguous block ptr
+;
+;       Verify we have a previous contiguous FREE block.
+;
+                        test    ebx,ebx                                         ;is there a previous block?
+                        jz      .100                                            ;no, branch
+                        cmp     dword [ebx+MEMBLOCK.signature],EMEMFREECODE     ;is the previous block FREE?
+                        jne     .100                                            ;no, branch
+;
+;       Update adjacent block's contiguous pointers.
+;
+                        mov     [ebx+MEMBLOCK.nextcontig],ecx                   ;update previous contig's next contig
+                        jecxz   .50                                             ;branch if no next contiguous block
+                        mov     [ecx+MEMBLOCK.previouscontig],ebx               ;update next congit's previous contig
+                        jmp     .60                                             ;continue
+.50                     mov     [esi+MEMROOT.lastcontig],ebx                    ;update last contig pointer
+;
+;       Update the size of the merged FREE block.
+;
+.60                     mov     eax,[edi+MEMBLOCK.bytes]                        ;current block size
+                        add     [ebx+MEMBLOCK.bytes],eax                        ;update previous block's size
+;
+;       Having merged our new free block into the previous free block, make the previous free block the current block
+;
+                        mov     ecx,EMEMBLOCKLEN                                ;block header length
+                        mov     al,EMEMWIPEBYTE                                 ;memory wipe byte
+                        rep     stosb                                           ;clear memory header
+                        mov     edi,ebx                                         ;current block is now previous block
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Unlink the previous contiguous FREE memory block
+;
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Address the preceding and following USER memory blocks
+;
+                        mov     ebx,[edi+MEMBLOCK.previousblock]                ;previous block pointer
+                        mov     ecx,[edi+MEMBLOCK.nextblock]                    ;next block pointer
+;
+;       Update the previous block's next-block pointer if there is a previous block. Otherwise, update the first free
+;       block pointer.
+;
+                        test    ebx,ebx                                         ;is there a previous block?
+                        jz      .70                                             ;no, branch
+                        mov     [ebx+MEMBLOCK.nextblock],ecx                    ;update previous block's next pointer
+                        jmp     .80                                             ;branch
+.70                     mov     [esi+MEMROOT.firstfree],ecx                     ;update first FREE block pointer
+;
+;       Update the next block's previous-block pointer if there is a next block. Otherwise, update the last free block
+;       pointer.
+;
+.80                     jecxz   .90                                             ;branch if no next block
+                        mov     [ecx+MEMBLOCK.previousblock],ebx                ;update next block's previous pointer
+                        jmp     .100                                            ;continue
+.90                     mov     [esi+MEMROOT.lastfree],ebx                      ;update last FREE block pointer
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Merge with a following contiguous FREE memory block.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Verify we have a following contiguous FREE block.
+;
+.100                    mov     ecx,[edi+MEMBLOCK.nextcontig]                   ;next contiguous block ptr
+                        jecxz   .170                                            ;branch if no next contiguous block
+                        cmp     dword [ecx+MEMBLOCK.signature],EMEMFREECODE     ;is the next-contiguous block free?
+                        jne     .170                                            ;no, branch
+;
+;       Add the size of the following adjacent FREE block to this block's size.
+;
+                        mov     eax,[ecx+MEMBLOCK.bytes]                        ;next contiguous (free) block size
+                        add     [edi+MEMBLOCK.bytes],eax                        ;add size to this block's size
+;
+;       Unlink the following contiguous FREE block from the contiguous block chain.
+;
+                        mov     eax,[ecx+MEMBLOCK.nextcontig]                   ;following block's next-contig ptr
+                        mov     [edi+MEMBLOCK.nextcontig],eax                   ;update this block's next-contig ptr
+                        test    eax,eax                                         ;does a block follow the next contig blk
+                        jz      .110                                            ;no, branch
+                        mov     [eax+MEMBLOCK.previouscontig],edi               ;update following block's prev contig
+                        jmp     .120                                            ;continue
+.110                    mov     [esi+MEMROOT.lastcontig],edi                    ;update last contig block ptr
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Unlink the following contiguous FREE memory block
+;
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Unlink the following adjacent FREE block from the FREE block chain.
+;
+.120                    push    edi                                             ;save this block
+                        mov     edi,ecx                                         ;next contiguous block
+                        push    ecx                                             ;save next contiguous block
+;
+;       Address the preceding and following USER memory blocks
+;
+                        mov     ebx,[edi+MEMBLOCK.previousblock]                ;next contig's previous block pointer
+                        mov     ecx,[edi+MEMBLOCK.nextblock]                    ;next contig's next block pointer
+;
+;       Update the previous block's next-block pointer if there is a previous block. Otherwise, update the first free
+;       block pointer.
+;
+                        test    ebx,ebx                                         ;is there a previous block?
+                        jz      .130                                            ;no, branch
+                        mov     [ebx+MEMBLOCK.nextblock],ecx                    ;update next contig's prev blk next-ptr
+                        jmp     .140                                            ;branch
+.130                    mov     [esi+MEMROOT.firstfree],ecx                     ;update first FREE block pointer
+;
+;       Update the next block's previous-block pointer if there is a next block. Otherwise, update the last free block
+;       pointer.
+;
+.140                    jecxz   .150                                            ;branch if no next block
+                        mov     [ecx+MEMBLOCK.previousblock],ebx                ;update next contig's next blk prev-ptr
+                        jmp     .160                                            ;continue
+.150                    mov     [esi+MEMROOT.lastfree],ebx                      ;update last FREE block pointer
+;
+;       Clear next contiguous block's header
+;
+.160                    pop     edi                                             ;next congiguous block pointer
+                        mov     ecx,EMEMBLOCKLEN                                ;memory block header length
+                        mov     al,EMEMWIPEBYTE                                 ;memory wipe byte
+                        rep     stosb                                           ;clear memory header
+                        pop     edi                                             ;this block's pointer
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Insert the final FREE block back into the block chain.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Walk the FREE memory chain until a block is found that is larger than or equal in size to the block being
+;       inserted. The block being inserted will be inserted before that block or after the last block found if none
+;       all are smaller in size.
+;
+.170                    mov     ebx,[edi+MEMBLOCK.bytes]                        ;size of block
+                        mov     ecx,[esi+MEMROOT.firstfree]                     ;first free block ptr
+.180                    jecxz   .190                                            ;exit if no ptr
+                        cmp     ebx,[ecx+MEMBLOCK.bytes]                        ;next block bigger?
+                        jb      .190                                            ;yes, branch
+                        mov     ecx,[ecx+MEMBLOCK.nextblock]                    ;next free memory block
+                        jmp     .180                                            ;continue
+;
+;       Set the next-block pointer. Determine the previous-block, which may be the last FREE block if we found no
+;       larger free block. Update the next block's previous block pointer.
+;
+.190                    mov     [edi+MEMBLOCK.nextblock],ecx                    ;set the next block ptr
+                        mov     ebx,[esi+MEMROOT.lastfree]                      ;assume all blocks smaller
+                        jecxz   .200                                            ;branch if no block found
+                        mov     ebx,[ecx+MEMBLOCK.previousblock]                ;next block's previous block ptr
+                        mov     [ecx+MEMBLOCK.previousblock],edi                ;update next block's previous ptr
+                        jmp     .210                                            ;continue
+.200                    mov     [esi+MEMROOT.lastfree],edi                      ;this block is now the last free
+;
+;       Set our previous block pointer to either the previous pointer of the found block or the last free block.
+;       If there is no previous block pointer, then this block now the first FREE block. Otherwise update that block's
+;       next pointer.
+;
+.210                    mov     [edi+MEMBLOCK.previousblock],ebx                ;set the previous block ptr
+                        test    ebx,ebx                                         ;do we have a previous block?
+                        jz      .220                                            ;no, branch
+                        mov     [ebx+MEMBLOCK.nextblock],edi                    ;update previous block's next block ptr
+                        jmp     .230                                            ;continue
+.220                    mov     [esi+MEMROOT.firstfree],edi                     ;update first free ptr
+;
+;       The memory free has completed.
+;
+.230                    xor     eax,eax                                         ;indicate success
+;
+;       Restore and return.
+;
+.240                    pop     es                                              ;restore non-volatile regs
+                        pop     ds                                              ;
+                        pop     edi                                             ;
+                        pop     esi                                             ;
+                        pop     ecx                                             ;
+                        pop     ebx                                             ;
+                        ret                                                     ;return
 ;=======================================================================================================================
 ;
 ;       String Helper Routines
@@ -2880,9 +4031,11 @@ UpperCaseString         push    esi                                             
 ;
 ;       Console Helper Routines
 ;
+;       FirstConsoleColumn
 ;       GetConsoleChar
 ;       GetConsoleString
 ;       NextConsoleColumn
+;       NextConsoleRow
 ;       PreviousConsoleColumn
 ;       PutConsoleChar
 ;       PutConsoleHexByte
@@ -2890,9 +4043,22 @@ UpperCaseString         push    esi                                             
 ;       PutConsoleHexWord
 ;       PutConsoleOIAChar
 ;       PutConsoleOIAShift
+;       PutConsoleString
 ;       Yield
 ;
 ;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        FirstConsoleColumn
+;
+;       Description:    This routine resets the console column to start of the row.
+;
+;       In:             DS      OS data selector
+;
+;-----------------------------------------------------------------------------------------------------------------------
+FirstConsoleColumn      xor     al,al                                           ;zero column
+                        mov     [wbConsoleColumn],al                            ;save column
+                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        GetConsoleChar
@@ -2988,10 +4154,31 @@ GetConsoleString        push    ecx                                             
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 NextConsoleColumn       mov     al,[wbConsoleColumn]                            ;current column
-                        cmp     al,ECONCOLS-1                                   ;end of row?
-                        jnb     .10
-                        inc     al
-                        mov     [wbConsoleColumn],al
+                        inc     al                                              ;increment column
+                        mov     [wbConsoleColumn],al                            ;save column
+                        cmp     al,ECONCOLS                                     ;end of row?
+                        jb      .10                                             ;no, skip ahead
+                        call    FirstConsoleColumn                              ;reset column to start of row
+                        call    NextConsoleRow                                  ;line feed to next row
+.10                     ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        NextConsoleRow
+;
+;       Description:    This routine advances the console position one line. Scroll the screen one row if needed.
+;
+;       In:             DS      OS data selector
+;
+;-----------------------------------------------------------------------------------------------------------------------
+NextConsoleRow          mov     al,[wbConsoleRow]                               ;current row
+                        inc     al                                              ;increment row
+                        mov     [wbConsoleRow],al                               ;save row
+                        cmp     al,ECONROWS                                     ;end of screen?
+                        jb      .10                                             ;no, skip ahead
+                        call    ScrollConsoleRow                                ;scroll up one row
+                        mov     al,[wbConsoleRow]                               ;row
+                        dec     al                                              ;decrement row
+                        mov     [wbConsoleRow],al                               ;save row
 .10                     ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -3005,10 +4192,16 @@ NextConsoleColumn       mov     al,[wbConsoleColumn]                            
 ;-----------------------------------------------------------------------------------------------------------------------
 PreviousConsoleColumn   mov     al,[wbConsoleColumn]                            ;current column
                         or      al,al                                           ;start of row?
-                        jz      .10
-                        dec     al
-                        mov     [wbConsoleColumn],al
-.10                     ret                                                     ;return
+                        jnz     .10                                             ;no, skip ahead
+                        mov     ah,[wbConsoleRow]                               ;current row
+                        or      ah,ah                                           ;top of screen?
+                        jz      .20                                             ;yes, exit with no change
+                        dec     ah                                              ;decrement row
+                        mov     [wbConsoleRow],ah                               ;save row
+                        mov     al,ECONCOLS                                     ;set maximum column
+.10                     dec     al                                              ;decrement column
+                        mov     [wbConsoleColumn],al                            ;save column
+.20                     ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        PutConsoleChar
@@ -3042,16 +4235,22 @@ PutConsoleChar          push    ecx                                             
 ;                       ES      CGA selector
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-PutConsoleHexByte       push    eax                                             ;save non-volatile regs
+PutConsoleHexByte       push    ebx                                             ;save non-volatile regs
+                        mov     bl,al                                           ;save byte value
                         shr     al,4                                            ;hi-order nybble
-                        call    .10                                             ;make ASCII and store
-                        pop     eax                                             ;byte value
-                        and     al,0Fh                                          ;lo-order nybble
-.10                     or      al,030h                                         ;apply ASCII zone
-                        cmp     al,03Ah                                         ;numeric?
+                        or      al,030h                                         ;apply ASCII zone
+                        cmp     al,03ah                                         ;numeric?
+                        jb      .10                                             ;yes, skip ahead
+                        add     al,7                                            ;add ASCII offset for alpha
+.10                     call    SetConsoleChar                                  ;display ASCII character
+                        mov     al,bl                                           ;byte value
+                        and     al,0fh                                          ;lo-order nybble
+                        or      al,30h                                          ;apply ASCII zone
+                        cmp     al,03ah                                         ;numeric?
                         jb      .20                                             ;yes, skip ahead
                         add     al,7                                            ;add ASCII offset for alpha
 .20                     call    SetConsoleChar                                  ;display ASCII character
+                        pop     ebx                                             ;restore non-volatile regs
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -3216,6 +4415,36 @@ PutConsoleOIAShift      push    ecx                                             
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;       Routine:        PutConsoleString
+;
+;       Description:    This routine writes a sequence of ASCII characters to the console until null and updates the
+;                       console position as needed.
+;
+;       In:             EDX     source address
+;                       DS      OS data selector
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutConsoleString        push    esi                                             ;save non-volatile regs
+                        mov     esi,edx                                         ;source address
+                        cld                                                     ;forward strings
+.10                     lodsb                                                   ;ASCII character
+                        or      al,al                                           ;end of string?
+                        jz      .40                                             ;yes, skip ahead
+                        cmp     al,EASCIIRETURN                                 ;carriage return?
+                        jne     .20                                             ;no, skip ahead
+                        call    FirstConsoleColumn                              ;move to start of row
+                        jmp     .10                                             ;next character
+.20                     cmp     al,EASCIILINEFEED                               ;line feed?
+                        jne     .30                                             ;no, skip ahead
+                        call    NextConsoleRow                                  ;move to next row
+                        jmp     .10                                             ;next character
+.30                     call    PutConsoleChar                                  ;output character to console
+                        call    NextConsoleColumn                               ;advance to next column
+                        jmp     .10                                             ;next character
+.40                     pop     esi                                             ;restore non-volatile regs
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;       Routine:        Yield
 ;
 ;       Description:    This routine passes control to the next ready task or enter halt.
@@ -3228,10 +4457,51 @@ Yield                   sti                                                     
 ;
 ;       Data-Type Conversion Helper Routines
 ;
+;       DecimalToUnsigned
 ;       HexadecimalToUnsigned
+;       UnsignedToDecimalString
 ;       UnsignedToHexadecimal
 ;
 ;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        DecimalToUnsigned
+;
+;       Description:    This routine returns an unsigned integer of the value of the input ASCIIZ decimal string.
+;
+;       Input:          DS:EDX  null-terminated decimal string address
+;
+;       Output:         EAX     unsigned integer value
+;
+;-----------------------------------------------------------------------------------------------------------------------
+DecimalToUnsigned       push    esi                                             ;save non-volatile regs
+                        mov     esi,edx                                         ;source address
+                        xor     edx,edx                                         ;zero total
+.10                     lodsb                                                   ;source byte
+                        cmp     al,','                                          ;comma?
+                        je      .10                                             ;yes, ignore
+                        test    al,al                                           ;end of string?
+                        jz      .30                                             ;yes, done
+                        cmp     al,'.'                                          ;decimal point?
+                        je      .30                                             ;yes, done
+                        cmp     al,'0'                                          ;numeral?
+                        jb      .20                                             ;no, invalid string
+                        cmp     al,'9'                                          ;numeral?
+                        ja      .20                                             ;no, invalid string
+                        and     al,00Fh                                         ;mask ASCII zone
+                        push    eax                                             ;save numeral
+                        shl     edx,1                                           ;total * 2
+                        mov     eax,edx                                         ;total * 2
+                        shl     edx,2                                           ;total * 8
+                        add     edx,eax                                         ;total * 10
+                        pop     eax                                             ;restore numeral
+                        add     edx,eax                                         ;accumulate decimal digit
+                        xor     eax,eax                                         ;zero register
+                        jmp     .10                                             ;next
+.20                     xor     edx,edx                                         ;zero result on error
+.30                     mov     eax,edx                                         ;result
+                        pop     esi                                             ;restore non-volatile regs
+                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        HexadecimalToUnsigned
@@ -3251,13 +4521,84 @@ HexadecimalToUnsigned   push    esi                                             
                         jz      .30                                             ;yes, branch
                         cmp     al,'9'                                          ;hexadecimal?
                         jna     .20                                             ;no, skip ahead
-                        sub     al,037h                                         ;'A' = 41h, less 37h = 0Ah
-.20                     and     eax,00Fh                                        ;remove ascii zone
+                        sub     al,37h                                          ;'A' = 41h, less 37h = 0Ah
+.20                     and     eax,0fh                                         ;remove ascii zone
                         shl     edx,4                                           ;previous total x 16
                         add     edx,eax                                         ;add prior value x 16
                         jmp     .10                                             ;next
 .30                     mov     eax,edx                                         ;result
                         pop     esi                                             ;restore non-volatile regs
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        UnsignedToDecimalString
+;
+;       Description:    This routine creates an ASCIIZ string representing the decimal value of 32-bit binary input.
+;
+;       Input:          BH      flags           bit 0: 1 = trim leading zeros
+;                                               bit 1: 1 = include comma grouping delimiters
+;                                               bit 4: 1 = non-zero digit found (internal)
+;                       ECX     32-bit binary
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+UnsignedToDecimalString push    ebx                                             ;save non-volatile regs
+                        push    ecx                                             ;
+                        push    edi                                             ;
+                        push    es                                              ;
+                        push    ds                                              ;load data selector
+                        pop     es                                              ;... into extra segment reg
+                        mov     edi,edx                                         ;output buffer address
+                        and     bh,00001111b                                    ;zero internal flags
+                        mov     edx,ecx                                         ;binary
+                        mov     ecx,1000000000                                  ;10^9 divisor
+                        call    .30                                             ;divide and store
+                        mov     ecx,100000000                                   ;10^8 divisor
+                        call    .10                                             ;divide and store
+                        mov     ecx,10000000                                    ;10^7 divisor
+                        call    .30                                             ;divide and store
+                        mov     ecx,1000000                                     ;10^6 divisor
+                        call    .30                                             ;divide and store
+                        mov     ecx,100000                                      ;10^5 divisor
+                        call    .10                                             ;divide and store
+                        mov     ecx,10000                                       ;10^4 divisor
+                        call    .30                                             ;divide and store
+                        mov     ecx,1000                                        ;10^3 divisor
+                        call    .30                                             ;divide and store
+                        mov     ecx,100                                         ;10^2 divisor
+                        call    .10                                             ;divide and store
+                        mov     ecx,10                                          ;10^2 divisor
+                        call    .30                                             ;divide and store
+                        mov     eax,edx                                         ;10^1 remainder
+                        call    .40                                             ;store
+                        xor     al,al                                           ;null terminator
+                        stosb
+                        pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     ecx                                             ;
+                        pop     ebx                                             ;
+                        ret                                                     ;return
+.10                     test    bh,00000010b                                    ;comma group delims?
+                        jz      .30                                             ;no, branch
+                        test    bh,00000001b                                    ;trim leading zeros?
+                        jz      .20                                             ;no, store delim
+                        test    bh,00010000b                                    ;non-zero found?
+                        jz      .30                                             ;no, branch
+.20                     mov     al,','                                          ;delimiter
+                        stosb                                                   ;store delimiter
+.30                     mov     eax,edx                                         ;lo-orer dividend
+                        xor     edx,edx                                         ;zero hi-order
+                        div     ecx                                             ;divide by power of 10
+                        test    al,al                                           ;zero?
+                        jz      .50                                             ;yes, branch
+                        or      bh,00010000b                                    ;non-zero found
+.40                     or      al,30h                                          ;ASCII zone
+                        stosb                                                   ;store digit
+                        ret                                                     ;return
+.50                     test    bh,00000001b                                    ;trim leading zeros?
+                        jz      .40                                             ;no, store and continue
+                        test    bh,00010000b                                    ;non-zero found?
+                        jnz     .40                                             ;yes, store and continue
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -3276,9 +4617,9 @@ UnsignedToHexadecimal   push    edi                                             
                         mov     cl,8                                            ;nybble count
 .10                     rol     edx,4                                           ;next hi-order nybble in bits 0-3
                         mov     al,dl                                           ;????bbbb
-                        and     al,00Fh                                         ;mask out bits 4-7
-                        or      al,030h                                         ;mask in ascii zone
-                        cmp     al,03Ah                                         ;A through F?
+                        and     al,0fh                                          ;mask out bits 4-7
+                        or      al,30h                                          ;mask in ascii zone
+                        cmp     al,3ah                                          ;A through F?
                         jb      .20                                             ;no, skip ahead
                         add     al,7                                            ;41h through 46h
 .20                     stosb                                                   ;store hexnum
@@ -3323,7 +4664,7 @@ GetMessage              push    ebx                                             
                         mov     [ebx],ecx                                       ;... in lo-order dword
                         mov     [ebx+4],ecx                                     ;... in hi-order dword
                         add     ebx,8                                           ;next queue element
-                        and     ebx,03FCh                                       ;at end of queue?
+                        and     ebx,03fch                                       ;at end of queue?
                         jnz     .10                                             ;no, skip ahead
                         mov     bl,8                                            ;reset to 1st entry
 .10                     mov     [MQHead],ebx                                    ;save new head ptr
@@ -3355,7 +4696,7 @@ PutMessage              push    ds                                              
                         mov     [eax],edx                                       ;store lo-order data
                         mov     [eax+4],ecx                                     ;store hi-order data
                         add     eax,8                                           ;next queue element adr
-                        and     eax,03FCh                                       ;at end of queue?
+                        and     eax,03fch                                       ;at end of queue?
                         jnz     .10                                             ;no, skip ahead
                         mov     al,8                                            ;reset to top of queue
 .10                     mov     [MQTail],eax                                    ;save new tail ptr
@@ -3368,10 +4709,74 @@ PutMessage              push    ds                                              
 ;
 ;       These routines read and/or write directly to CGA video memory (B800:0)
 ;
+;       ClearConsoleScreen
+;       ScrollConsoleRow
 ;       SetConsoleChar
 ;       SetConsoleString
 ;
 ;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ClearConsoleScreen
+;
+;       Description:    This routine clears the console (CGA) screen.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ClearConsoleScreen      push    ecx                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    ds                                              ;
+                        push    es                                              ;
+                        push    EGDTOSDATA                                      ;load OS Data selector ...
+                        pop     ds                                              ;... into DS register
+                        push    EGDTCGA                                         ;load CGA selector ...
+                        pop     es                                              ;... into ES register
+                        mov     eax,ECONCLEARDWORD                              ;initializtion value
+                        mov     ecx,ECONROWDWORDS*(ECONROWS)                    ;double-words to clear
+                        xor     edi,edi                                         ;target offset
+                        cld                                                     ;forward strings
+                        rep     stosd                                           ;reset screen body
+                        mov     eax,ECONOIADWORD                                ;OIA attribute and space
+                        mov     ecx,ECONROWDWORDS                               ;double-words per row
+                        rep     stosd                                           ;reset OIA line
+                        xor     al,al                                           ;zero register
+                        mov     [wbConsoleRow],al                               ;reset console row
+                        mov     [wbConsoleColumn],al                            ;reset console column
+                        call    PlaceCursor                                     ;place cursor at current position
+                        pop     es                                              ;restore non-volatile regs
+                        pop     ds                                              ;
+                        pop     edi                                             ;
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ScrollConsoleRow
+;
+;       Description:    This routine scrolls the console (text) screen up one row.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ScrollConsoleRow        push    ecx                                             ;save non-volatile regs
+                        push    esi                                             ;
+                        push    edi                                             ;
+                        push    ds                                              ;
+                        push    es                                              ;
+                        push    EGDTCGA                                         ;load CGA video selector ...
+                        pop     ds                                              ;... into DS
+                        push    EGDTCGA                                         ;load CGA video selector ...
+                        pop     es                                              ;... into ES
+                        mov     ecx,ECONROWDWORDS*(ECONROWS-1)                  ;double-words to move
+                        mov     esi,ECONROWBYTES                                ;ESI = source (line 2)
+                        xor     edi,edi                                         ;EDI = target (line 1)
+                        cld                                                     ;forward strings
+                        rep     movsd                                           ;move 24 lines up
+                        mov     eax,ECONCLEARDWORD                              ;attribute and ASCII space
+                        mov     ecx,ECONROWDWORDS                               ;double-words per row
+                        rep     stosd                                           ;clear bottom row
+                        pop     es                                              ;restore non-volatile regs
+                        pop     ds                                              ;
+                        pop     edi                                             ;
+                        pop     esi                                             ;
+                        pop     ecx                                             ;
+                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        SetConsoleChar
@@ -3424,15 +4829,67 @@ SetConsoleString        push    esi                                             
 ;
 ;       These routines read and/or write directly to ports.
 ;
+;       GetBaseMemSize
+;       GetExtendedMemSize
+;       GetROMMemSize
 ;       PlaceCursor
 ;       PutPrimaryEndOfInt
 ;       PutSecondaryEndOfInt
+;       ReadRealTimeClock
 ;       ResetSystem
 ;       SetKeyboardLamps
 ;       WaitForKeyInBuffer
 ;       WaitForKeyOutBuffer
 ;
 ;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        GetBaseMemSize
+;
+;       Description:    Return the amount of base RAM as reported by the CMOS.
+;
+;       Output:         EAX     base RAM size in bytes
+;
+;-----------------------------------------------------------------------------------------------------------------------
+GetBaseMemSize          xor     eax,eax                                         ;zero register
+                        mov     al,ERTCBASERAMHI                                ;base RAM high register
+                        out     ERTCREGPORT,al                                  ;select base RAM high register
+                        in      al,ERTCDATAPORT                                 ;read base RAM high (KB)
+                        mov     ah,al                                           ;save base RAM high
+                        mov     al,ERTCBASERAMLO                                ;base RAM low register
+                        out     ERTCREGPORT,al                                  ;select base RAM low register
+                        in      al,ERTCDATAPORT                                 ;read base RAM low (KB)
+                        ret                                                     ;return to caller
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        GetExtendedMemSize
+;
+;       Description:    Return the amount of extended RAM as reported by the CMOS.
+;
+;       Output:         EAX     extended RAM size in bytes
+;
+;-----------------------------------------------------------------------------------------------------------------------
+GetExtendedMemSize      xor     eax,eax                                         ;zero register
+                        mov     al,ERTCEXTRAMHI                                 ;extended RAM high register
+                        out     ERTCREGPORT,al                                  ;select extended RAM high register
+                        in      al,ERTCDATAPORT                                 ;read extended RAM high (KB)
+                        mov     ah,al                                           ;save extended RAM high
+                        mov     al,ERTCEXTRAMLO                                 ;extended RAM low register
+                        out     ERTCREGPORT,al                                  ;select extended RAM low register
+                        in      al,ERTCDATAPORT                                 ;read extended RAM low (KB)
+                        ret                                                     ;return to caller
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        GetROMMemSize
+;
+;       Description:    Return the amount of RAM as reported by the BIOS during power-up.
+;
+;       Output:         EAX     RAM size in bytes
+;
+;-----------------------------------------------------------------------------------------------------------------------
+GetROMMemSize           xor     eax,eax                                         ;zero register
+                        mov     ax,[wwROMMemSize]                               ;memory size (KB) as returned by INT 12h
+                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        PlaceCursor
@@ -3471,7 +4928,8 @@ PlaceCursor             push    ecx                                             
 ;       Description:    This routine sends a non-specific end-of-interrupt signal to the primary PIC.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-PutPrimaryEndOfInt      mov     al,EPICEOI                                      ;non-specific end-of-interrupt
+PutPrimaryEndOfInt      sti                                                     ;enable maskable interrupts
+                        mov     al,EPICEOI                                      ;non-specific end-of-interrupt
                         out     EPICPORTPRI,al                                  ;send EOI to primary PIC
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -3481,8 +4939,79 @@ PutPrimaryEndOfInt      mov     al,EPICEOI                                      
 ;       Description:    This routine sends a non-specific end-of-interrupt signal to the secondary PIC.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-PutSecondaryEndOfInt    mov     al,EPICEOI                                      ;non-specific end-of-interrupt
+PutSecondaryEndOfInt    sti                                                     ;enable maskable interrupts
+                        mov     al,EPICEOI                                      ;non-specific end-of-interrupt
                         out     EPICPORTSEC,al                                  ;send EOI to secondary PIC
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ReadRealTimeClock
+;
+;       Description:    This routine gets current date time from the real-time clock.
+;
+;       In:             DS:EBX  DATETIME structure
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ReadRealTimeClock       push    esi                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    es                                              ;
+                        push    ds                                              ;store data selector ...
+                        pop     es                                              ;... in es register
+                        mov     edi,ebx                                         ;date-time structure
+                        mov     al,ERTCSECONDREG                                ;second register
+                        out     ERTCREGPORT,al                                  ;select second register
+                        in      al,ERTCDATAPORT                                 ;read second register
+                        cld                                                     ;forward strings
+                        stosb                                                   ;store second value
+                        mov     al,ERTCMINUTEREG                                ;minute register
+                        out     ERTCREGPORT,al                                  ;select minute register
+                        in      al,ERTCDATAPORT                                 ;read minute register
+                        stosb                                                   ;store minute value
+                        mov     al,ERTCHOURREG                                  ;hour register
+                        out     ERTCREGPORT,al                                  ;select hour register
+                        in      al,ERTCDATAPORT                                 ;read hour register
+                        stosb                                                   ;store hour value
+                        mov     al,ERTCWEEKDAYREG                               ;weekday register
+                        out     ERTCREGPORT,al                                  ;select weekday register
+                        in      al,ERTCDATAPORT                                 ;read weekday register
+                        stosb                                                   ;store weekday value
+                        mov     al,ERTCDAYREG                                   ;day register
+                        out     ERTCREGPORT,al                                  ;select day register
+                        in      al,ERTCDATAPORT                                 ;read day register
+                        stosb                                                   ;store day value
+                        mov     al,ERTCMONTHREG                                 ;month register
+                        out     ERTCREGPORT,al                                  ;select month register
+                        in      al,ERTCDATAPORT                                 ;read month register
+                        stosb                                                   ;store month value
+                        mov     al,ERTCYEARREG                                  ;year register
+                        out     ERTCREGPORT,al                                  ;select year register
+                        in      al,ERTCDATAPORT                                 ;read year register
+                        stosb                                                   ;store year value
+                        mov     al,ERTCCENTURYREG                               ;century register
+                        out     ERTCREGPORT,al                                  ;select century register
+                        in      al,ERTCDATAPORT                                 ;read century register
+                        stosb                                                   ;store century value
+                        mov     al,ERTCSTATUSREG                                ;status register
+                        out     ERTCREGPORT,al                                  ;select status register
+                        in      al,ERTCDATAPORT                                 ;read status register
+                        test    al,ERTCBINARYVALS                               ;test if values are binary
+                        jnz     .20                                             ;skip ahead if binary values
+                        mov     esi,ebx                                         ;date-time structure address
+                        mov     edi,ebx                                         ;date-time structure address
+                        mov     ecx,8                                           ;loop counter
+.10                     lodsb                                                   ;BCD value
+                        mov     ah,al                                           ;BCD value
+                        and     al,00001111b                                    ;low-order decimal zone
+                        and     ah,11110000b                                    ;hi-order decimal zone
+                        shr     ah,1                                            ;hi-order decimal * 8
+                        add     al,ah                                           ;low-order + hi-order * 8
+                        shr     ah,2                                            ;hi-order decimal * 2
+                        add     al,ah                                           ;low-order + hi-order * 10
+                        stosb                                                   ;replace BCD with binary
+                        loop    .10                                             ;next value
+.20                     pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     esi                                             ;
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -3685,154 +5214,119 @@ section                 conmque                                                 
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 concode vstart=05000h                                   ;labels relative to 5000h
+ConCode                 call    ConInitializeData                               ;initialize console variables
+
+                        clearConsoleScreen                                      ;clear the console screen
+                        putConsoleString czTitle                                ;display startup message
+                        putConsoleString czROMMem                               ;ROM memory label
+                        putConsoleString wzROMMemSize                           ;ROM memory amount
+                        putConsoleString czKB                                   ;Kilobytes
+                        putConsoleString czNewLine                              ;new line
+                        putConsoleString czBaseMem                              ;base memory label
+                        putConsoleString wzBaseMemSize                          ;base memory size
+                        putConsoleString czKB                                   ;Kilobytes
+                        putConsoleString czNewLine                              ;new line
+                        putConsoleString czExtendedMem                          ;extended memory label
+                        putConsoleString wzExtendedMemSize                      ;extended memory size
+                        putConsoleString czKB                                   ;Kilobytes
+                        putConsoleString czNewLine                              ;new line
+.10                     putConsoleString czPrompt                               ;display input prompt
+                        placeCursor                                             ;set CRT cursor location
+                        getConsoleString wzConsoleInBuffer,79,1,13              ;accept keyboard input
+                        putConsoleString czNewLine                              ;newline
+
+                        mov     edx,wzConsoleInBuffer                           ;console input buffer
+                        mov     ebx,wzConsoleToken                              ;token buffer
+                        call    ConTakeToken                                    ;handle console input
+                        mov     edx,wzConsoleToken                              ;token buffer
+                        call    ConDetermineCommand                             ;determine command number
+                        cmp     eax,ECONJMPTBLCNT                               ;valid command number?
+                        jb      .20                                             ;yes, branch
+
+                        putConsoleString czUnknownCommand                       ;display error message
+
+                        jmp     .10                                             ;next command
+.20                     shl     eax,2                                           ;index into jump table
+                        mov     edx,tConJmpTbl                                  ;jump table base address
+                        mov     eax,[edx+eax]                                   ;command handler routine address
+                        call    eax                                             ;call command handler
+                        jmp     .10                                             ;next command
+;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Initialize console work areas to low values.
+;       Routine:        ConInitializeData
 ;
-ConCode                 mov     edi,ECONDATA                                    ;OS console data address
+;       Description:    This routine initializes console task variables.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConInitializeData       push    ecx                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    es                                              ;
+;
+;       Initialize console work areas.
+;
+                        push    EGDTOSDATA                                      ;load OS data selector ...
+                        pop     es                                              ;... into extra segment register
+                        mov     edi,ECONDATA                                    ;OS console data address
                         xor     al,al                                           ;initialization value
                         mov     ecx,ECONDATALEN                                 ;size of OS console data
                         cld                                                     ;forward strings
                         rep     stosb                                           ;initialize data
 ;
-;       Initialize the active panel variables.
+;       Initialize heap size
 ;
-                        mov     eax,czPnlCon001                                 ;initial console panel
-                        mov     [wdConsolePanel],eax                            ;save panel template address
+                        mov     eax,EKRNHEAPSIZE                                ;heap size
+                        mov     [wdConsoleHeapSize],eax                         ;set heap size
 ;
-;       Initialize the Operator Information Area (OIA) (This is done once).
+;       Initialize MEMROOT structure
 ;
-                        push    es                                              ;save non-volatile regs
-                        push    EGDTCGA                                         ;load CGA video selector...
-                        pop     es                                              ;...into extra segment reg
-                        mov     edi,ECONROWS*ECONROWBYTES                       ;target offset
-                        mov     ecx,ECONROWDWORDS                               ;double-words per row
-                        mov     eax,ECONOIADWORD                                ;OIA attribute and space
-                        rep     stosd                                           ;reset OIA
-                        pop     es                                              ;restore non-volatile regs
-;
-;       Clear the console rows. (This is done after every attention key).
-;
-.20                     push    es                                              ;save non-volatile regs
-                        push    EGDTCGA                                         ;load CGA video selector...
-                        pop     es                                              ;...into extra segment reg
-                        xor     edi,edi                                         ;target offset
-                        mov     ecx,ECONROWS*ECONROWDWORDS                      ;double-words to clear
-                        mov     eax,ECONCLEARDWORD                              ;initialization value
-                        rep     stosd                                           ;reset screen body
-                        pop     es                                              ;restore non-volatile regs
-;
-;       Reset the input field input address, row and column.
-;
-                        xor     eax,eax                                         ;zero register
-                        mov     [wdConsoleField],eax                            ;zero field addr
-                        mov     [wdConsoleInput],eax                            ;zero input addr
-                        mov     [wbConsoleRow],al                               ;zero console row
-                        mov     [wbConsoleColumn],al                            ;zero console column
-;
-;       Load the field address from the panel. Exit loop if address is null.
-;
-                        mov     ebx,[wdConsolePanel]                            ;first field template addr
-.30                     mov     esi,[ebx]                                       ;field value addr
-                        test    esi,esi                                         ;end of panel?
-                        jz      .70                                             ;yes, exit loop
-;
-;       Load the field row, column, color and length.
-;
-                        mov     ch,[ebx+4]                                      ;row
-                        mov     cl,[ebx+5]                                      ;column
-                        mov     dh,[ebx+6]                                      ;color
-                        mov     dl,[ebx+7]                                      ;length
-;
-;       Test the row high-bit for input field indication.
-;
-                        test    ch,080h                                         ;input field?
-                        jz      .40                                             ;no, branch
-                        and     ch,07Fh                                         ;clear input field indicator
-;
-;       Save the row and column if this is the first input field.
-;
-                        mov     al,[wbConsoleRow]                               ;console row
-                        or      al,[wbConsoleColumn]                            ;already have an input field?
-                        jnz     .40                                             ;yes, branch
-                        mov     [wdConsoleField],ebx                            ;save field template addr
-                        mov     [wdConsoleInput],esi                            ;update console input buffer
-                        mov     [wbConsoleRow],ch                               ;update console row
-                        mov     [wbConsoleColumn],cl                            ;update console column
-;
-;       Clear input field contents.
-;
-                        push    ecx                                             ;save row, col
-                        mov     edi,esi                                         ;target is field data addr
-                        xor     al,al                                           ;fill byte is NUL
-                        movzx   ecx,dl                                          ;field length
-                        rep     stosb                                           ;fill field with fill byte
-                        pop     ecx                                             ;restore row, col
-;
-;       Compute the target offset.
-;
-.40                     movzx   eax,ch                                          ;row
-                        mov     ah,ECONCOLS                                     ;columns per row
-                        mul     ah                                              ;row offset
-                        add     al,cl                                           ;add column
-                        adc     ah,0                                            ;handle overflow
-                        shl     eax,1                                           ;two-bytes per column
-;
-;       Display the field contents. EAX = screen target offset, DL = length, DL = attributes
-;
-                        push    es                                              ;save non-volatile regs
-                        push    EGDTCGA                                         ;load CGA video selector...
-                        pop     es                                              ;...into extra segment reg
-                        mov     edi,eax                                         ;target offset
-                        movzx   ecx,dl                                          ;length
-                        mov     ah,dh                                           ;color
-.50                     lodsb                                                   ;field character
-                        test    al,al                                           ;end of value?
-                        jz      .60                                             ;yes, branch
-                        stosw                                                   ;store character and color
-                        loop    .50                                             ;next character
-.60                     pop     es                                              ;restore non-volatile regs
-;
-;       Next Field.
-;
-                        add     ebx,8                                           ;next field addr
-                        jmp     short .30                                       ;next field
-;
-;       Place the cursor at the input field.
-;
-.70                     mov     ah,[wbConsoleRow]                               ;field row
-                        mov     al,[wbConsoleColumn]                            ;field column
-                        placeCursor                                             ;position the cursor
-;
-;       Get command.
-;
-                        mov     esi,[wdConsoleField]                            ;input field template addr
-                        mov     edx,[wdConsoleInput]                            ;target buffer addr
+                        mov     edi,wsConsoleMemRoot                            ;memory root structure address
+                        mov     eax,EKRNHEAPBASE                                ;base address of heap storage
                         xor     ecx,ecx                                         ;zero register
-                        mov     cl,[esi+7]                                      ;maximum chars to accept
-                        mov     bh,1                                            ;echo to terminal
-                        mov     bl,13                                           ;terminating character
-                        getConsoleString                                        ;accept keyboard input
+                        mov     cl,4                                            ;count
+                        rep     stosd                                           ;store first/last contig and free addrs
+                        xor     eax,eax                                         ;zero register
+                        stosd                                                   ;zero first task block
+                        stosd                                                   ;zero last task block
 ;
-;       Take the first token entered.
+;       Initialize MEMBLOCK structure at EMEMBASE
 ;
-                        mov     edx,[wdConsoleInput]                            ;console input buffer addr
-                        mov     ebx,wzConsoleToken                              ;token buffer
-                        call    ConTakeToken                                    ;take first command token
+                        mov     edi,EKRNHEAPBASE                                ;memory block structure address
+                        mov     eax,EMEMFREECODE                                ;free memory signature
+                        stosd                                                   ;store signature
+                        mov     eax,EKRNHEAPSIZE                                ;heap size
+                        stosd                                                   ;store block size
+                        xor     ecx,ecx                                         ;zero register
+                        mov     cl,6                                            ;count
+                        xor     eax,eax                                         ;zero register
+                        rep     stosd                                           ;zero owner, reserved, pointers
 ;
-;       Evaluate token.
+;       Read memory sizes from ROM
 ;
-                        mov     edx,wzConsoleToken                              ;token buffer
-                        call    ConDetermineCommand                             ;determine if this is a command
-                        cmp     eax,ECONJMPTBLCNT                               ;command number in range?
-                        jnb     .80                                             ;no, branch
-                        shl     eax,2                                           ;convert number to array offset
-                        mov     edx,tConJmpTbl                                  ;command handler address table base
-                        mov     eax,[edx+eax]                                   ;command handler address
-                        call    eax                                             ;handler command
+                        getROMMemSize                                           ;get ROM memory size
+                        mov     [wdROMMemSize],eax                              ;bytes reported by ROM
+                        mov     ecx,eax                                         ;integer param
+                        mov     edx,wzROMMemSize                                ;output buffer param
+                        mov     bh,3                                            ;no leading zeros; thousands grouping
+                        unsignedToDecimalString                                 ;build ASCIIZ decimal string
+                        getBaseMemSize                                          ;get base RAM count from CMOS
+                        mov     [wdBaseMemSize],eax                             ;save base RAM count
+                        mov     ecx,eax                                         ;integer param
+                        mov     edx,wzBaseMemSize                               ;output buffer param
+                        mov     bh,3                                            ;no leading zeros; thousands grouping
+                        unsignedToDecimalString                                 ;build ASCIIZ decimal string
+                        getExtendedMemSize                                      ;get extended RAM count from CMOS
+                        mov     [wdExtendedMemSize],eax                         ;save base RAM count
+                        mov     ecx,eax                                         ;integer param
+                        mov     edx,wzExtendedMemSize                           ;output buffer param
+                        mov     bh,3                                            ;no leading zeros; thousands grouping
+                        unsignedToDecimalString                                 ;build ASCIIZ decimal string
 ;
-;       Refresh Panel.
+;       Restore and return.
 ;
-.80                      jmp     .20                                            ;refresh panel
+                        pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     ecx                                             ;
+                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        ConTakeToken
@@ -3898,7 +5392,9 @@ ConDetermineCommand     push    ebx                                             
                         push    ecx                                             ;
                         push    esi                                             ;
                         push    edi                                             ;
+
                         upperCaseString                                         ;upper-case string at EDX
+
                         mov     esi,tConCmdTbl                                  ;commands table
                         xor     edi,edi                                         ;intialize command number
                         cld                                                     ;forward strings
@@ -3907,7 +5403,9 @@ ConDetermineCommand     push    ebx                                             
                         jecxz   .20                                             ;branch if end of table
                         mov     ebx,esi                                         ;table entry address
                         add     esi,ecx                                         ;next table entry address
+
                         compareMemory                                           ;compare byte arrays at EDX, EBX
+
                         jecxz   .20                                             ;branch if equal
                         inc     edi                                             ;increment command nbr
                         jmp     .10                                             ;repeat
@@ -3916,6 +5414,39 @@ ConDetermineCommand     push    ebx                                             
                         pop     esi                                             ;
                         pop     ecx                                             ;
                         pop     ebx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConClear
+;
+;       Description:    This routine handles the CLEAR command and its CLS alias.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConClear                clearConsoleScreen                                      ;clear console screen
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConDate
+;
+;       Description:    This routine handles the DATE command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConDate                 readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
+                        putDateString     wsConsoleDateTime,wzConsoleOutBuffer  ;format date string
+                        putConsoleString  wzConsoleOutBuffer                    ;write string to console
+                        putConsoleString  czNewLine                             ;write newline to console
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConDay
+;
+;       Description:    This routine handles the DAY command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConDay                  readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
+                        putDayString      wsConsoleDateTime,wzConsoleOutBuffer  ;format day string
+                        putConsoleString  wzConsoleOutBuffer                    ;write string to console
+                        putConsoleString  czNewLine                             ;write newline to console
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -3928,6 +5459,67 @@ ConExit                 resetSystem                                             
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;       Routine:        ConFree
+;
+;       Description:    This routine handles the FREE command.
+;
+;       Input:          wzConsoleInBuffer contains parameter(s)
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConFree                 push    ebx                                             ;save non-volatile regs
+                        push    ecx                                             ;
+                        push    esi                                             ;
+                        push    edi                                             ;
+;
+;       Get address parameter
+;
+                        mov     edx,wzConsoleInBuffer                           ;console input buffer address (param)
+                        mov     ebx,wzConsoleToken                              ;console command token address
+                        call    ConTakeToken                                    ;take first param as token
+;
+;       Convert input parameter from hexadecimal string to binary
+;
+                        cmp     byte [wzConsoleToken],0                         ;token found?
+                        je      .10                                             ;no, branch
+                        mov     edx,wzConsoleToken                              ;first param as token address
+
+                        hexadecimalToUnsigned                                   ;convert string token to unsigned
+
+                        test    eax,eax                                         ;valid parameter?
+                        jz      .10                                             ;no, branch
+;
+;       Free memory block
+;
+                        freeMemory eax                                          ;free memory
+
+                        cmp     eax,-1                                          ;memory freed?
+                        je      .10                                             ;no, branch
+;
+;       Indicate memory freed
+;
+                        putConsoleString czOK                                   ;indicate success
+;
+;       Restore and return
+;
+.10                     pop     edi                                             ;restore non-volatile regs
+                        pop     esi                                             ;
+                        pop     ecx                                             ;
+                        pop     ebx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConHour
+;
+;       Description:    This routine Handles the HOUR command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConHour                 readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
+                        putHourString     wsConsoleDateTime,wzConsoleOutBuffer  ;format hour string
+                        putConsoleString  wzConsoleOutBuffer                    ;write string to console
+                        putConsoleString  czNewLine                             ;write newline to console
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;       Routine:        ConInt6
 ;
 ;       Description:    This routine issues an interrupt 6 to exercise the interrupt handler.
@@ -3935,10 +5527,58 @@ ConExit                 resetSystem                                             
 ;-----------------------------------------------------------------------------------------------------------------------
 ConInt6                 ud2                                                     ;raise bad opcode exception
                         ret                                                     ;return (not executed)
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConMalloc
+;
+;       Description:    This routine handles the MALLOC command.
+;
+;       Input:          wzConsoleInBuffer contains parameter(s)
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConMalloc               push    ebx                                             ;save non-volatile regs
+                        push    ecx                                             ;
+                        push    esi                                             ;
+                        push    edi                                             ;
+;
+;       Get size parameter
+;
+                        mov     edx,wzConsoleInBuffer                           ;console input buffer address (params)
+                        mov     ebx,wzConsoleToken                              ;console command token address
+                        call    ConTakeToken                                    ;take first param as token
+;
+;       Convert input parameter from decimal string to binary
+;
+                        cmp     byte [wzConsoleToken],0                         ;token found?
+                        je      .10                                             ;no, branch
+                        mov     edx,wzConsoleToken                              ;first param as token address
 
-ConMain                 mov     eax,czPnlCon001                                 ;initial console panel
-                        mov     [wdConsolePanel],eax                            ;save panel template address
-                        ret
+                        decimalToUnsigned                                       ;convert string token to unsigned
+
+                        test    eax,eax                                         ;valid parameter?
+                        jz      .10                                             ;no, branch
+;
+;       Allocate memory block
+;
+                        allocateMemory eax                                      ;allocate memory
+
+                        test    eax,eax                                         ;memory allocated?
+                        jz      .10                                             ;no, branch
+;
+;       Report allocated memory block address
+;
+                        mov     edx,wzConsoleOutBuffer                          ;output buffer address
+                        mov     ecx,eax                                         ;memory address
+
+                        unsignedToHexadecimal                                   ;convert memory address to hex
+                        putConsoleString wzConsoleOutBuffer                     ;display memory address
+                        putConsoleString czNewLine                              ;display new line
+
+.10                     pop     edi                                             ;restore non-volatile regs
+                        pop     esi                                             ;
+                        pop     ecx                                             ;
+                        pop     ebx                                             ;
+                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        ConMem
@@ -3960,7 +5600,9 @@ ConMem                  push    ebx                                             
                         cmp     byte [wzConsoleToken],0                         ;token found?
                         je      .10                                             ;no, branch
                         mov     edx,wzConsoleToken                              ;first param as token address
+
                         hexadecimalToUnsigned                                   ;convert string token to unsigned
+
                         mov     [wdConsoleMemBase],eax                          ;save console memory address
 ;
 ;       Setup source address and row count.
@@ -3968,24 +5610,25 @@ ConMem                  push    ebx                                             
 .10                     mov     esi,[wdConsoleMemBase]                          ;source memory address
                         xor     ecx,ecx                                         ;zero register
                         mov     cl,16                                           ;row count
-                        mov     ebx,wzConsoleMemBuf0                            ;output buffer address
 ;
 ;       Start the row with the source address in hexadecimal.
 ;
 .20                     push    ecx                                             ;save remaining rows
-                        mov     edi,ebx                                         ;output buffer address
+                        mov     edi,wzConsoleOutBuffer                          ;output buffer address
                         mov     edx,edi                                         ;output buffer address
                         mov     ecx,esi                                         ;console memory address
+
                         unsignedToHexadecimal                                   ;convert unsigned address to hex string
+
                         add     edi,8                                           ;end of memory addr hexnum
+                        mov     al,' '                                          ;ascii space
+                        stosb                                                   ;store delimiter
 ;
 ;       Output 16 ASCII hexadecimal byte values for the row.
 ;
                         xor     ecx,ecx                                         ;zero register
                         mov     cl,16                                           ;loop count
 .30                     push    ecx                                             ;save loop count
-                        mov     al,' '                                          ;ascii space
-                        stosb                                                   ;store delimiter
                         lodsb                                                   ;memory byte
                         mov     ah,al                                           ;memory byte
                         shr     al,4                                            ;high-order in bits 3-0
@@ -4001,15 +5644,13 @@ ConMem                  push    ebx                                             
                         jb      .50                                             ;yes, skip ahead
                         add     al,7                                            ;adjust ascii for 'A'-'F'
 .50                     stosb                                                   ;store ascii hexadecimal of low-order
+                        mov     al,' '                                          ;ascii space
+                        stosb                                                   ;store ascii space delimiter
                         pop     ecx                                             ;loop count
                         loop    .30                                             ;next
 ;
 ;       Output printable ASCII character section for the row.
 ;
-                        mov     al,' '                                          ;ascii space
-                        stosb                                                   ;store delimiter
-                        mov     al,' '                                          ;ascii space
-                        stosb                                                   ;store delimiter
                         sub     esi,16                                          ;reset source pointer
                         mov     cl,16                                           ;loop count
 .60                     lodsb                                                   ;source byte
@@ -4020,94 +5661,373 @@ ConMem                  push    ebx                                             
 .70                     mov     al,' '                                          ;display space instead of printable
 .80                     stosb                                                   ;store printable ascii byte
                         loop    .60                                             ;next source byte
+                        xor     al,al                                           ;nul-terminator
+                        stosb                                                   ;terminate output line
 ;
 ;       Display constructed output buffer and newline.
 ;
-                        add     ebx,80                                          ;next contiguous output buffer addr
+                        putConsoleString wzConsoleOutBuffer                     ;display constructed output
+                        putConsoleString czNewLine                              ;display new line
 ;
 ;       Repeat until all lines displayed and preserve source address.
 ;
                         pop     ecx                                             ;remaining rows
                         loop    .20                                             ;next row
                         mov     [wdConsoleMemBase],esi                          ;update console memory address
-;
-;       Update the current panel identifier.
-;
-                        mov     eax,czPnlMem001                                 ;initial console panel
-                        mov     [wdConsolePanel],eax                            ;save panel template address
-;
-;       Restore and return.
-;
                         pop     edi                                             ;restore regs
                         pop     esi                                             ;
                         pop     ebx                                             ;
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Constants
+;       Routine:        ConMinute
+;
+;       Description:    This routine Handles the MINUTE command.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+ConMinute               readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
+                        putMinuteString   wsConsoleDateTime,wzConsoleOutBuffer  ;format minute string
+                        putConsoleString  wzConsoleOutBuffer                    ;write string to console
+                        putConsoleString  czNewLine                             ;write newline to console
+                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Panels
+;       Routine:        ConMonth
 ;
-;       Notes:          1.      Each field MUST have an address of a constant or an input field.
-;                       2.      The constant text or input field MUST be at least the length of the field.
-;                       3.      Field constant text or field values MUST be comprised of printable characters.
+;       Description:    This routine Handles the MONTH command.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-czPnlCon001             dd      czFldPnlIdCon001                                ;field text
-                        db      00,00,02h,06                                    ;flags+row, col, attr, length
-                        dd      czFldTitleCon001
-                        db      00,30,07h,20
-                        dd      czFldDatTmCon001
-                        db      00,63,02h,17
-                        dd      czFldPrmptCon001
-                        db      23,00,07h,01
-                        dd      wzConsoleInBuffer
-                        db      128+23,01,07h,79
-                        dd      0                                               ;end of panel
-czPnlMem001             dd      czFldPnlIdMem001                                ;field text
-                        db      00,00,02h,06                                    ;flags+row, col, attr, length
-                        dd      czFldTitleMem001
-                        db      00,33,07h,14
-                        dd      wzConsoleMemBuf0
-                        db      03,00,07h,80
-                        dd      wzConsoleMemBuf1
-                        db      04,00,07h,80
-                        dd      wzConsoleMemBuf2
-                        db      05,00,07h,80
-                        dd      wzConsoleMemBuf3
-                        db      06,00,07h,80
-                        dd      wzConsoleMemBuf4
-                        db      07,00,07h,80
-                        dd      wzConsoleMemBuf5
-                        db      08,00,07h,80
-                        dd      wzConsoleMemBuf6
-                        db      09,00,07h,80
-                        dd      wzConsoleMemBuf7
-                        db      10,00,07h,80
-                        dd      wzConsoleMemBuf8
-                        db      11,00,07h,80
-                        dd      wzConsoleMemBuf9
-                        db      12,00,07h,80
-                        dd      wzConsoleMemBufA
-                        db      13,00,07h,80
-                        dd      wzConsoleMemBufB
-                        db      14,00,07h,80
-                        dd      wzConsoleMemBufC
-                        db      15,00,07h,80
-                        dd      wzConsoleMemBufD
-                        db      16,00,07h,80
-                        dd      wzConsoleMemBufE
-                        db      17,00,07h,80
-                        dd      wzConsoleMemBufF
-                        db      18,00,07h,80
-                        dd      czFldPrmptCon001
-                        db      23,00,07h,01
-                        dd      wzConsoleInBuffer
-                        db      128+23,01,07h,79
-                        dd      0                                               ;end of panel
+ConMonth                readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
+                        putMonthString    wsConsoleDateTime,wzConsoleOutBuffer  ;format month string
+                        putConsoleString  wzConsoleOutBuffer                    ;write string to console
+                        putConsoleString  czNewLine                             ;write newline to console
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConMonthName
+;
+;       Description:    This routine Handles the MONTH.NAME command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConMonthName            readRealTimeClock  wsConsoleDateTime                    ;read RTC data into structure
+                        putMonthNameString wsConsoleDateTime,wzConsoleOutBuffer ;format month name string
+                        putConsoleString   wzConsoleOutBuffer                   ;write string to console
+                        putConsoleString   czNewLine                            ;write newline to console
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConPCIProbe
+;
+;       Description:    This routine handles the PCIProbe command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConPCIProbe             push    ebx                                             ;save non-volatile regs
+;
+;       Setup addressability.
+;
+                        mov     ebx,wsConsolePCI                                ;PCI structure address
+;
+;       Initialize PCI variables.
+;
+                        xor     eax,eax                                         ;zero register
+                        mov     [ebx+PCI.configdata],eax                        ;initialize config-data
+                        mov     [ebx+PCI.selector],eax                          ;initialize selector
+                        mov     [ebx+PCI.bus],al                                ;initialize bus
+                        mov     [ebx+PCI.device],al                             ;initialize device
+                        mov     [ebx+PCI.function],al                           ;initialize function
+                        mov     [ebx+PCI.register],al                           ;initialize register
+                        mov     [ebx+PCI.bar0],eax                              ;initialize base address reg 0
+                        mov     [ebx+PCI.bar1],eax                              ;initialize base address reg 1
+                        mov     [ebx+PCI.bar2],eax                              ;initialize base address reg 2
+                        mov     [ebx+PCI.bar3],eax                              ;initialize base address reg 3
+                        mov     [ebx+PCI.bar4],eax                              ;initialize base address reg 4
+                        mov     [ebx+PCI.bar5],eax                              ;initialize base address reg 5
+;                       mov     [wbConsolePCIBus],al                            ;initialize bus
+;                       mov     [wbConsolePCIDevice],al                         ;initialize device
+;                       mov     [wbConsolePCIFunction],al                       ;initialize function
+;
+;       Construct PCI selector.
+;
+.10                     mov     ah,[ebx+PCI.bus]                                ;AH = bbbb bbbb
+                        mov     dl,[ebx+PCI.device]                             ;DL = ???d dddd
+;.10                    mov     ah,[wbConsolePCIBus]                            ;AH = bbbb bbbb
+;                       mov     dl,[wbConsolePCIDevice]                         ;DL = ???d dddd
+                        shl     dl,3                                            ;DL = dddd d000
+                        mov     al,[ebx+PCI.function]                           ;AL = ???? ?fff
+;                       mov     al,[wbConsolePCIFunction]                       ;AL = ???? ?fff
+                        and     al,007h                                         ;AL = 0000 0fff
+                        or      al,dl                                           ;AL = dddd dfff
+                        movzx   eax,ax                                          ;0000 0000 0000 0000 bbbb bbbb dddd dfff
+                        shl     eax,8                                           ;0000 0000 bbbb bbbb dddd dfff 0000 0000
+                        or      eax,80000000h                                   ;1000 0000 bbbb bbbb dddd dfff 0000 0000
+                        mov     [ebx+PCI.selector],eax                          ;save selector
+;                       mov     [wdConsolePCISelector],eax                      ;save selector
+;
+;       Read PCI data register.
+;
+                        mov     dx,EPCIPORTCONFIGADDR                           ;PCI config address port
+;                       mov     dx,0cf8h                                        ;register port
+                        out     dx,eax                                          ;select device
+                        mov     dx,EPCIPORTCONFIGDATA                           ;PCI config data port
+;                       mov     dx,0cfch                                        ;data port
+                        in      eax,dx                                          ;read register data
+                        mov     [ebx+PCI.configdata],eax                        ;save config data
+;                       mov     [wdConsolePCIData],eax                          ;save data
+;
+;                       interpret PCI data value and display finding
+;
+                        cmp     eax,0ffffffffh                                  ;not defined?
+                        je      .20                                             ;yes, branch
+                        mov     edx,wzConsoleToken                              ;output buffer
+                        call    ConBuildPCIIdent                                ;build PCI bus, device, function ident
+
+                        putConsoleString wzConsoleToken                         ;display bus as decimal
+
+                        call    ConInterpretPCIData                             ;update flags based on data
+
+                        putConsoleString czSpace
+                        putConsoleString [wdConsolePCIVendorStr]
+                        putConsoleString czSpace
+                        putConsoleString [wdConsolePCIChipStr]
+                        putConsoleString czNewLine                              ;display new line
+;
+;                       step to next function, device, bus
+;
+.20                     inc     byte [ebx+PCI.function]                         ;next function
+                        cmp     byte [ebx+PCI.function],8                       ;at limit?
+;.20                    inc     byte [wbConsolePCIFunction]                     ;next function
+;                       cmp     byte [wbConsolePCIFunction],8                   ;at limit?
+                        jb      .10                                             ;no, continue
+                        mov     byte [ebx+PCI.function],0                       ;zero function
+                        inc     byte [ebx+PCI.device]                           ;next device
+                        cmp     byte [ebx+PCI.device],32                        ;at limit?
+;                       mov     byte [wbConsolePCIFunction],0                   ;zero function
+;                       inc     byte [wbConsolePCIDevice]                       ;next device
+;                       cmp     byte [wbConsolePCIDevice],32                    ;at limit?
+                        jb      .10                                             ;no, continue
+                        mov     byte [ebx+PCI.device],0                         ;zero device
+                        inc     byte [ebx+PCI.bus]                              ;next bus
+                        cmp     byte [ebx+PCI.bus],8                            ;at limit?
+;                       mov     byte [wbConsolePCIDevice],0                     ;zero device
+;                       inc     byte [wbConsolePCIBus]                          ;next bus
+;                       cmp     byte [wbConsolePCIBus],8                        ;at limit?
+                        jb      .10                                             ;no, continue
+;
+;       Restore and return.
+;
+                        pop     ebx                                             ;restore non-volatile regs
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConBuildPCIIdent
+;
+;       Description:    This routine constructs a PCI identification string from the current PCI Bus, Device, and
+;                       Function code values.
+;
+;       In:             DS:EBX  PCI structure address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConBuildPCIIdent        push    edi                                             ;save non-volatile regs
+                        mov     edi,edx                                         ;output buffer address
+                        mov     al,[ebx+PCI.bus]                                ;current PCI bus (0-255)
+;                       mov     al,[wbConsolePCIBus]                            ;current PCI bus (0-255)
+                        xor     ah,ah                                           ;zero high-order dividend
+                        mov     cl,100                                          ;divisor (10^2)
+                        div     cl                                              ;AL=100's, AH=bus MOD 100
+                        or      al,30h                                          ;apply ASCII zone
+                        cld                                                     ;forward strings
+                        stosb                                                   ;store 100's digit
+                        mov     al,ah                                           ;bus MOD 100
+                        xor     ah,ah                                           ;zero high-order dividend
+                        mov     cl,10                                           ;divisor (10^1)
+                        div     cl                                              ;AL=10's, AH=1's
+                        or      ax,3030h                                        ;apply ASCII zone
+                        stosw                                                   ;store 10's and 1's
+                        mov     al,EASCIIPERIOD                                 ;ASCII period delimiter
+                        stosb                                                   ;store delimiter
+                        mov     al,[ebx+PCI.device]                             ;current PCI device (0-15)
+;                       mov     al,[wbConsolePCIDevice]                         ;current PCI device (0-15)
+                        xor     ah,ah                                           ;zero high order dividend
+                        mov     cl,10                                           ;divisor (10^1)
+                        div     cl                                              ;AL=10's, AH=1's
+                        or      ax,3030h                                        ;apply ASCII zone
+                        stosw                                                   ;store 10's and 1's
+                        mov     al,EASCIIPERIOD                                 ;ASCII period delimiter
+                        stosb                                                   ;store delimiter
+                        mov     al,[ebx+PCI.function]                           ;current PCI function (0-7)
+;                       mov     al,[wbConsolePCIFunction]                       ;current PCI function (0-7)
+                        or      al,30h                                          ;apply ASCII zone
+                        stosb                                                   ;store 1's
+                        xor     al,al                                           ;null terminator
+                        stosb                                                   ;store terminator
+                        pop     edi                                             ;restore non-volatile regs
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConInterpretPCIData
+;
+;       Description:    This routine interprets the PCI vendor and device IDs.
+;
+;       In:             DS:EBX  PCI structure address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConInterpretPCIData     mov     eax,czApple
+                        cmp     word [ebx+PCI.configdata_lo],EPCIVENDORAPPLE    ;Apple?
+;                       cmp     word [wwConsolePCIVendor],EPCIVENDORAPPLE       ;Apple?
+                        jne     .10                                             ;no, branch
+                        mov     edx,czUSBController
+                        cmp     word [ebx+PCI.configdata_hi],EPCIAPPLEUSB       ;USB?
+;                       cmp     word [wwConsolePCIChip],EPCIAPPLEUSB            ;USB?
+                        je      .80                                             ;yes, branch
+                        mov     edx,czOther                                     ;other
+                        jmp     .80                                             ;continue
+.10                     mov     eax,czIntel                                     ;Intel
+                        cmp     word [ebx+PCI.configdata_lo],EPCIVENDORINTEL    ;Intel?
+;                       cmp     word [wwConsolePCIVendor],EPCIVENDORINTEL       ;Intel?
+                        jne     .20                                             ;no, branch
+                        mov     edx,czPro1000MT                                 ;Pro/1000 MT
+                        cmp     word [ebx+PCI.configdata_hi],EPCIINTELPRO1000MT ;Pro/1000 MT?
+;                       cmp     word [wwConsolePCIChip],EPCIINTELPRO1000MT      ;Pro/1000 MT?
+                        je      .80                                             ;yes, branch
+                        mov     edx,czPCIAndMem                                 ;PCI and Memory
+                        cmp     word [ebx+PCI.configdata_hi],EPCIINTELPCIMEM    ;PCI and Memory?
+;                       cmp     word [wwConsolePCIChip],EPCIINTELPCIMEM         ;PCI and Memory?
+                        je      .80                                             ;yes, branch
+                        mov     edx,czAurealAD1881                              ;Aureal 1881 SOUNDMAX
+                        cmp     word [ebx+PCI.configdata_hi],EPCIINTELAD1881    ;Aureal 1881 SOUNDMAX?
+;                       cmp     word [wwConsolePCIChip],EPCIINTELAD1881         ;Aureal 1881 SOUNDMAX?
+                        je      .80                                             ;yes, branch
+                        mov     edx,czPIIX3PCItoIDEBridge                       ;PIIX3 PCI-to-IDE Bridge
+                        cmp     word [ebx+PCI.configdata_hi],EPCIINTELPIIX3     ;PIIX3 PCI-to-IDE Bridge?
+;                       cmp     word [wwConsolePCIChip],EPCIINTELPIIX3          ;PIIX3 PCI-to-IDE Bridge?
+                        je      .80                                             ;yes, branch
+                        mov     edx,cz82371ABBusMaster                          ;82371AB Bus Master
+                        cmp     word [ebx+PCI.configdata_hi],EPCIINTEL82371AB   ;82371AB Bua Master?
+;                       cmp     word [wwConsolePCIChip],EPCIINTEL82371AB        ;82371AB Bus Master?
+                        je      .80                                             ;yes, branch
+                        mov     edx,czPIIX4PowerMgmt                            ;PIIX4/4E/4M Power Mgmt Controller
+                        cmp     word [ebx+PCI.configdata_hi],EPCIINTELPIIX4     ;PIIX4/4E/4M Power Mgmt Controller?
+;                       cmp     word [wwConsolePCIChip],EPCIINTELPIIX4          ;PIIX4/4E/4M Power Mgmt Controller?
+                        je      .80                                             ;yes, branch
+                        mov     edx,czOther                                     ;other
+                        jmp     .80                                             ;continue
+.20                     mov     eax,czOracle                                    ;Oracle
+                        cmp     word [ebx+PCI.configdata_lo],EPCIVENDORORACLE   ;Oracle?
+;                       cmp     word [wwConsolePCIVendor],EPCIVENDORORACLE      ;Oracle?
+                        jne     .30                                             ;no, branch
+                        mov     edx,czVirtualBoxGA                              ;VirtulaBox Graphics Adapter
+                        cmp     word [ebx+PCI.configdata_hi],EPCIORACLEVBOXGA   ;VirtualBox Graphics Adapter?
+;                       cmp     word [wwConsolePCIChip],EPCIORACLEVBOXGA        ;VirtualBox Graphics Adapter?
+                        je      .80                                             ;yes, branch
+                        mov     edx,czVirtualBoxDevice                          ;VirtualBox Device
+                        cmp     word [ebx+PCI.configdata_hi],EPCIORACLEVBOXDEVICE       ;VirtualBox Device?
+;                       cmp     word [wwConsolePCIChip],EPCIORACLEVBOXDEVICE    ;VirtualBox Device?
+                        je      .80                                             ;yes, branch
+                        mov     edx,czOther                                     ;other
+                        jmp     .80                                             ;continue
+.30                     mov     eax,czOther                                     ;other
+                        mov     edx,czOther                                     ;other
+.80                     mov     [wdConsolePCIVendorStr],eax                     ;save vendor string
+                        mov     [wdConsolePCIChipStr],edx                       ;save chip string
+;
+;       Set hardware flag if supported adapter found.
+;
+                        cmp     word [ebx+PCI.configdata_hi],EPCIINTELPRO1000MT ;Pro/1000 MT Ethernet Adpater
+;                       cmp     word [wwConsolePCIChip],EPCIINTELPRO1000MT      ;Pro/1000 MT Ethernet Adapter
+                        jne     .90                                             ;no, branch
+                        or      byte [wbConsoleHWFlags],EHWETHERNET             ;ethernet adapter found
+                        mov     eax,[ebx+PCI.selector]                          ;PCI selector
+;                       mov     eax,[wdConsolePCISelector]                      ;PCI selector
+                        mov     [wdConsoleEthernetDevice],eax                   ;save as ethernet device selector
+.90                     ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConSecond
+;
+;       Description:    This routine Handles the SECOND command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConSecond               readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
+                        putSecondString   wsConsoleDateTime,wzConsoleOutBuffer  ;format second string
+                        putConsoleString  wzConsoleOutBuffer                    ;write string to console
+                        putConsoleString  czNewLine                             ;write newline to console
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConTime
+;
+;       Description:    This routine Handles the TIME command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConTime                 readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
+                        putTimeString     wsConsoleDateTime,wzConsoleOutBuffer  ;format time string
+                        putConsoleString  wzConsoleOutBuffer                    ;write string to console
+                        putConsoleString  czNewLine                             ;write newline to console
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConVersion
+;
+;       Description:    This routine handles the VERSION command and its alias, VER.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConVersion              putConsoleString czTitle                                ;display version message
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConWeekday
+;
+;       Description:    This routine handles the WEEKDAY command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConWeekday              readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
+                        putWeekdayString  wsConsoleDateTime,wzConsoleOutBuffer  ;format weekday string
+                        putConsoleString  wzConsoleOutBuffer                    ;write string to console
+                        putConsoleString  czNewLine                             ;write newline to console
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConWeekdayName
+;
+;       Description:    This routine Handles the WEEKDAY.NAME command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConWeekdayName          readRealTimeClock    wsConsoleDateTime                          ;read RTC data into structure
+                        putWeekdayNameString wsConsoleDateTime,wzConsoleOutBuffer       ;format day name string
+                        putConsoleString     wzConsoleOutBuffer                         ;write string to console
+                        putConsoleString     czNewLine                                  ;write newline to console
+                        ret                                                             ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConYear
+;
+;       Description:    This routine Handles the YEAR command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConYear                 readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
+                        putYearString     wsConsoleDateTime,wzConsoleOutBuffer  ;format year string
+                        putConsoleString  wzConsoleOutBuffer                    ;write string to console
+                        putConsoleString  czNewLine                             ;write newline to console
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConYearIsLeap
+;
+;       Description:    This routine handles the YEAR.ISLEAP command
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConYearIsLeap           readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
+                        isLeapYear        wsConsoleDateTime                     ;indicate if year is leap year
+
+                        jecxz   .10                                             ;branch if not leap
+
+                        putConsoleString  czYearIsLeap                          ;display year is leap message
+
+                        jmp     .20                                             ;continue
+
+.10                     putConsoleString  czYearIsNotLeap                       ;display year is not leap mesage
+.20                     ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Tables
@@ -4117,38 +6037,97 @@ czPnlMem001             dd      czFldPnlIdMem001                                
                                                                                 ;  Command Jump Table
                                                                                 ;---------------------------------------
 tConJmpTbl              equ     $                                               ;command jump table
+                        dd      ConWeekdayName  - ConCode                       ;weekday.name command routine offset
+                        dd      ConYearIsLeap   - ConCode                       ;year.isleap command routine offset
+                        dd      ConMonthName    - ConCode                       ;month.name command routine offset
+                        dd      ConPCIProbe     - ConCode                       ;pciprobe command routine offset
                         dd      ConExit         - ConCode                       ;shutdown command routine offset
+                        dd      ConVersion      - ConCode                       ;version command routine offset
+                        dd      ConWeekday      - ConCode                       ;weekday command routine offset
+                        dd      ConMalloc       - ConCode                       ;malloc command routine offset
                         dd      ConMem          - ConCode                       ;memory command routine offset
+                        dd      ConMinute       - ConCode                       ;minute command routine offset
+                        dd      ConSecond       - ConCode                       ;second command routine offset
+                        dd      ConClear        - ConCode                       ;clear command routine offset
+                        dd      ConPCIProbe     - ConCode                       ;lspci command routine offset
+                        dd      ConMonth        - ConCode                       ;month command routine offset
+                        dd      ConDate         - ConCode                       ;date command routine offset
                         dd      ConExit         - ConCode                       ;exit command routine offset
+                        dd      ConFree         - ConCode                       ;free command routine offset
+                        dd      ConHour         - ConCode                       ;hour command routine offset
                         dd      ConInt6         - ConCode                       ;int6 command routine offset
-                        dd      ConMain         - ConCode                       ;main command routine offset
                         dd      ConExit         - ConCode                       ;quit command routine offset
+                        dd      ConTime         - ConCode                       ;time command routine offset
+                        dd      ConYear         - ConCode                       ;year command routine offset
+                        dd      ConClear        - ConCode                       ;cls command routine offset
+                        dd      ConDay          - ConCode                       ;day command routine offset
                         dd      ConMem          - ConCode                       ;mem command routine offset
+                        dd      ConVersion      - ConCode                       ;ver command routine offset
 ECONJMPTBLL             equ     ($-tConJmpTbl)                                  ;table length
 ECONJMPTBLCNT           equ     ECONJMPTBLL/4                                   ;table entries
                                                                                 ;---------------------------------------
                                                                                 ;  Command Name Table
                                                                                 ;---------------------------------------
 tConCmdTbl              equ     $                                               ;command name table
+                        db      13,"WEEKDAY.NAME",0                             ;weekday.name command
+                        db      12,"YEAR.ISLEAP",0                              ;year.isleap command
+                        db      11,"MONTH.NAME",0                               ;month.name command
+                        db      9,"PCIPROBE",0                                  ;pciprobe command
                         db      9,"SHUTDOWN",0                                  ;shutdown command
+                        db      8,"VERSION",0                                   ;version command
+                        db      8,"WEEKDAY",0                                   ;weekday command
+                        db      7,"MALLOC",0                                    ;malloc command
                         db      7,"MEMORY",0                                    ;memory command
+                        db      7,"MINUTE",0                                    ;minute command
+                        db      7,"SECOND",0                                    ;second command
+                        db      6,"CLEAR",0                                     ;clear command
+                        db      6,"LSPCI",0                                     ;lspci command (pciprobe alias)
+                        db      6,"MONTH",0                                     ;month command
+                        db      5,"DATE",0                                      ;date command
                         db      5,"EXIT",0                                      ;exit command
+                        db      5,"FREE",0                                      ;free command
+                        db      5,"HOUR",0                                      ;hour command
                         db      5,"INT6",0                                      ;int6 command
-                        db      5,"MAIN",0                                      ;main command
                         db      5,"QUIT",0                                      ;quit command
+                        db      5,"TIME",0                                      ;time command
+                        db      5,"YEAR",0                                      ;year command
+                        db      4,"CLS",0                                       ;cls command
+                        db      4,"DAY",0                                       ;day command
                         db      4,"MEM",0                                       ;mem command
+                        db      4,"VER",0                                       ;ver command
                         db      0                                               ;end of table
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Strings
+;       Constants
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-czFldPnlIdCon001        db      "MAIN01"                                        ;main console panel id
-czFldPnlIdMem001        db      "MEM001"                                        ;memory panel id
-czFldTitleCon001        db      "CustomOS Version 1.0"                          ;main console panel title
-czFldTitleMem001        db      "Memory Display"                                ;memory panel title
-czFldDatTmCon001        db      "DD-MMM-YYYY HH:MM"                             ;panel date and time template
-czFldPrmptCon001        db      ":"                                             ;command prompt
+czApple                 db      "Apple",0                                       ;vendor name string
+czAurealAD1881          db      "Aureal AD1881 SOUNDMAX",0                      ;soundmax string
+czBaseMem               db      "Base memory: ",0                               ;base memory from BIOS
+czEthernetAdapterFound  db      "Ethernet adapter found",13,10,0                ;adapter found message
+czExtendedMem           db      "Extended memory: ",0                           ;extended memory from BIOS
+czIntel                 db      "Intel",0                                       ;vendor name string
+czKB                    db      "KB",0                                          ;Kilobytes
+czNewLine               db      13,10,0                                         ;new line string
+czOK                    db      "ok",13,10,0                                    ;ok string
+czOracle                db      "Oracle",0                                      ;vendor name string
+czOther                 db      "Other",0                                       ;default name string
+czPCIAndMem             db      "PCI & Memory",0                                ;PCI and Memory string
+czPeriod                db      ".",0                                           ;period delimiter
+czPIIX3PCItoIDEBridge   db      "PIIX3 PCI-to-ISA Bridge",0                     ;pci-to-isa bridge string
+czPIIX4PowerMgmt        db      "PIIX4/4E/4M Power Management Controller",0     ;power management controller string
+czPrompt                db      ":",0                                           ;prompt string
+czPro1000MT             db      "Pro/1000 MT Ethernet Adapter",0                ;Intel Pro/1000 MT Ethernet adapter strg
+czROMMem                db      "Base memory below EBDA (Int 12h): ",0          ;memory reported by ROM
+czSpace                 db      " ",0                                           ;space delimiter
+czTitle                 db      "Custom Operating System 1.0",13,10,0           ;version string
+czUnknownCommand        db      "Unknown command",13,10,0                       ;unknown command response string
+czUSBController         db      "USB Controller",0                              ;USB controller string
+czVirtualBoxDevice      db      "VirtualBox Device",0                           ;Virtual Box device string
+czVirtualBoxGA          db      "VirtualBox Graphics Adapter",0                 ;Virtual Box graphics adapter string
+czYearIsLeap            db      "The year is a leap year.",13,10,0              ;leap year message
+czYearIsNotLeap         db      "The year is not a leap year.",13,10,0          ;not leap year message
+cz82371ABBusMaster      db      "82371AB/EB PCI Bus Master IDE Controller",0    ;bus-master strin
                         times   4096-($-$$) db 0h                               ;zero fill to end of section
 %endif
 %ifdef BUILDDISK
