@@ -9,12 +9,12 @@ implementations in the form of a rudimentary operating system for x86-based (32-
 
 ## Motivation
 
-OS is intended as a learning resource, although all code is intended to be fully-functional.
+OS is provided as a learning resource, although all code is intended to be fully-functional.
 
 ## Subprojects
 
-OS is provided as a progressive series of subprojects that incrementally introduce and demonstrate
-concepts. Additional subprojects may be added from time to time as the CustomOS project progresses.
+OS is presented in a progressive series of subprojects that incrementally introduce and demonstrate
+concepts. Additional subprojects may be added from time to time as the project progresses.
 
 Part 1.			Boot to Protected Mode
 
