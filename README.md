@@ -1,6 +1,6 @@
 ## OS
 
-	Copyright (C) 2010-2019 David J. Walling. All Rights Reserved.
+	Copyright (C) 2010-2019 David J. Walling
 
 ## Synopsis
 
