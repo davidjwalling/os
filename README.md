@@ -10,7 +10,7 @@ platforms.
 
 ## Motivation
 
-OS is provided as a learning resource, although all code is intended to be fully-functional.
+OS is provided as a learning resource. All code is intended to be fully-functional.
 
 ## Subprojects
 
