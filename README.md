@@ -5,7 +5,8 @@
 ## Synopsis
 
 OS demonstrates assembly-language programming, hardware I/O techniques and standard protocol
-implementations in the form of a rudimentary operating system for x86-based (32-bit) platforms.
+implementations in the form of a rudimentary operating system for x86-based PC-compatible
+platforms.
 
 ## Motivation
 
