@@ -1,20 +1,20 @@
-## CustomOS
+## OS
 
-	Copyright (C) 2010-2018 David J. Walling. All Rights Reserved.
+	Copyright (C) 2010-2019 David J. Walling. All Rights Reserved.
 
 ## Synopsis
 
-CustomOS demonstrates assembly-language programming, hardware I/O techniques and standard
-protocol implementations in the form of a rudimentary operating system for i386-based (32-bit) platforms.
+OS demonstrates assembly-language programming, hardware I/O techniques and standard protocol
+implementations in the form of a rudimentary operating system for x86-based (32-bit) platforms.
 
 ## Motivation
 
-CustomOS is intended as a learning resource, although all code is intended to be fully-functional.
+OS is intended as a learning resource, although all code is intended to be fully-functional.
 
 ## Subprojects
 
-CustomOS is provided as a progressive series of subprojects that incrementally introduce and demonstrate concepts.
-Additional subprojects may be added from time to time as the CustomOS project progresses.
+OS is provided as a progressive series of subprojects that incrementally introduce and demonstrate
+concepts. Additional subprojects may be added from time to time as the CustomOS project progresses.
 
 Part 1.			Boot to Protected Mode
 
