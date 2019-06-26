@@ -8,7 +8,7 @@
 ;                       The boot sector searches the disk for the loader program, loads it into memory and runs it. The
 ;                       loader program in this sample simply displays a greeting.
 ;
-;       Revised:        January 1, 2019
+;       Revised:        June 17, 2019
 ;
 ;       Assembly:       nasm os.asm -f bin -o os.dat -l os.dat.lst -DBUILDBOOT
 ;                       nasm os.asm -f bin -o os.dsk -l os.dsk.lst -DBUILDDISK
@@ -16,7 +16,7 @@
 ;
 ;       Assembler:      Netwide Assembler (NASM) 2.13.03, Feb 7 2018
 ;
-;       Notice:         Copyright (C) 2010-2019 David J. Walling. All Rights Reserved.
+;       Notice:         Copyright (C) 2010-2019 David J. Walling
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -31,42 +31,37 @@
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 %ifdef BUILDDISK                                                                ;if we are building a disk image ...
-%define BUILDBOOT                                                               ;... build the boot sector
+%define BUILDBOOT                                                               ;... also build the boot sector
 %define BUILDCOM                                                                ;... and the OS kernel
 %endif
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Conventions
 ;
-;       Alignment:      In this document, columns are numbered beginning with 1.
-;                       Logical tabs are set after every eight columns.
-;                       Tabs are simulated using SPACE characters.
-;                       For comments that span an entire line, comment text begins in column 9.
-;                       Assembly instructions (mnemonics) begin in column 25.
-;                       Assembly operands begin in column 33.
-;                       Inline comments begin in column 81.
+;       Alignment:      In this document, columns are numbered beginning with 1. Logical tabs are set after every
+;                       eight columns. Tabs are simulated using SPACE characters. Comments that span an entire line
+;                       have a semicolon in line 1 and text begins in column 9. Assembly instructions (mnemonics)
+;                       begin in column 25. Assembly operands begin in column 33. Inline comments begin in column 81.
 ;                       Lines should not extend beyond column 120.
 ;
-;       Arguments:      Arguments are passed as registers and generally follow this order: EAX, ECX, EDX, EBX.
-;                       However, ECX may be used as the sole parameter if a test for zero is required. EBX and EBP
-;                       may be used as parameters if the routine is considered a "method" of an "object". In this
-;                       case, EBX or EBP will address the object storage. If the routine is general-purpose string
-;                       or character-array manipulator, ESI and EDI may be used as parameters to address input and/or
-;                       ouput buffers, respectively.
+;       Arguments:      Arguments are passed as registers and generally follow this order: EAX, ECX, EDX, EBX. ECX
+;                       may be used as the sole parameter if a test for zero is required. EBX and EBP may be used as
+;                       parameters if the routine is considered a "method" of an "object". In this case, EBX or EBP
+;                       will address the object storage. If the routine is general-purpose string or character-array
+;                       manipulator, ESI and EDI may be used as parameters to address input and/or ouput buffers.
 ;
-;       Code Order:     Routines should appear in the order of their first likely use.
-;                       Negative relative call or jump addresses usually, therefore, indicate reuse.
+;       Code Order:     Routines should appear in the order of their first likely use. Negative relative call or jump
+;                       addresses usually, therefore, indicate reuse.
 ;
-;       Comments:       A comment that spans the entire line begins with a semicolon in column 1.
-;                       A comment that accompanies code on a line begins with a semicolon in column 81.
-;                       Register names in comments are in upper case (EAX, EDI).
-;                       Hexadecimal values in comments are in lower case (01fh, 0dah).
+;       Comments:       A comment that spans the entire line begins with a semicolon in column 1. A comment that
+;                       accompanies code on a line begins with a semicolon in column 81. Register names in comments
+;                       are in upper case (EAX, EDI). Hexadecimal values in comments are in lower case (01fh, 0dah).
 ;                       Routines are preceded with a comment box that includes the routine name, description, and
 ;                       register contents on entry and exit.
 ;
-;       Constants:      Symbolic constants (equates) are named in all-caps beginning with 'E' (EDATAPORT).
-;                       Constant stored values are named in camel case, starting with 'c' (cbMaxLines).
-;                       The 2nd letter of the constant label indicates the storage type.
+;       Constants:      Symbolic constants (equates) are named in all-caps beginning with 'E' (EDATAPORT). Constant
+;                       stored values are named in camel case, starting with 'c' (cbMaxLines). The 2nd letter of the
+;                       constant label indicates the storage type.
 ;
 ;                       cq......        constant quad-word (dq)
 ;                       cd......        constant double-word (dd)
@@ -74,52 +69,48 @@
 ;                       cb......        constant byte (db)
 ;                       cz......        constant ASCIIZ (null-terminated) string
 ;
-;       Instructions:   32-bit instructions are generally favored.
-;                       8-bit instructions and data are preferred for flags and status fields, etc.
-;                       16-bit instructions are avoided wherever possible to avoid prefix bytes.
+;       Instructions:   32-bit instructions are generally favored. 8-bit instructions and data are preferred for
+;                       flags and status fields, etc. 16-bit instructions are avoided wherever possible to avoid
+;                       prefix bytes.
 ;
-;       Labels:         Labels within a routine are numeric and begin with a period (.10, .20).
-;                       Labels within a routine begin at ".10" and increment by 10.
+;       Labels:         Labels within a routine are numeric and begin with a period (.10, .20). Labels within a
+;                       routine begin at ".10" and increment by 10.
 ;
-;       Literals:       Literal values defined by external standards should be defined as symbolic constants (equates).
-;                       Hexadecimal literals in code are in upper case with a leading '0' and trailing 'h' (01Fh).
-;                       Binary literal values in source code are encoded with a final 'b' (1010b).
-;                       Decimal literal values in source code are strictly numerals (2048).
-;                       Octal literal values are avoided.
-;                       String literals are enclosed in double quotes, e.g. "Loading OS".
-;                       Single character literals are enclosed in single quotes, e.g. 'A'.
+;       Literals:       Literal values defined by external standards should be defined as symbolic constants
+;                       (equates). Hexadecimal literals in code are in upper case with a leading '0' and trailing
+;                       'h' (01Fh). Binary literal values in source code are encoded with a final 'b' (1010b).
+;                       Decimal literal values in source code are strictly numerals (2048). Octal literal values
+;                       are avoided. String literals are enclosed in double quotes, e.g. "Loading OS". Single
+;                       character literals are enclosed in single quotes, e.g. 'A'.
 ;
-;       Macros:         Macro names are in camel case, beginning with a lower-case letter (getDateString).
-;                       Macro names describe an action and so DO begin with a verb.
+;       Macros:         Macro names are in camel case, beginning with a lower-case letter (getDateString). Macro
+;                       names describe an action and so DO begin with a verb.
 ;
-;       Memory Use:     Operating system memory allocation is minimized.
-;                       Buffers are kept to as small a size as practicable.
-;                       Data and code intermingling is avoided wherever possible.
+;       Memory Use:     Operating system memory allocation is minimized. Buffers are kept to as small a size as
+;                       practicable. Data and code intermingling is avoided wherever possible.
 ;
-;       Registers:      Register names in comments are in upper case (EAX, EDX).
-;                       Register names in source code are in lower case (eax, edx).
+;       Registers:      Register names in comments are in upper case (EAX, EDX). Register names in source code are
+;                       in lower case (eax, edx).
 ;
 ;       Return Values:  Routines return result values in EAX or ECX or both. Routines should indicate failure by
 ;                       setting the carry flag to 1. Routines may prefer the use of ECX as a return value if the
 ;                       value is to be tested for null upon return (using the jecxz instruction).
 ;
-;       Routines:       Routine names are in mixed case and capitalized (GetYear, ReadRealTimeClock).
-;                       Routine names begin with a verb (Get, Read, Load).
-;                       Routines should have a single entry address and a single exit instruction (ret, iretd, etc.).
-;                       Routines that serve as wrappers for library functions carry the same name as the library
-;                       function but begin with a leading underscore (_) character.
+;       Routines:       Routine names are in mixed case and capitalized (GetYear, ReadRealTimeClock). Routine names
+;                       begin with a verb (Get, Read, Load). Routines should have a single entry address and a single
+;                       exit instruction (ret, iretd, etc.). Routines that serve as wrappers for library functions
+;                       carry the same name as the library function but begin with a leading underscore (_) character.
 ;
-;       Structures:     Structure names are in all-caps (DATETIME).
-;                       Structure names describe a "thing" and so do NOT begin with a verb.
+;       Structures:     Structure names are in all-caps (DATETIME). Structure names describe a "thing" and so do NOT
+;                       begin with a verb.
 ;
-;       Usage:          Registers EBX, ECX, EBP, SS, CS, DS and ES are preserved by routines.
-;                       Registers ESI and EDI are preserved unless they are input parameters.
-;                       Registers EAX and ECX are preferred for returning response/result values.
-;                       Registers EBX and EBP are preferred for context (structure) address parameters.
-;                       Registers EAX, ECX, EDX and EBX are preferred for integral parameters.
+;       Usage:          Registers EBX, ECX, EBP, SS, CS, DS and ES are preserved by routines. Registers ESI and EDI
+;                       are preserved unless they are input parameters. Registers EAX and ECX are preferred for
+;                       returning response/result values. Registers EBX and EBP are preferred for context (structure)
+;                       address parameters. Registers EAX, ECX, EDX and EBX are preferred for integral parameters.
 ;
-;       Variables:      Variables are named in camel case, starting with 'w'.
-;                       The 2nd letter of the variable label indicates the storage type.
+;       Variables:      Variables are named in camel case, starting with 'w'. The 2nd letter of the variable label
+;                       indicates the storage type.
 ;
 ;                       wq......        variable quad-word (resq)
 ;                       wd......        variable double-word (resd)
@@ -249,11 +240,11 @@ cwTrackSectors          dw      18                                              
 cwDiskSides             dw      2                                               ;sides per disk
 cwSpecialSectors        dw      0                                               ;special sectors
 ;
-;       BIOS typically loads the boot sector at absolute address 7c00 and sets the stack pointer at 512 bytes past the
-;       end of the boot sector. But, since BIOS code varies, we don't make any assumptions as to where our boot sector
-;       is loaded. For example, the initial CS:IP could be 0:7c00, 700:c00, 7c0:0, etc. So, to avoid assumptions, we
-;       first normalize CS:IP to get the absolute segment address in BX. The comments below show the effect of this code
-;       given several possible starting values for CS:IP.
+;       BIOS typically loads the boot sector at absolute address 7c00 and sets the stack pointer at 512 bytes past
+;       the end of the boot sector. But, since BIOS code varies, we don't make any assumptions as to where our boot
+;       sector is loaded. For example, the initial CS:IP could be 0:7c00, 700:c00, 7c0:0, etc. To avoid assumptions,
+;       we first normalize CS:IP to get the absolute segment address in BX. The comments below show the effect of this
+;       code given several possible starting values for CS:IP.
 ;
                                                                                 ;CS:IP   0:7c00 700:c00 7c0:0
 Boot.10                 call    word .20                                        ;[ESP] =   7c21     c21    21
