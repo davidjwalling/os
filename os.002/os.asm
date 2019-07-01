@@ -8,13 +8,13 @@
 ;                       The boot sector searches the disk for the loader program, loads it into memory and runs it. The
 ;                       loader program in this sample simply displays a greeting.
 ;
-;       Revised:        June 17, 2019
+;       Revised:        17 June 2019
 ;
 ;       Assembly:       nasm os.asm -f bin -o os.dat -l os.dat.lst -DBUILDBOOT
 ;                       nasm os.asm -f bin -o os.dsk -l os.dsk.lst -DBUILDDISK
 ;                       nasm os.asm -f bin -o os.com -l os.com.lst -DBUILDCOM
 ;
-;       Assembler:      Netwide Assembler (NASM) 2.13.03, Feb 7 2018
+;       Assembler:      Netwide Assembler (NASM) 2.13.03, 7 Feb 2018
 ;
 ;       Notice:         Copyright (C) 2010-2019 David J. Walling
 ;
@@ -57,7 +57,7 @@
 ;                       accompanies code on a line begins with a semicolon in column 81. Register names in comments
 ;                       are in upper case (EAX, EDI). Hexadecimal values in comments are in lower case (01fh, 0dah).
 ;                       Routines are preceded with a comment box that includes the routine name, description, and
-;                       register contents on entry and exit.
+;                       register contents on entry and exit, if applicable.
 ;
 ;       Constants:      Symbolic constants (equates) are named in all-caps beginning with 'E' (EDATAPORT). Constant
 ;                       stored values are named in camel case, starting with 'c' (cbMaxLines). The 2nd letter of the
@@ -68,10 +68,11 @@
 ;                       cw......        constant word (dw)
 ;                       cb......        constant byte (db)
 ;                       cz......        constant ASCIIZ (null-terminated) string
+;                       cs......        constant non-terminated string (sequence of characters)
 ;
 ;       Instructions:   32-bit instructions are generally favored. 8-bit instructions and data are preferred for
-;                       flags and status fields, etc. 16-bit instructions are avoided wherever possible to avoid
-;                       prefix bytes.
+;                       flags and status fields, etc. 16-bit instructions are avoided wherever possible to limit
+;                       the generation of prefix bytes.
 ;
 ;       Labels:         Labels within a routine are numeric and begin with a period (.10, .20). Labels within a
 ;                       routine begin at ".10" and increment by 10.
@@ -84,10 +85,10 @@
 ;                       character literals are enclosed in single quotes, e.g. 'A'.
 ;
 ;       Macros:         Macro names are in camel case, beginning with a lower-case letter (getDateString). Macro
-;                       names describe an action and so DO begin with a verb.
+;                       names describe an action and begin with a verb.
 ;
-;       Memory Use:     Operating system memory allocation is minimized. Buffers are kept to as small a size as
-;                       practicable. Data and code intermingling is avoided wherever possible.
+;       Memory Use:     Operating system memory allocation is avoided. Buffers are kept to as small a size as
+;                       practicable. Data and code intermingling is avoided.
 ;
 ;       Registers:      Register names in comments are in upper case (EAX, EDX). Register names in source code are
 ;                       in lower case (eax, edx).
@@ -126,7 +127,7 @@
 ;       The equate (equ) statement defines a symbolic name for a fixed value so that such a value can be defined and
 ;       verified once and then used throughout the code. Using symbolic names simplifies searching for where logical
 ;       values are used. Equate names are in all-caps and begin with the letter 'E'. Equates are grouped into related
-;       sets. Equates here are defined in the following groupings:
+;       sets. Equates in this sample program are defined in the following groupings:
 ;
 ;       Hardware-Defined Values
 ;
@@ -192,8 +193,8 @@ EBIOSFNKEYSTATUS        equ     001h                                            
 ;-----------------------------------------------------------------------------------------------------------------------
 EBOOTSTACKTOP           equ     0100h                                           ;boot sector stack top relative to DS
 EBOOTSECTORBYTES        equ     512                                             ;bytes per sector
-EBOOTDIRENTRIES         equ     224                                             ;directory entries
-EBOOTDISKSECTORS        equ     2880                                            ;sectors per disk
+EBOOTDIRENTRIES         equ     224                                             ;directory entries (1.44MB 3.5" FD)
+EBOOTDISKSECTORS        equ     2880                                            ;sectors per disk (1.44MB 3.5" FD)
 EBOOTDISKBYTES          equ     (EBOOTSECTORBYTES*EBOOTDISKSECTORS)             ;bytes per disk
 EBOOTFATBASE            equ     (EBOOTSTACKTOP+EBOOTSECTORBYTES)                ;offset of FAT I/O buffer rel to DS
 EBOOTMAXTRIES           equ     5                                               ;max read retries
@@ -202,16 +203,16 @@ EBOOTMAXTRIES           equ     5                                               
 ;
 ;       Boot Sector                                                             @disk: 000000   @mem: 007c00
 ;
-;       The first sector of the disk is the boot sector. The BIOS will load the boot sector into memory and pass
+;       The first sector of the diskette is the boot sector. The BIOS will load the boot sector into memory and pass
 ;       control to the code at the start of the sector. The boot sector code is responsible for loading the operating
 ;       system into memory. The boot sector contains a disk parameter table describing the geometry and allocation
-;       of the disk. Following the disk parameter table is code to load the operating system kernel into memory.
+;       of the diskette. Following the disk parameter table is code to load the operating system kernel into memory.
 ;
 ;       The "cpu" directive limits emitted code to those instructions supported by the most primitive processor
 ;       we expect to ever execute our code. The "vstart" parameter indicates addressability of symbols so as to
 ;       emulate the DOS .COM program model. Although the BIOS is expected to load the boot sector at address 7c00,
 ;       we do not make that assumption. The CPU starts in 16-bit addressing mode. A three-byte jump instruction is
-;       immediately followed by a disk parameter table.
+;       immediately followed by the disk parameter table.
 ;
 ;=======================================================================================================================
                         cpu     8086                                            ;assume minimal CPU
@@ -226,7 +227,7 @@ Boot                    jmp     word Boot.10                                    
 ;       3.5" 1.44MB floppy disk since this format is widely supported by virtual machine hypervisors.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-                        db      "CustomOS"                                      ;eight-byte label
+                        db      "OS      "                                      ;eight-byte label
 cwSectorBytes           dw      EBOOTSECTORBYTES                                ;bytes per sector
 cbClusterSectors        db      1                                               ;sectors per cluster
 cwReservedSectors       dw      1                                               ;reserved sectors
@@ -262,6 +263,9 @@ Boot.10                 call    word .20                                        
 ;       the assembler to produce addresses for our symbols that are offset from our code by 100h. See the "vstart"
 ;       parameter for the "section" directive above. We also set SS to the PSP and SP to the address of our i/o
 ;       buffer. This leaves 256 bytes of usable stack from 7b0:0 to 7b0:100.
+;
+;       Note that when a value is loaded into the stack segment register (SS) interrupts are disabled until the
+;       completion of the following instruction.
 ;
                         sub     bx,16                                           ;BX = 07b0
                         mov     ds,bx                                           ;DS = 07b0 = psp
@@ -692,7 +696,7 @@ Loader                  push    cs                                              
 ;                       TTY output function of the BIOS video interrupt, passing the address of the string in DS:SI
 ;                       and the BIOS teletype function code in AH. After a return from the BIOS interrupt, we repeat
 ;                       for the next string character until a NUL is found. Note that we clear the direction flag (DF)
-;                       with CLD before the first LODSB. The direction flag is not guaranteed to be preseved between
+;                       with CLD before the first LODSB. The direction flag is not guaranteed to be preserved between
 ;                       calls within the OS. However, the "int" instruction does store the EFLAGS register on the
 ;                       stack and restores it on return. Therefore, clearing the direction flag before subsequent calls
 ;                       to LODSB is not needed.

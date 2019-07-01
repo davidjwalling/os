@@ -66,7 +66,7 @@
     66                                  ;                       cw......        constant word (dw)
     67                                  ;                       cb......        constant byte (db)
     68                                  ;                       cz......        constant ASCIIZ (null-terminated) string
-    69                                  ;                       cs......        constant non-termiated string (sequence of characters)
+    69                                  ;                       cs......        constant non-terminated string (sequence of characters)
     70                                  ;
     71                                  ;       Instructions:   32-bit instructions are generally favored. 8-bit instructions and data are preferred for
     72                                  ;                       flags and status fields, etc. 16-bit instructions are avoided wherever possible to limit
