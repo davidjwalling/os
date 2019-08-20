@@ -7,16 +7,16 @@
 ;       Description:    In this sample, the kernel is expanded to include a keyboard interupt handler. This handler
 ;                       updates data visible on the console in an operator information area.
 ;
-;       Revised:        January 1, 2019
+;       Revised:        17 June 2019
 ;
 ;       Assembly:       nasm os.asm -f bin -o os.dat     -l os.dat.lst     -DBUILDBOOT
 ;                       nasm os.asm -f bin -o os.dsk     -l os.dsk.lst     -DBUILDDISK
 ;                       nasm os.asm -f bin -o os.com     -l os.com.lst     -DBUILDCOM
 ;                       nasm os.asm -f bin -o osprep.com -l osprep.com.lst -DBUILDPREP
 ;
-;       Assembler:      Netwide Assembler (NASM) 2.13.03, Feb 7 2018
+;       Assembler:      Netwide Assembler (NASM) 2.14.02, 26 Dec 2018
 ;
-;       Notice:         Copyright (C) 2010-2019 David J. Walling. All Rights Reserved.
+;       Notice:         Copyright (C) 2010-2019 David J. Walling
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -28,11 +28,11 @@
 ;       BUILDBOOT       Creates os.dat, a 512-byte boot sector as a standalone file.
 ;       BUILDDISK       Creates os.dsk, a 1.44MB (3.5") floppy disk image file.
 ;       BUILDCOM        Creates os.com, the OS loader and kernel as a standalone DOS program.
-;       BUILDPREP       Creates osprep.com, a DOS program that prepares a floppy disk to boot the OS
+;       BUILDPREP       Creates osprep.com, a DOS program that prepares a floppy disk to boot the OS.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 %ifdef BUILDDISK                                                                ;if we are building a disk image ...
-%define BUILDBOOT                                                               ;... build the boot sector
+%define BUILDBOOT                                                               ;... also build the boot sector
 %define BUILDCOM                                                                ;... and the OS kernel
 %endif
 %ifdef BUILDPREP                                                                ;if creating the disk prep program ...
@@ -42,88 +42,80 @@
 ;
 ;       Conventions
 ;
-;       Alignment:      In this document, columns are numbered beginning with 1.
-;                       Logical tabs are set after every eight columns.
-;                       Tabs are simulated using SPACE characters.
-;                       For comments that span an entire line, comment text begins in column 9.
-;                       Assembly instructions (mnemonics) begin in column 25.
-;                       Assembly operands begin in column 33.
-;                       Inline comments begin in column 81.
+;       Alignment:      In this document, columns are numbered beginning with 1. Logical tabs are set after every
+;                       eight columns. Tabs are simulated using SPACE characters. Comments that span an entire line
+;                       have a semicolon in line 1 and text begins in column 9. Assembly instructions (mnemonics)
+;                       begin in column 25. Assembly operands begin in column 33. Inline comments begin in column 81.
 ;                       Lines should not extend beyond column 120.
 ;
-;       Arguments:      Arguments are passed as registers and generally follow this order: EAX, ECX, EDX, EBX.
-;                       However, ECX may be used as the sole parameter if a test for zero is required. EBX and EBP
-;                       may be used as parameters if the routine is considered a "method" of an "object". In this
-;                       case, EBX or EBP will address the object storage. If the routine is general-purpose string
-;                       or character-array manipulator, ESI and EDI may be used as parameters to address input and/or
-;                       ouput buffers, respectively.
+;       Arguments:      Arguments are passed as registers and generally follow this order: EAX, ECX, EDX, EBX. ECX
+;                       may be used as the sole parameter if a test for zero is required. EBX and EBP may be used as
+;                       parameters if the routine is considered a "method" of an "object". In this case, EBX or EBP
+;                       will address the object storage. If the routine is a general-purpose string or byte-array
+;                       manipulator, ESI and EDI may be used as parameters to address input and/or ouput buffers.
 ;
-;       Code Order:     Routines should appear in the order of their first likely use.
-;                       Negative relative call or jump addresses usually, therefore, indicate reuse.
+;       Code Order:     Routines should appear in the order of their first likely use. Negative relative call or jump
+;                       addresses usually, therefore, indicate reuse.
 ;
-;       Comments:       A comment that spans the entire line begins with a semicolon in column 1.
-;                       A comment that accompanies code on a line begins with a semicolon in column 81.
-;                       Register names in comments are in upper case (EAX, EDI).
-;                       Hexadecimal values in comments are in lower case (01fh, 0dah).
+;       Comments:       A comment that spans the entire line begins with a semicolon in column 1. A comment that
+;                       accompanies code on a line begins with a semicolon in column 81. Register names in comments
+;                       are in upper case (EAX, EDI). Hexadecimal values in comments are in lower case (01fh, 0dah).
 ;                       Routines are preceded with a comment box that includes the routine name, description, and
-;                       register contents on entry and exit.
+;                       register contents on entry and exit, if applicable.
 ;
-;       Constants:      Symbolic constants (equates) are named in all-caps beginning with 'E' (EDATAPORT).
-;                       Constant stored values are named in camel case, starting with 'c' (cbMaxLines).
-;                       The 2nd letter of the constant label indicates the storage type.
+;       Constants:      Symbolic constants (equates) are named in all-caps beginning with 'E' (EDATAPORT). Constant
+;                       stored values are named in camel case, starting with 'c' (cbMaxLines). The 2nd letter of the
+;                       constant label indicates the storage type.
 ;
 ;                       cq......        constant quad-word (dq)
 ;                       cd......        constant double-word (dd)
 ;                       cw......        constant word (dw)
 ;                       cb......        constant byte (db)
 ;                       cz......        constant ASCIIZ (null-terminated) string
+;                       cs......        constant non-terminated string (sequence of characters)
 ;
-;       Instructions:   32-bit instructions are generally favored.
-;                       8-bit instructions and data are preferred for flags and status fields, etc.
-;                       16-bit instructions are avoided wherever possible to avoid prefix bytes.
+;       Instructions:   32-bit instructions are generally favored. 8-bit instructions and data are preferred for
+;                       flags and status fields, etc. 16-bit instructions are avoided wherever possible to limit
+;                       the generation of prefix bytes.
 ;
-;       Labels:         Labels within a routine are numeric and begin with a period (.10, .20).
-;                       Labels within a routine begin at ".10" and increment by 10.
+;       Labels:         Labels within a routine are numeric and begin with a period (.10, .20). Labels within a
+;                       routine begin at ".10" and increment by 10.
 ;
-;       Literals:       Literal values defined by external standards should be defined as symbolic constants (equates).
-;                       Hexadecimal literals in code are in upper case with a leading '0' and trailing 'h' (01Fh).
-;                       Binary literal values in source code are encoded with a final 'b' (1010b).
-;                       Decimal literal values in source code are strictly numerals (2048).
-;                       Octal literal values are avoided.
-;                       String literals are enclosed in double quotes, e.g. "Loading OS".
-;                       Single character literals are enclosed in single quotes, e.g. 'A'.
+;       Literals:       Literal values defined by external standards should be defined as symbolic constants
+;                       (equates). Hexadecimal literals in code are in upper case with a leading '0' and trailing
+;                       'h' (01Fh). Binary literal values in source code are encoded with a final 'b' (1010b).
+;                       Decimal literal values in source code are strictly numerals (2048). Octal literal values
+;                       are avoided. String literals are enclosed in double quotes, e.g. "Loading OS". Single
+;                       character literals are enclosed in single quotes, e.g. 'A'.
 ;
-;       Macros:         Macro names are in camel case, beginning with a lower-case letter (getDateString).
-;                       Macro names describe an action and so DO begin with a verb.
+;       Macros:         Macro names are in camel case, beginning with a lower-case letter (getDateString). Macro
+;                       names describe an action and begin with a verb.
 ;
-;       Memory Use:     Operating system memory allocation is minimized.
-;                       Buffers are kept to as small a size as practicable.
-;                       Data and code intermingling is avoided wherever possible.
+;       Memory Use:     Operating system memory allocation is avoided. Buffers are kept to as small a size as
+;                       practicable. Data and code intermingling is avoided.
 ;
-;       Registers:      Register names in comments are in upper case (EAX, EDX).
-;                       Register names in source code are in lower case (eax, edx).
+;       Registers:      Register names in comments are in upper case (EAX, EDX). Register names in source code are
+;                       in lower case (eax, edx).
 ;
 ;       Return Values:  Routines return result values in EAX or ECX or both. Routines should indicate failure by
 ;                       setting the carry flag to 1. Routines may prefer the use of ECX as a return value if the
 ;                       value is to be tested for null upon return (using the jecxz instruction).
 ;
-;       Routines:       Routine names are in mixed case and capitalized (GetYear, ReadRealTimeClock).
-;                       Routine names begin with a verb (Get, Read, Load).
-;                       Routines should have a single entry address and a single exit instruction (ret, iretd, etc.).
-;                       Routines that serve as wrappers for library functions carry the same name as the library
-;                       function but begin with a leading underscore (_) character.
+;       Routines:       Routine names are in mixed case and capitalized (GetYear, ReadRealTimeClock). Routine names
+;                       begin with a verb (Get, Read, Load). Routines should have a single entry address and a single
+;                       exit instruction (ret, iretd, etc.). Routines that serve as wrappers for library functions
+;                       carry the same name as the library function but begin with a leading underscore (_) character.
 ;
-;       Structures:     Structure names are in all-caps (DATETIME).
-;                       Structure names describe a "thing" and so do NOT begin with a verb.
+;       Structures:     Structure names are in all-caps (DATETIME). Structure names describe a "thing" and so do NOT
+;                       begin with a verb.
 ;
-;       Usage:          Registers EBX, ECX, EBP, SS, CS, DS and ES are preserved by routines.
-;                       Registers ESI and EDI are preserved unless they are input parameters.
-;                       Registers EAX and ECX are preferred for returning response/result values.
-;                       Registers EBX and EBP are preferred for context (structure) address parameters.
-;                       Registers EAX, ECX, EDX and EBX are preferred for integral parameters.
+;       Usage:          Registers EBX, ECX, EBP, SS, CS, DS and ES are preserved by routines. Registers ESI and EDI
+;                       are preserved unless they are input parameters. Registers EAX and ECX are preferred for
+;                       returning response/result values. Registers EBX and EBP are preferred for context (structure)
+;                       address parameters. Registers EAX, ECX, EDX and EBX are preferred for integral parameters.
 ;
-;       Variables:      Variables are named in camel case, starting with 'w'.
-;                       The 2nd letter of the variable label indicates the storage type.
+;       Variables:      Variables are named in camel case, starting with 'w'. The 2nd letter of the variable label
+;                       indicates the storage type.
 ;
 ;                       wq......        variable quad-word (resq)
 ;                       wd......        variable double-word (resd)
@@ -139,7 +131,7 @@
 ;       The equate (equ) statement defines a symbolic name for a fixed value so that such a value can be defined and
 ;       verified once and then used throughout the code. Using symbolic names simplifies searching for where logical
 ;       values are used. Equate names are in all-caps and begin with the letter 'E'. Equates are grouped into related
-;       sets. Equates here are defined in the following groupings:
+;       sets. Equates in this sample program are defined in the following groupings:
 ;
 ;       Hardware-Defined Values
 ;
@@ -346,8 +338,8 @@ EASCIICASEMASK          equ     11011111b                                       
 ;-----------------------------------------------------------------------------------------------------------------------
 EBOOTSTACKTOP           equ     0100h                                           ;boot sector stack top relative to DS
 EBOOTSECTORBYTES        equ     512                                             ;bytes per sector
-EBOOTDIRENTRIES         equ     224                                             ;directory entries
-EBOOTDISKSECTORS        equ     2880                                            ;sectors per disk
+EBOOTDIRENTRIES         equ     224                                             ;directory entries (1.44MB 3.5" FD)
+EBOOTDISKSECTORS        equ     2880                                            ;sectors per disk (1.44MB 3.5" FD)
 EBOOTDISKBYTES          equ     (EBOOTSECTORBYTES*EBOOTDISKSECTORS)             ;bytes per disk
 EBOOTFATBASE            equ     (EBOOTSTACKTOP+EBOOTSECTORBYTES)                ;offset of FAT I/O buffer rel to DS
 EBOOTMAXTRIES           equ     5                                               ;max read retries
@@ -565,16 +557,16 @@ e%1                     equ     ($-tsvc)/4
 ;
 ;       Boot Sector                                                             @disk: 000000   @mem: 007c00
 ;
-;       The first sector of the disk is the boot sector. The BIOS will load the boot sector into memory and pass
+;       The first sector of the diskette is the boot sector. The BIOS will load the boot sector into memory and pass
 ;       control to the code at the start of the sector. The boot sector code is responsible for loading the operating
 ;       system into memory. The boot sector contains a disk parameter table describing the geometry and allocation
-;       of the disk. Following the disk parameter table is code to load the operating system kernel into memory.
+;       of the diskette. Following the disk parameter table is code to load the operating system kernel into memory.
 ;
 ;       The "cpu" directive limits emitted code to those instructions supported by the most primitive processor
 ;       we expect to ever execute our code. The "vstart" parameter indicates addressability of symbols so as to
 ;       emulate the DOS .COM program model. Although the BIOS is expected to load the boot sector at address 7c00,
 ;       we do not make that assumption. The CPU starts in 16-bit addressing mode. A three-byte jump instruction is
-;       immediately followed by a disk parameter table.
+;       immediately followed by the disk parameter table.
 ;
 ;=======================================================================================================================
                         cpu     8086                                            ;assume minimal CPU
@@ -593,7 +585,7 @@ Boot                    jmp     word Boot.10                                    
 ;       3.5" 1.44MB floppy disk since this format is widely supported by virtual machine hypervisors.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-                        db      "CustomOS"                                      ;eight-byte label
+                        db      "OS      "                                      ;eight-byte label
 cwSectorBytes           dw      EBOOTSECTORBYTES                                ;bytes per sector
 cbClusterSectors        db      1                                               ;sectors per cluster
 cwReservedSectors       dw      1                                               ;reserved sectors
@@ -607,11 +599,11 @@ cwTrackSectors          dw      18                                              
 cwDiskSides             dw      2                                               ;sides per disk
 cwSpecialSectors        dw      0                                               ;special sectors
 ;
-;       BIOS typically loads the boot sector at absolute address 7c00 and sets the stack pointer at 512 bytes past the
-;       end of the boot sector. But, since BIOS code varies, we don't make any assumptions as to where our boot sector
-;       is loaded. For example, the initial CS:IP could be 0:7c00, 700:c00, 7c0:0, etc. So, to avoid assumptions, we
-;       first normalize CS:IP to get the absolute segment address in BX. The comments below show the effect of this code
-;       given several possible starting values for CS:IP.
+;       BIOS typically loads the boot sector at absolute address 7c00 and sets the stack pointer at 512 bytes past
+;       the end of the boot sector. But, since BIOS code varies, we don't make any assumptions as to where our boot
+;       sector is loaded. For example, the initial CS:IP could be 0:7c00, 700:c00, 7c0:0, etc. To avoid assumptions,
+;       we first normalize CS:IP to get the absolute segment address in BX. The comments below show the effect of this
+;       code given several possible starting values for CS:IP.
 ;
                                                                                 ;CS:IP   0:7c00 700:c00 7c0:0
 Boot.10                 call    word .20                                        ;[ESP] =   7c21     c21    21
@@ -629,6 +621,9 @@ Boot.10                 call    word .20                                        
 ;       the assembler to produce addresses for our symbols that are offset from our code by 100h. See the "vstart"
 ;       parameter for the "section" directive above. We also set SS to the PSP and SP to the address of our i/o
 ;       buffer. This leaves 256 bytes of usable stack from 7b0:0 to 7b0:100.
+;
+;       Note that when a value is loaded into the stack segment register (SS) interrupts are disabled until the
+;       completion of the following instruction.
 ;
                         sub     bx,16                                           ;BX = 07b0
                         mov     ds,bx                                           ;DS = 07b0 = psp
@@ -1043,8 +1038,8 @@ Prep                    mov     si,czPrepMsg10                                  
 ;       Diskette Preparation Messages
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-czPrepMsg10             db      13,10,"CustomOS Boot-Diskette Preparation Program"
-                        db      13,10,"Copyright (C) 2010-2019 David J. Walling. All rights reserved."
+czPrepMsg10             db      13,10,"OS Boot-Diskette Preparation Program"
+                        db      13,10,"Copyright (C) 2010-2019 David J. Walling"
                         db      13,10
                         db      13,10,"This program overwrites the boot sector of a diskette with startup code that"
                         db      13,10,"will load the operating system into memory when the computer is restarted."
@@ -1357,7 +1352,7 @@ GetCPUType              mov     al,1                                            
 ;                       TTY output function of the BIOS video interrupt, passing the address of the string in DS:SI
 ;                       and the BIOS teletype function code in AH. After a return from the BIOS interrupt, we repeat
 ;                       for the next string character until a NUL is found. Note that we clear the direction flag (DF)
-;                       with CLD before the first LODSB. The direction flag is not guaranteed to be preseved between
+;                       with CLD before the first LODSB. The direction flag is not guaranteed to be preserved between
 ;                       calls within the OS. However, the "int" instruction does store the EFLAGS register on the
 ;                       stack and restores it on return. Therefore, clearing the direction flag before subsequent calls
 ;                       to LODSB is not needed.
@@ -2739,7 +2734,7 @@ ConCode                 mov     edi,ECONDATA                                    
                         mov     eax,ECONCLEARDWORD                              ;initialization value
                         rep     stosd                                           ;reset screen body
 ;
-;       Reset the input field input address, row and column.
+;       Reset the row and column.
 ;
                         xor     eax,eax                                         ;zero register
                         mov     [wbConsoleRow],al                               ;zero console row
@@ -2747,8 +2742,8 @@ ConCode                 mov     edi,ECONDATA                                    
 ;
 ;       Load the field address from the panel. Exit loop if address is null.
 ;
-                        mov     ebx,[wdConsolePanel]                            ;first field template addr
-.30                     mov     esi,[ebx]                                       ;field value addr
+                        mov     ebx,[wdConsolePanel]                            ;panel field addr
+.30                     mov     esi,[ebx]                                       ;field buffer addr
                         test    esi,esi                                         ;end of panel?
                         jz      .70                                             ;yes, exit loop
 ;
@@ -2768,7 +2763,7 @@ ConCode                 mov     edi,ECONDATA                                    
 ;       Save the row and column if this is the first input field.
 ;
                         mov     al,[wbConsoleRow]                               ;console row
-                        or      al,[wbConsoleColumn]                            ;already have an input field?
+                        test    al,[wbConsoleColumn]                            ;already have an input field?
                         jnz     .40                                             ;yes, branch
                         mov     [wbConsoleRow],ch                               ;update console row
                         mov     [wbConsoleColumn],cl                            ;update console column
@@ -2786,6 +2781,7 @@ ConCode                 mov     edi,ECONDATA                                    
 ;       Display the field contents.
 ;
                         movzx   ecx,dl                                          ;length
+                        jecxz   .60                                             ;branch if zero-length
                         mov     ah,dh                                           ;color
 .50                     lodsb                                                   ;field character
                         test    al,al                                           ;end of value?
@@ -2823,7 +2819,7 @@ ConCode                 mov     edi,ECONDATA                                    
 czPnlCon001             dd      czFldPnlIdCon001                                ;field text
                         db      00,00,02h,06                                    ;flags+row, col, attr, length
                         dd      czFldTitleCon001
-                        db      00,30,07h,20
+                        db      00,33,07h,14
                         dd      czFldDatTmCon001
                         db      00,63,02h,17
                         dd      czFldPrmptCon001
@@ -2837,7 +2833,7 @@ czPnlCon001             dd      czFldPnlIdCon001                                
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 czFldPnlIdCon001        db      "CON001"                                        ;main console panel id
-czFldTitleCon001        db      "CustomOS Version 1.0"                          ;main console panel title
+czFldTitleCon001        db      "OS Version 1.0"                                ;main console panel title
 czFldDatTmCon001        db      "DD-MMM-YYYY HH:MM"                             ;panel date and time template
 czFldPrmptCon001        db      ":"                                             ;command prompt
                         times   4096-($-$$) db 0h                               ;zero fill to end of section
