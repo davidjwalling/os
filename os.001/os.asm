@@ -14,7 +14,7 @@
 ;       Assembly:       nasm os.asm -f bin -o os.dat -l os.dat.lst -DBUILDBOOT
 ;                       nasm os.asm -f bin -o os.dsk -l os.dsk.lst -DBUILDDISK
 ;
-;       Assembler:      Netwide Assembler (NASM) 2.13.03, 7 Feb 2018
+;       Assembler:      Netwide Assembler (NASM) 2.14.02, 26 Dec 2018
 ;
 ;       Notice:         Copyright (C) 2010-2019 David J. Walling
 ;
