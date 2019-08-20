@@ -29,7 +29,7 @@
 ;       BUILDBOOT       Creates os.dat, a 512-byte boot sector as a standalone file.
 ;       BUILDDISK       Creates os.dsk, a 1.44MB (3.5") floppy disk image file.
 ;       BUILDCOM        Creates os.com, the OS loader and kernel as a standalone DOS program.
-;       BUILDPREP       Creates osprep.com, a DOS program that prepares a floppy disk to boot the OS
+;       BUILDPREP       Creates osprep.com, a DOS program that prepares a floppy disk to boot the OS.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 %ifdef BUILDDISK                                                                ;if we are building a disk image ...
