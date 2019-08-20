@@ -319,6 +319,7 @@ EBIOSFNKEYSTATUS        equ     001h                                            
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 EASCIIBACKSPACE         equ     008h                                            ;backspace
+EASCIITAB               equ     009h                                            ;tab
 EASCIILINEFEED          equ     00Ah                                            ;line feed
 EASCIIRETURN            equ     00Dh                                            ;carriage return
 EASCIIESCAPE            equ     01Bh                                            ;escape
@@ -2918,8 +2919,12 @@ GetConsoleChar          call    GetMessage                                      
 ;
 ;       In:             DS:EDX  target buffer address
 ;                       ECX     maximum number of characters to accept
-;                       BH      echo to terminal
+;                       BH      flags
+;                               00000001 echo to terminal
+;                               00000010 break on tab
 ;                       BL      terminating character
+;
+;       Out:            AL      final character ASCII
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 GetConsoleString        push    ecx                                             ;save non-volatile regs
@@ -2936,12 +2941,18 @@ GetConsoleString        push    ecx                                             
                         pop     ecx                                             ;maximum characters
                         mov     edi,edx                                         ;edi = target buffer
                         mov     esi,edx                                         ;esi = target buffer
-.10                     jecxz   .50                                             ;exit if max-length is zero
+.10                     jecxz   .50                                             ;exit if max-length is zero; AL=0
+                                                                                ;---------------------------------------
+                                                                                ;  top of loop
+                                                                                ;---------------------------------------
 .20                     call    GetConsoleChar                                  ;al = next input char
                         cmp     al,bl                                           ;is this the terminator?
-                        je      .50                                             ;yes, exit
+                        je      .50                                             ;yes, exit; AL=char
                         cmp     al,EASCIIBACKSPACE                              ;is this a backspace?
                         jne     .30                                             ;no, skip ahead
+                                                                                ;---------------------------------------
+                                                                                ;  handle backspace
+                                                                                ;---------------------------------------
                         cmp     esi,edi                                         ;at start of buffer?
                         je      .20                                             ;yes, get next character
                         dec     edi                                             ;backup target pointer
@@ -2954,20 +2965,29 @@ GetConsoleString        push    ecx                                             
                         call    PutConsoleChar                                  ;write space to console
                         call    PlaceCursor                                     ;position the cursor
                         jmp     .20                                             ;get next character
-.30                     cmp     al,EASCIISPACE                                  ;printable? (lower bounds)
+.30                     cmp     al,EASCIITAB                                    ;is this a tab?
+                        jne     .32                                             ;no, skip ahead
+                                                                                ;---------------------------------------
+                                                                                ;  handle tab
+                                                                                ;---------------------------------------
+                        test    bh,2                                            ;exit on tab?
+                        jz      .20                                             ;no, get another character
+                        jmp     .50                                             ;exit; AL=char
+.32                     cmp     al,EASCIISPACE                                  ;printable? (lower bounds)
                         jb      .20                                             ;no, get another character
                         cmp     al,EASCIITILDE                                  ;printable? (upper bounds)
                         ja      .20                                             ;no, get another character
                         stosb                                                   ;store character in buffer
                         test    bh,1                                            ;echo to console?
                         jz      .40                                             ;no, skip ahead
+                        push    eax                                             ;save character code
                         call    PutConsoleChar                                  ;write character to console
                         call    NextConsoleColumn                               ;advance console position
                         call    PlaceCursor                                     ;position the cursor
+                        pop     eax                                             ;restore character code
 .40                     dec     ecx                                             ;decrement remaining chars
                         jmp     .10                                             ;next
-.50                     xor     al,al                                           ;null
-                        stosb                                                   ;terminate buffer
+.50                     mov     byte [es:edi],0                                 ;null-terminate buffer
                         pop     es                                              ;restore non-volatile regs
                         pop     edi                                             ;
                         pop     esi                                             ;
@@ -3727,14 +3747,14 @@ ConCode                 mov     edi,ECONDATA                                    
 ;
 ;       Load the field address from the panel. Exit loop if address is null.
 ;
-                        mov     ebx,[wdConsolePanel]                            ;panel field addr
+.28                     mov     ebx,[wdConsolePanel]                            ;panel field addr
 .30                     mov     esi,[ebx]                                       ;field buffer addr
                         test    esi,esi                                         ;end of panel?
                         jz      .70                                             ;yes, exit loop
 ;
 ;       Load the field row, column, color and length.
 ;
-                        mov     ch,[ebx+4]                                      ;row
+.32                     mov     ch,[ebx+4]                                      ;row
                         mov     cl,[ebx+5]                                      ;column
                         mov     dh,[ebx+6]                                      ;color
                         mov     dl,[ebx+7]                                      ;length
@@ -3757,12 +3777,12 @@ ConCode                 mov     edi,ECONDATA                                    
 ;
 ;       Clear input field contents.
 ;
-                        push    ecx                                             ;save row, col
-                        mov     edi,esi                                         ;target is field data addr
-                        xor     al,al                                           ;fill byte is NUL
-                        movzx   ecx,dl                                          ;field length
-                        rep     stosb                                           ;fill field with fill byte
-                        pop     ecx                                             ;restore row, col
+                        ;push    ecx                                             ;save row, col
+                        ;mov     edi,esi                                         ;target is field data addr
+                        ;xor     al,al                                           ;fill byte is NUL
+                        ;movzx   ecx,dl                                          ;field length
+                        ;rep     stosb                                           ;fill field with fill byte
+                        ;pop     ecx                                             ;restore row, col
 ;
 ;       Compute the target offset.
 ;
@@ -3773,7 +3793,7 @@ ConCode                 mov     edi,ECONDATA                                    
                         adc     ah,0                                            ;handle overflow
                         shl     eax,1                                           ;two-bytes per column
 ;
-;       Display the field contents. EAX = screen target offset, DL = length, DL = attributes
+;       Display the field contents. EAX = screen target offset, DL = length, DL = attributes.
 ;
                         push    es                                              ;save non-volatile regs
                         push    EGDTCGA                                         ;load CGA video selector...
@@ -3786,7 +3806,11 @@ ConCode                 mov     edi,ECONDATA                                    
                         test    al,al                                           ;end of value?
                         jz      .60                                             ;yes, branch
                         stosw                                                   ;store character and color
-                        loop    .50                                             ;next character
+
+                        cmp     ebx,[wdConsoleField]
+                        jne     .58
+                        inc     byte [wbConsoleColumn]
+.58                     loop    .50                                             ;next character
 .60                     pop     es                                              ;restore non-volatile regs
 ;
 ;       Next Field.
@@ -3806,13 +3830,26 @@ ConCode                 mov     edi,ECONDATA                                    
                         mov     edx,[wdConsoleInput]                            ;target buffer addr
                         xor     ecx,ecx                                         ;zero register
                         mov     cl,[esi+7]                                      ;maximum chars to accept
-                        mov     bh,1                                            ;echo to terminal
+                        mov     bh,3                                            ;echo to terminal; exit on tab
                         mov     bl,13                                           ;terminating character
                         getConsoleString                                        ;accept keyboard input
+                        cmp     al,13                                           ;entry ended with terminating char?
+                        je      .72                                             ;yes, skip ahead
+
+                        xor     al,al                                           ;zero byte
+                        mov     [wbConsoleRow],al                               ;zero console row
+                        mov     [wbConsoleColumn],al                            ;zero console column
+
+                        mov     ebx,[wdConsoleField]                            ;input field template addr
+                        add     ebx,8                                           ;next field addr
+                        mov     esi,[ebx]                                       ;field buffer addr
+                        test    esi,esi                                         ;end of panel?
+                        jnz     .32                                             ;no, next field
+                        jmp     .28                                             ;return to first field
 ;
 ;       Take the first token entered.
 ;
-                        mov     edx,[wdConsoleInput]                            ;console input buffer addr
+.72                     mov     edx,[wdConsoleInput]                            ;console input buffer addr
                         mov     ebx,wzConsoleToken                              ;token buffer
                         call    ConTakeToken                                    ;take first command token
 ;
