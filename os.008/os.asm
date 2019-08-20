@@ -3719,7 +3719,7 @@ ConCode                 mov     edi,ECONDATA                                    
                         mov     ebx,wzConsoleToken                              ;token buffer
                         call    ConTakeToken                                    ;take first command token
 ;
-;       Evaluate token
+;       Evaluate token.
 ;
                         mov     edx,wzConsoleToken                              ;token buffer
                         call    ConDetermineCommand                             ;determine if this is a command
