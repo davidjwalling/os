@@ -1289,7 +1289,7 @@ GetCPUType              mov     al,1                                            
 ;                       TTY output function of the BIOS video interrupt, passing the address of the string in DS:SI
 ;                       and the BIOS teletype function code in AH. After a return from the BIOS interrupt, we repeat
 ;                       for the next string character until a NUL is found. Note that we clear the direction flag (DF)
-;                       with CLD before the first LODSB. The direction flag is not guaranteed to be preseved between
+;                       with CLD before the first LODSB. The direction flag is not guaranteed to be preserved between
 ;                       calls within the OS. However, the "int" instruction does store the EFLAGS register on the
 ;                       stack and restores it on return. Therefore, clearing the direction flag before subsequent calls
 ;                       to LODSB is not needed.
@@ -2217,7 +2217,7 @@ ConCode                 mov     edi,ECONDATA                                    
                         mov     eax,ECONCLEARDWORD                              ;initialization value
                         rep     stosd                                           ;reset screen body
 ;
-;       Reset the input field input address, row and column.
+;       Reset the row and column.
 ;
                         xor     eax,eax                                         ;zero register
                         mov     [wbConsoleRow],al                               ;zero console row
@@ -2225,8 +2225,8 @@ ConCode                 mov     edi,ECONDATA                                    
 ;
 ;       Load the field address from the panel. Exit loop if address is null.
 ;
-                        mov     ebx,[wdConsolePanel]                            ;first field template addr
-.30                     mov     esi,[ebx]                                       ;field value addr
+                        mov     ebx,[wdConsolePanel]                            ;panel field addr
+.30                     mov     esi,[ebx]                                       ;field buffer addr
                         test    esi,esi                                         ;end of panel?
                         jz      .70                                             ;yes, exit loop
 ;
@@ -2246,7 +2246,7 @@ ConCode                 mov     edi,ECONDATA                                    
 ;       Save the row and column if this is the first input field.
 ;
                         mov     al,[wbConsoleRow]                               ;console row
-                        or      al,[wbConsoleColumn]                            ;already have an input field?
+                        test    al,[wbConsoleColumn]                            ;already have an input field?
                         jnz     .40                                             ;yes, branch
                         mov     [wbConsoleRow],ch                               ;update console row
                         mov     [wbConsoleColumn],cl                            ;update console column
@@ -2264,6 +2264,7 @@ ConCode                 mov     edi,ECONDATA                                    
 ;       Display the field contents.
 ;
                         movzx   ecx,dl                                          ;length
+                        jecxz   .60                                             ;branch if zero-length
                         mov     ah,dh                                           ;color
 .50                     lodsb                                                   ;field character
                         test    al,al                                           ;end of value?
@@ -2301,7 +2302,7 @@ ConCode                 mov     edi,ECONDATA                                    
 czPnlCon001             dd      czFldPnlIdCon001                                ;field text
                         db      00,00,02h,06                                    ;flags+row, col, attr, length
                         dd      czFldTitleCon001
-                        db      00,30,07h,20
+                        db      00,33,07h,14
                         dd      czFldDatTmCon001
                         db      00,63,02h,17
                         dd      czFldPrmptCon001
@@ -2315,7 +2316,7 @@ czPnlCon001             dd      czFldPnlIdCon001                                
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 czFldPnlIdCon001        db      "CON001"                                        ;main console panel id
-czFldTitleCon001        db      "CustomOS Version 1.0"                          ;main console panel title
+czFldTitleCon001        db      "OS Version 1.0"                                ;main console panel title
 czFldDatTmCon001        db      "DD-MMM-YYYY HH:MM"                             ;panel date and time template
 czFldPrmptCon001        db      ":"                                             ;command prompt
                         times   4096-($-$$) db 0h                               ;zero fill to end of section
