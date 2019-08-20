@@ -4,9 +4,7 @@
 
 ## Synopsis
 
-OS demonstrates assembly-language programming, hardware I/O techniques and standard protocol
-implementations in the form of a rudimentary operating system for x86-based PC-compatible
-systems.
+OS demonstrates assembly-language programming, hardware I/O techniques and standard protocol implementations in the form of a rudimentary operating system for x86-based PC-compatible systems.
 
 ## Motivation
 
@@ -55,7 +53,7 @@ Part V			Tasks
 
 Assembling the source code requires NASM (the Netwide Assembler) or a compatible assembler.
 
-	The recommended version of NASM is 2.13.03, compiled 7 Feb 2018.
+	The recommended version of NASM is 2.14.02, compiled 26 Dec 2018.
 
 Compilation on Windows:
 
