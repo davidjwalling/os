@@ -30,7 +30,7 @@ Part II 		Interrupts, Messages and Commands
 
 Part III		Memory and Clock
 
-	os.009		Add support for "mem" and "memory" commands to display memory.
+	os.009		Add "mem" and "memory" commands to display memory and "main" to return to the main panel.
 	os.010		Add simple memory allocation and deallocation routines and "malloc" and "free" test routines.
 	os.011		Add memory-size reporting from BIOS and Real-Time Clock (RTC) chip.
 	os.012		Add "date", "time" and related commands with RTC chip support.
