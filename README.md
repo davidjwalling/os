@@ -6,7 +6,7 @@
 
 OS demonstrates assembly-language programming, hardware I/O techniques and standard protocol
 implementations in the form of a rudimentary operating system for x86-based PC-compatible
-platforms.
+systems.
 
 ## Motivation
 
@@ -14,8 +14,7 @@ OS is provided as a learning resource. All code is intended to be fully-function
 
 ## Subprojects
 
-OS is presented in a progressive series of subprojects that incrementally introduce and demonstrate
-concepts. Additional subprojects may be added from time to time as the project progresses.
+OS is presented in a progressive series of subprojects that incrementally introduce and demonstrate concepts. Additional subprojects may be added from time to time as the project progresses.
 
 Part I			Boot to Protected Mode
 
