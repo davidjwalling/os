@@ -45,7 +45,7 @@
     45                                  ;       Arguments:      Arguments are passed as registers and generally follow this order: EAX, ECX, EDX, EBX. ECX
     46                                  ;                       may be used as the sole parameter if a test for zero is required. EBX and EBP may be used as
     47                                  ;                       parameters if the routine is considered a "method" of an "object". In this case, EBX or EBP
-    48                                  ;                       will address the object storage. If the routine is general-purpose string or character-array
+    48                                  ;                       will address the object storage. If the routine is a general-purpose string or byte-array
     49                                  ;                       manipulator, ESI and EDI may be used as parameters to address input and/or ouput buffers.
     50                                  ;
     51                                  ;       Code Order:     Routines should appear in the order of their first likely use. Negative relative call or jump
