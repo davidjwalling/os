@@ -14,7 +14,7 @@
 ;                       nasm os.asm -f bin -o os.dsk -l os.dsk.lst -DBUILDDISK
 ;                       nasm os.asm -f bin -o os.com -l os.com.lst -DBUILDCOM
 ;
-;       Assembler:      Netwide Assembler (NASM) 2.13.03, 7 Feb 2018
+;       Assembler:      Netwide Assembler (NASM) 2.14.02, 26 Dec 2018
 ;
 ;       Notice:         Copyright (C) 2010-2019 David J. Walling
 ;
@@ -47,7 +47,7 @@
 ;       Arguments:      Arguments are passed as registers and generally follow this order: EAX, ECX, EDX, EBX. ECX
 ;                       may be used as the sole parameter if a test for zero is required. EBX and EBP may be used as
 ;                       parameters if the routine is considered a "method" of an "object". In this case, EBX or EBP
-;                       will address the object storage. If the routine is general-purpose string or character-array
+;                       will address the object storage. If the routine is a general-purpose string or byte-array
 ;                       manipulator, ESI and EDI may be used as parameters to address input and/or ouput buffers.
 ;
 ;       Code Order:     Routines should appear in the order of their first likely use. Negative relative call or jump
