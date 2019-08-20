@@ -707,7 +707,7 @@ Prep                    mov     si,czPrepMsg10                                  
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 czPrepMsg10             db      13,10,"OS Boot-Diskette Preparation Program"
-                        db      13,10,"Copyright (C) 2010-2019 David J. Walling."
+                        db      13,10,"Copyright (C) 2010-2019 David J. Walling"
                         db      13,10
                         db      13,10,"This program overwrites the boot sector of a diskette with startup code that"
                         db      13,10,"will load the operating system into memory when the computer is restarted."
