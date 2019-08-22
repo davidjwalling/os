@@ -586,6 +586,14 @@ wzConsoleMemBufC        resb    80                                              
 wzConsoleMemBufD        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
 wzConsoleMemBufE        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
 wzConsoleMemBufF        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
+wzConsoleMemBuf10       resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
+wzConsoleMemBuf11       resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
+wzConsoleMemBuf12       resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
+wzConsoleMemBuf13       resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
+wzFldMenuOptn0          resb    2
+wzFldMenuOptn1          resb    2
+wzFldMenuOptn2          resb    2
+wzFldMenuOptn3          resb    2
 wbConsoleColumn         resb    1                                               ;console column
 wbConsoleRow            resb    1                                               ;console row
                                                                                 ;---------------------------------------
@@ -601,6 +609,7 @@ wbConsoleScan3          resb    1                                               
 wbConsoleScan4          resb    1                                               ;scan code
 wbConsoleScan5          resb    1                                               ;scan code
 wbConsoleChar           resb    1                                               ;ASCII code
+wbConsoleScan           resb    1
 ECONDATALEN             equ     ($-ECONDATA)                                    ;size of console data area
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -2564,6 +2573,7 @@ irq1.90                 movzx   ecx,ah                                          
                         ja      irq1.100                                        ;yes, skip ahead
                         xor     al,EASCIICASE                                   ;switch case
 irq1.100                mov     [wbConsoleChar],al                              ;save ASCII code
+                        mov     [wbConsoleScan],ah
 irq1.110                mov     edx,EMSGKEYDOWN                                 ;assume key-down event
                         test    ah,EKEYBUP                                      ;release scan-code?
                         jz      irq1.120                                        ;no, skip ahead
@@ -3975,8 +3985,10 @@ ConEditField            push    ebx                                             
 ;       Get a keypress. Exit if attention identifier.
 ;
 .20                     getConsoleChar                                          ;AH = scan; AL = ASCII
-                        cmp     ah,EKEYBENTERDOWN                               ;tab key down?
+                        cmp     ah,EKEYBENTERDOWN                               ;enter key down?
                         je      .100                                            ;yes, exit
+                        cmp     ah,EKEYBTABDOWN                                 ;tab down?
+                        je      .100                                            ;yes, exist
 ;
 ;       Get another key if we have no field or no field buffer
 ;
@@ -4043,8 +4055,13 @@ ConEditField            push    ebx                                             
                         add     edi,edx
                         stosb
                         ; move following characters if in insert mode
-                        inc     byte [ebx+7]
-                        call    ConDrawField
+
+                        mov     dl,[ebx+7]
+                        inc     dl
+                        cmp     dl,[ebx+6]
+                        jnb     .94
+                        mov     [ebx+7],dl
+.94                     call    ConDrawField
                         jmp     .10
 ;
 ;       Call panel handler
@@ -4098,6 +4115,57 @@ ConHandlerMain          push    ebx                                             
 ;
                         pop     ebx                                             ;restore non-volatile regs
                         ret                                                     ;return
+
+ConHandlerMem           push    ebx
+
+                        mov     ah,[wbConsoleScan]
+                        cmp     ah,EKEYBTABDOWN
+                        jne     .40
+;
+;       Start at the current field or czPnlMenuInp if no current field.
+;
+                        mov     ebx,[wdConsoleField]
+                        test    ebx,ebx
+                        jnz     .10
+                        mov     ebx,czPnlMenuInp
+                        mov     [wdConsoleField],ebx
+;
+;       Go to the next field or restart at the top of the panel.
+;
+.10                     lea     ebx,[ebx+12]                                    ;next field addr
+                        cmp     dword [ebx],0                                   ;end of panel?
+                        jne     .20                                             ;no, branch
+                        mov     ebx,czPnlMem001                                 ;start of panel
+;
+;       Exit loop if we have returned to where we started.
+;
+.20                     cmp     ebx,[wdConsoleField]
+                        je      .30
+;
+;       If this is an input field, set it as our new current field
+;
+                        test    byte [ebx+11],80h
+                        jz      .10
+.30                     mov     [wdConsoleField],ebx
+                        jmp     .90
+
+
+.40                     mov     edx,wzConsoleInBuffer                           ;console input buffer addr
+                        mov     ebx,wzConsoleToken                              ;token buffer
+                        call    ConTakeToken                                    ;take first command token
+                        mov     edx,wzConsoleToken                              ;token buffer
+                        call    ConDetermineCommand                             ;determine if this is a command
+                        cmp     eax,ECONJMPTBLCNT                               ;command number in range?
+                        jnb     .50                                             ;no, branch
+                        shl     eax,2                                           ;convert number to array offset
+                        mov     edx,tConJmpTbl                                  ;command handler address table base
+                        mov     eax,[edx+eax]                                   ;command handler address
+                        call    eax                                             ;handler command
+.50                     mov     ebx,czPnlMenuInp
+                        call    ConClearField
+
+.90                     pop     ebx
+                        ret
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -4261,12 +4329,21 @@ ConMem                  push    ebx                                             
                         mov     edx,wzConsoleToken                              ;first param as token address
                         hexadecimalToUnsigned                                   ;convert string token to unsigned
                         mov     [wdConsoleMemBase],eax                          ;save console memory address
+
+.10                     mov     al,'_'
+                        xor     ah,ah
+                        mov     edi,wzFldMenuOptn0
+                        cld
+                        stosw
+                        stosw
+                        stosw
+                        stosw
 ;
 ;       Setup source address and row count.
 ;
-.10                     mov     esi,[wdConsoleMemBase]                          ;source memory address
+                        mov     esi,[wdConsoleMemBase]                          ;source memory address
                         xor     ecx,ecx                                         ;zero register
-                        mov     cl,16                                           ;row count
+                        mov     cl,20                                           ;row count
                         mov     ebx,wzConsoleMemBuf0                            ;output buffer address
 ;
 ;       Start the row with the source address in hexadecimal.
@@ -4277,6 +4354,8 @@ ConMem                  push    ebx                                             
                         mov     ecx,esi                                         ;console memory address
                         unsignedToHexadecimal                                   ;convert unsigned address to hex string
                         add     edi,8                                           ;end of memory addr hexnum
+                        mov     al,' '
+                        stosb
 ;
 ;       Output 16 ASCII hexadecimal byte values for the row.
 ;
@@ -4307,7 +4386,6 @@ ConMem                  push    ebx                                             
 ;
                         mov     al,' '                                          ;ascii space
                         stosb                                                   ;store delimiter
-                        mov     al,' '                                          ;ascii space
                         stosb                                                   ;store delimiter
                         sub     esi,16                                          ;reset source pointer
                         mov     cl,16                                           ;loop count
@@ -4332,8 +4410,12 @@ ConMem                  push    ebx                                             
 ;
 ;       Update the current panel identifier.
 ;
+                        mov     eax,[cdHandlerMem]                              ;mem panel handler
+                        mov     [wdConsoleHandler],eax                          ;set panel handler addr
                         mov     eax,czPnlMem001                                 ;initial console panel
                         mov     [wdConsolePanel],eax                            ;save panel template address
+                        xor     eax,eax
+                        mov     [wdConsoleField],eax
 ;
 ;       Restore and return.
 ;
@@ -4347,6 +4429,7 @@ ConMem                  push    ebx                                             
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 cdHandlerMain           dd      ConHandlerMain - ConCode
+cdHandlerMem            dd      ConHandlerMem - ConCode
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Panels
@@ -4373,51 +4456,64 @@ czPnlMainInp            dd      wzConsoleInBuffer
                         db      0,0,7,80h
                         dd      0                                               ;end of panel
 
-czPnlMem001             dd      czFldPnlIdMem001                                ;field text
-                        db      0,0,6,0
-                        db      0,0,2,0
+czPnlMem001             dd      czFldPnlIdMem001
+                        db      0,0,6,0,0,0,2,0
                         dd      czFldTitleMem001
-                        db      0,33,14,0
-                        db      0,0,7,0
+                        db      0,33,14,0,0,0,7,0
+                        dd      czFldDatTmCon001
+                        db      0,63,17,0,0,0,2,0
+                        dd      wzFldMenuOptn0
+                        db      2,1,1,0,0,0,2,80h
                         dd      wzConsoleMemBuf0
-                        db      2,0,80,0
-                        db      0,0,7,0
-                        ;dd      wzConsoleMemBuf1
-                        ;db      04,00,07h,80
-                        ;dd      wzConsoleMemBuf2
-                        ;db      05,00,07h,80
-                        ;dd      wzConsoleMemBuf3
-                        ;db      06,00,07h,80
-                        ;dd      wzConsoleMemBuf4
-                        ;db      07,00,07h,80
-                        ;dd      wzConsoleMemBuf5
-                        ;db      08,00,07h,80
-                        ;dd      wzConsoleMemBuf6
-                        ;db      09,00,07h,80
-                        ;dd      wzConsoleMemBuf7
-                        ;db      10,00,07h,80
-                        ;dd      wzConsoleMemBuf8
-                        ;db      11,00,07h,80
-                        ;dd      wzConsoleMemBuf9
-                        ;db      12,00,07h,80
-                        ;dd      wzConsoleMemBufA
-                        ;db      13,00,07h,80
-                        ;dd      wzConsoleMemBufB
-                        ;db      14,00,07h,80
-                        ;dd      wzConsoleMemBufC
-                        ;db      15,00,07h,80
-                        ;dd      wzConsoleMemBufD
-                        ;db      16,00,07h,80
-                        ;dd      wzConsoleMemBufE
-                        ;db      17,00,07h,80
-                        ;dd      wzConsoleMemBufF
-                        ;db      18,00,07h,80
+                        db      2,4,75,0,0,0,7,0
+                        dd      wzFldMenuOptn1
+                        db      3,1,1,0,0,0,2,80h
+                        dd      wzConsoleMemBuf1
+                        db      3,4,75,0,0,0,7,0
+                        dd      wzFldMenuOptn2
+                        db      4,1,1,0,0,0,2,80h
+                        dd      wzConsoleMemBuf2
+                        db      4,4,75,0,0,0,7,0
+                        dd      wzFldMenuOptn3
+                        db      5,1,1,0,0,0,2,80h
+                        dd      wzConsoleMemBuf3
+                        db      5,4,75,0,0,0,7,0
+                        dd      wzConsoleMemBuf4
+                        db      6,4,75,0,0,0,7,0
+                        dd      wzConsoleMemBuf5
+                        db      7,4,75,0,0,0,7,0
+                        dd      wzConsoleMemBuf6
+                        db      8,4,75,0,0,0,7,0
+                        dd      wzConsoleMemBuf7
+                        db      9,4,75,0,0,0,7,0
+                        dd      wzConsoleMemBuf8
+                        db      10,4,75,0,0,0,7,0
+                        dd      wzConsoleMemBuf9
+                        db      11,4,75,0,0,0,7,0
+                        dd      wzConsoleMemBufA
+                        db      12,4,75,0,0,0,7,0
+                        dd      wzConsoleMemBufB
+                        db      13,4,75,0,0,0,7,0
+                        dd      wzConsoleMemBufC
+                        db      14,4,75,0,0,0,7,0
+                        dd      wzConsoleMemBufD
+                        db      15,4,75,0,0,0,7,0
+                        dd      wzConsoleMemBufE
+                        db      16,4,75,0,0,0,7,0
+                        dd      wzConsoleMemBufF
+                        db      17,4,75,0,0,0,7,0
+                        dd      wzConsoleMemBuf10
+                        db      18,4,75,0,0,0,7,0
+                        dd      wzConsoleMemBuf11
+                        db      19,4,75,0,0,0,7,0
+                        dd      wzConsoleMemBuf12
+                        db      20,4,75,0,0,0,7,0
+                        dd      wzConsoleMemBuf13
+                        db      21,4,75,0,0,0,7,0
                         dd      czFldPrmptCon001
-                        db      23,0,1,0
-                        db      0,0,7,0
-                        dd      wzConsoleInBuffer
-                        db      23,1,79,0
-                        db      0,0,7,80h
+                        db      23,0,1,0,0,0,7,0
+czPnlMenuInp            dd      wzConsoleInBuffer
+                        db      23,1,79,0,0,0,7,80h
                         dd      0                                               ;end of panel
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -4460,6 +4556,7 @@ czFldTitleCon001        db      "OS Version 1.0",0                              
 czFldTitleMem001        db      "Memory Display",0                              ;memory panel title
 czFldDatTmCon001        db      "DD-MMM-YYYY HH:MM",0                           ;panel date and time template
 czFldPrmptCon001        db      ":",0                                           ;command prompt
+czFldMenuOptn001        db      "_",0                                           ;menu option
                         times   4096-($-$$) db 0h                               ;zero fill to end of section
 %endif
 %ifdef BUILDDISK
