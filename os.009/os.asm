@@ -212,7 +212,6 @@ EKEYBESCAPEDOWN         equ     001h                                            
 EKEYBTABDOWN            equ     00Fh                                            ;tab key down
 EKEYBENTERDOWN          equ     01Ch                                            ;enter key down
 EKEYBCTRLDOWN           equ     01Dh                                            ;control key down
-
 EKEYBSHIFTLDOWN         equ     02Ah                                            ;left shift key down
 EKEYBSLASH              equ     035h                                            ;slash
 EKEYBSHIFTRDOWN         equ     036h                                            ;right shift key down
@@ -226,6 +225,7 @@ EKEYBRIGHTARROWDOWN     equ     04Dh                                            
 EKEYBDOWNARROWDOWN      equ     050h                                            ;down-arrow down (e0 50)
 EKEYBINSERTDOWN         equ     052h                                            ;insert down (e0 52)
 EKEYBWINDOWN            equ     05Bh                                            ;windows (R) down
+EKEYBPAUSEBREAK         equ     065h                                            ;pause/break pseudo code
 EKEYBUP                 equ     080h                                            ;up
 EKEYBESCAPEUP           equ     081h                                            ;escape key up
 EKEYBTABUP              equ     08Fh                                            ;tab key up
@@ -408,7 +408,6 @@ EKEYFLOCKSCROLL         equ     00000001b                                       
 EKEYFLOCKNUM            equ     00000010b                                       ;num-lock flag
 EKEYFLOCKCAPS           equ     00000100b                                       ;cap-lock flag
 EKEYFLOCKINSERT         equ     00001000b                                       ;insert-lock flag
-EKEYFEXTCODE            equ     01000000b                                       ;extended scan code 1 (e1)
 EKEYFTIMEOUT            equ     10000000b                                       ;controller timeout
 ;-----------------------------------------------------------------------------------------------------------------------
 ;       Kernel Constants                                                        EKRN...
@@ -2406,12 +2405,47 @@ irq0.20                 sti                                                     
 ;
 ;       Scan Codes Returned
 ;
+;       Set 1           Base            Shift
 ;       01/81           Escape
-;
-;       1C/9C           Enter
-;       1D/9D           Left Ctrl
-;
-;       2B/AB           \
+;       02/82           1               !
+;       03/83           2               @
+;       04/84           3               #
+;       05/85           4               $
+;       06/86           5               %
+;       07/87           6               ^
+;       08/88           7               &
+;       09/89           8               *
+;       0A/8A           9               (
+;       0B/8B           0               )
+;       0C/8C           -               _
+;       0D/8D           =               +
+;       0E/8E           Backspace
+;       0F/8F           Tab
+;       10/90           q               Q
+;       11/91           w               W
+;       12/92           e               E
+;       13/93           r               R
+;       14/94           t               T
+;       15/95           y               Y
+;       16/96           u               U
+;       17/97           i               I
+;       18/98           o               O
+;       19/99           p               P
+;       1A/9A           [               {
+;       1B/9B           ]               }
+;       1C/9C           Enter           Enter
+;       1D/9D           Left Ctrl                       E0 1D/E0 9D             Right Ctrl
+;       1E/9E           a               A
+;       1F/9F           s               S
+;       20/A0           d               D
+;       21/A1           f               F
+;       22/A2           g               G
+;       23/A3           h               H
+;       24/A4           j               J
+;       25/A5           k               K
+;       26/A6           l               L
+;       27/A7           ;               :
+;       28/A8           '               "
 ;       29/A9           `               ~
 ;       2A/AA           Left Shift
 ;       2B/AB
@@ -2427,7 +2461,7 @@ irq0.20                 sti                                                     
 ;       35/B5           /
 ;       36/B6           Right Shift
 ;       37/B7           Keypad *
-;       38/B8           Left Alt
+;       38/B8           Left Alt                        E0 38/E0 B8             Right Alt
 ;       39/B9           Spacebar
 ;       3A/BA           Caps Lock
 ;       3B/BB           F1
@@ -2453,7 +2487,7 @@ irq0.20                 sti                                                     
 ;       4F/CF           Keypad 1
 ;       50/D0           Keypad 2
 ;       51/D1           Keypad 3
-;       52/D2           Keypad 0
+;       52/D2           Keypad 0                        E0 52/E0 D2             Insert
 ;       53/D3           Keypad .
 ;       54/D4
 ;       55/D5
@@ -2489,9 +2523,9 @@ irq0.20                 sti                                                     
                         push    EGDTOSDATA                                      ;load OS data selector ...
                         pop     ds                                              ;... into data segment register
 ;
-;       Clear keyboard timeout flag.
+;       Clear keyboard timeout flag
 ;
-                        mov     al,EKEYFTIMEOUT|EKEYFEXTCODE                    ;timeout|extended-code-1
+                        mov     al,EKEYFTIMEOUT                                 ;timeout|extended-code-1
                         not     al                                              ;controller timeout mask
                         and     [wbConsoleStatus],al                            ;zero timeout and ext code 1 flags
 ;
@@ -2524,8 +2558,8 @@ irq0.20                 sti                                                     
                         stosb                                                   ;save scan code 0
                         mov     ah,al                                           ;copy scan code
 ;
-;       If extended code one (e1), get the next five scan codes.
-;       Note: Only Pause/Break generates e1 and generates twin code triplets on make and no break codes.
+;       If extended code one (e1), get the next five scan codes. Note: Only Pause/Break generates e1. It generates
+;       twin code triplets on make and no break codes. We will return a tailored scan code to indicate pause/break.
 ;
                         cmp     ah,EKEYBCODEEXT1                                ;extended scan code 1?
                         jne     irq1.notext1                                    ;no, branch
@@ -2549,9 +2583,8 @@ irq0.20                 sti                                                     
                         jz      irq1.timeout                                    ;yes, skip ahead
                         in      al,EKEYBPORTDATA                                ;read scan code
                         stosb                                                   ;save scan code 5
-                        mov     ah,65h                                          ;pause/break pseudo-code
-                        or      byte [wbConsoleStatus],EKEYFEXTCODE             ;indicate ext code 1
-                        jmp     irq1.putscan                                    ;
+                        mov     ah,EKEYBPAUSEBREAK                              ;pause/break pseudo-code
+                        jmp     irq1.putscan                                    ;display scan codes
 
 
 ;
@@ -2601,7 +2634,7 @@ irq1.shiftsave          mov     [wbConsoleShift],bl                             
                         jmp     short irq1.putshift                             ;put shift and scan indicators
 ;
 ;       Handle single scan-codes that affect the lock flags.
-;       Note: Caps-Lock-Up, Num-Lock-Up and Scroll-Lock-Up are ignored. 
+;       Note: Caps-Lock-Up, Num-Lock-Up and Scroll-Lock-Up are ignored.
 ;
 irq1.locktest           mov     al,EKEYFLOCKCAPS                                ;caps-lock flag
                         cmp     ah,EKEYBCAPSDOWN                                ;caps-lock key down code?
