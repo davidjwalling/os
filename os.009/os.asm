@@ -213,7 +213,7 @@ EKEYBTABDOWN            equ     00Fh                                            
 EKEYBENTERDOWN          equ     01Ch                                            ;enter key down
 EKEYBCTRLDOWN           equ     01Dh                                            ;control key down
 EKEYBSHIFTLDOWN         equ     02Ah                                            ;left shift key down
-EKEYBSLASH              equ     035h                                            ;slash
+EKEYBSLASHDOWN          equ     035h                                            ;slash key down
 EKEYBSHIFTRDOWN         equ     036h                                            ;right shift key down
 EKEYBALTDOWN            equ     038h                                            ;alt key down
 EKEYBCAPSDOWN           equ     03Ah                                            ;caps-lock down
@@ -234,6 +234,7 @@ EKEYBCTRLUP             equ     09Dh                                            
 EKEYBSHIFTLUP           equ     0AAh                                            ;left shift key up
 EKEYBSLASHUP            equ     0B5h                                            ;slash key up
 EKEYBSHIFTRUP           equ     0B6h                                            ;right shift key up
+EKEYBPADASTERISKUP      equ     0B7h                                            ;keypad asterisk up
 EKEYBALTUP              equ     0B8h                                            ;alt key up
 EKEYBCAPSUP             equ     0BAh                                            ;caps-lock up
 EKEYBNUMUP              equ     0C5h                                            ;num-lock up
@@ -600,7 +601,7 @@ wbConsoleRow            resb    1                                               
                                                                                 ;---------------------------------------
 wbConsoleShift          resb    1                                               ;console shift flags
 wbConsoleLock           resb    1                                               ;console lock flags
-wbConsoleStatus         resb    1                                               ;controller status
+;wbConsoleStatus         resb    1                                               ;controller status
 wbConsoleScan0          resb    1                                               ;scan code
 wbConsoleScan1          resb    1                                               ;scan code
 wbConsoleScan2          resb    1                                               ;scan code
@@ -2405,405 +2406,401 @@ irq0.20                 sti                                                     
 ;
 ;       Scan Codes Returned
 ;
-;       Set 1           Base            Shift
-;       01/81           Escape
-;       02/82           1               !
-;       03/83           2               @
-;       04/84           3               #
-;       05/85           4               $
-;       06/86           5               %
-;       07/87           6               ^
-;       08/88           7               &
-;       09/89           8               *
-;       0A/8A           9               (
-;       0B/8B           0               )
-;       0C/8C           -               _
-;       0D/8D           =               +
-;       0E/8E           Backspace
-;       0F/8F           Tab
-;       10/90           q               Q
-;       11/91           w               W
-;       12/92           e               E
-;       13/93           r               R
-;       14/94           t               T
-;       15/95           y               Y
-;       16/96           u               U
-;       17/97           i               I
-;       18/98           o               O
-;       19/99           p               P
-;       1A/9A           [               {
-;       1B/9B           ]               }
-;       1C/9C           Enter           Enter
-;       1D/9D           Left Ctrl                       E0 1D/E0 9D             Right Ctrl
-;       1E/9E           a               A
-;       1F/9F           s               S
-;       20/A0           d               D
-;       21/A1           f               F
-;       22/A2           g               G
-;       23/A3           h               H
-;       24/A4           j               J
-;       25/A5           k               K
-;       26/A6           l               L
-;       27/A7           ;               :
-;       28/A8           '               "
-;       29/A9           `               ~
-;       2A/AA           Left Shift
-;       2B/AB
-;       2C/AC           z               Z
-;       2D/AD           x               X
-;       2E/AE           c               C
-;       2F/AF           v               V
-;       30/B0           b               B
-;       31/B1           n               N
-;       32/B2           m               M
-;       33/B3           ,
-;       34/B4           .
-;       35/B5           /
-;       36/B6           Right Shift
-;       37/B7           Keypad *
-;       38/B8           Left Alt                        E0 38/E0 B8             Right Alt
-;       39/B9           Spacebar
-;       3A/BA           Caps Lock
-;       3B/BB           F1
-;       3C/BC           F2
-;       3D/BD           F3
-;       3E/BE           F4
-;       3F/BF           F5
-;       40/C0           F6
-;       41/C1           F7
-;       42/C2           F8
-;       43/C3           F9
-;       44/C4           F10
-;       45/C5           Num Lock
-;       46/C6           Scroll Lock
-;       47/C7           Keypad 7
-;       48/C8           Keypad 8
-;       49/C9           Keypad 9
-;       4A/CA           Keypad -
-;       4B/CB           Keypad 4
-;       4C/CC           Keypad 5
-;       4D/CD           Keypad 6
-;       4E/CE           Keypad +
-;       4F/CF           Keypad 1
-;       50/D0           Keypad 2
-;       51/D1           Keypad 3
-;       52/D2           Keypad 0                        E0 52/E0 D2             Insert
-;       53/D3           Keypad .
-;       54/D4
-;       55/D5
-;       56/D6
-;       57/D7           F11
-;       58/D8           F12
-;       59/D9
-;       5A/DA
-;       5B/DB           Windows
-;       5C/DC
-;       5D/DD
-;       5E/DE
-;       5F/DF
+;       Set 1                           Base            Shift           KEYDOWN         KEYUP           CHAR
+;                                                                       Norm/Shift      Norm/Shift      Norm/Shift
+;                                                                       AX   AX         AX   AX         AX   AX
+;       00/80                           
+;       01/81                           Escape                          011B/011B       811B/811B       011B/011B
+;       02/82                           1               !               0231/0221       8231/8221       0231/0221
+;       03/83                           2               @               0332/0340       8332/8340       0332/0340
+;       04/84                           3               #               0433/0423       8433/8423       0433/0423
+;       05/85                           4               $               0534/0524       8534/8524       0534/0524
+;       06/86                           5               %               0635/0625       8635/8625       0635/0625
+;       07/87                           6               ^               0736/075E       8736/875E       0736/075E
+;       08/88                           7               &               0837/0826       8837/8826       0837/0826
+;       09/89                           8               *               0938/092A       8938/892A       0938/092A
+;       0A/8A                           9               (               0A39/0A28       8A39/8A28       0A39/9A28
+;       0B/8B                           0               )               0B30/0B29       8B30/8B29       0B30/0B29
+;       0C/8C                           -               _               0C2D/0C5F       8C2D/8C5F       0C2D/0C5F
+;       0D/8D                           =               +               0D3D/0D2B       8D3D/8D2B       0D3D/0D2B
+;       0E/8E                           Backspace                       0E08/0E08       8E08/8E08       0E08/0E08
+;       0F/8F                           Tab                             0F09/0F09       8F09/8F09       0F09/0F09
+;       10/90                           q               Q               1071/1051       9071/9051       1071/1051
+;       11/91                           w               W               1177/1157       9177/9157       1177/1157
+;       12/92                           e               E               1265/1245       9265/9245       1265/1245
+;       13/93                           r               R               13
+;       14/94                           t               T               14
+;       15/95                           y               Y               15
+;       16/96                           u               U               16
+;       17/97                           i               I               17
+;       18/98                           o               O               18
+;       19/99                           p               P               19
+;       1A/9A                           [               {               1A5B/1A7B       9A5B/9A7B       1A58/1A7B
+;       1B/9B                           ]               }               1B5D/1B7D       9B5D/9B7D       1B5D/1B7D
+;       1C/9C                           Enter                           1C00/1C00       9C00/9C00
+;               E0 1C/E0 9C             Keypad Enter                   *5C00/5C00      *DC00/DC00
+;       1D/9D                           Left Ctrl                       1D00/1D00       9D00/9D00
+;               E0 1D/E0 9D             Right Ctrl                     *5D00/5D00      *DD00/DD00
+;               E1 1D 45/E1 9D C5       Pause Break                    *6500/6500      *E500/E500
+;       1E/9E                           a               A               1E61/1E41       9E61/9E41       1E61/1E41
+;       1F/9F                           s               S               1F
+;       20/A0                           d               D               20
+;       21/A1                           f               F               21
+;       22/A2                           g               G               22
+;       23/A3                           h               H               23
+;       24/A4                           j               J               24
+;       25/A5                           k               K               25
+;       26/A6                           l               L               26
+;       27/A7                           ;               :               273B/273A       A73B/A73A       273B/273A
+;       28/A8                           '               "               2827/2822       A827/A822       2827/2822
+;       29/A9                           `               ~               2960/297E       A960/A97E       2960/297E
+;       2A/AA                           Left Shift                      2A00/2A00       AA00/AA00
+;       2B/AB                           \               |               2B5C/2B7C       AB5C/AB7C       2B5C/2B7C
+;       2C/AC                           z               Z               2C7A/2C5A       AC7A/AC5A       2C7A/2C5A
+;       2D/AD                           x               X               2D78/2D58       AD78/AD58       2D78/2D58
+;       2E/AE                           c               C               2E63/2E43       AE63/AE43       2E63/2E43
+;       2F/AF                           v               V               2F76/2F56       AF76/AF56       2F76/2F56
+;       30/B0                           b               B               3062/3042       B062/B042       3062/3042
+;       31/B1                           n               N               316E/314E       B16E/B14E       316E/314E
+;       32/B2                           m               M               326D/324D       B26D/B24D       326D/324D
+;       33/B3                           ,               <               332C/333C       B32C/B33C       332C/333C
+;       34/B4                           .               >               342E/343E       B42E/B43E       342E/343E
+;       35/B5                           /               ?               352F/353F       B52F/B53F       352F/353F
+;               E0 35/E0 B5             Keypad-Slash                   *752F/752F      *F52F/F52F      *752F/752F
+;               E0 35/E0 36             Right-Shift Keypad-Slash       *752F/752F      *F52F/F52F      *752F/752F
+;       36/B6                           Right Shift                     3600/3600       B600/B600
+;       37/B7                           Keypad *                        372A/372A       B72A/B72A       372A/372A
+;               E0 37/E0 B7 E0 B7       Shift PrntScrn                 *7700/7700      *F700/F700
+;               E0 2A E0 37/E0 B7 E0 AA PrntScrn                       *7700/7700      *F700/F700
+;       38/B8                           Left Alt                        3800/3800       B800/B800
+;               E0 38/E0 B8             Right Alt                      *7800/7800      *F800/F800
+;       39/B9                           Spacebar                        3920/3920       B920/B920       3920/3920
+;       3A/BA                           Caps Lock                       3A00/3A00       BA00/BA00
+;       3B/BB                           F1                              3B00/3B00       BB00/BB00
+;       3C/BC                           F2                              3C00/3C00       BC00/BC00
+;       3D/BD                           F3                              3D00/3D00       BD00/BD00
+;       3E/BE                           F4                              3E00/3E00       BE00/BE00
+;       3F/BF                           F5                              3F00/3F00       BF00/BF00
+;       40/C0                           F6                              4000/4000       C000/C000
+;       41/C1                           F7                              4100/4100       C100/C100
+;       42/C2                           F8                              4200/4200       C200/C200
+;       43/C3                           F9                              4300/4300       C300/C300
+;       44/C4                           F10                             4400/4400       C400/C400
+;       45/C5                           Num-Lock                        4500/4500       C500/C500
+;       46/C6                           Scroll-Lock                     4600/4600       C600/C600
+;       47/C7                           Keypad-7                        4700/4700       C700/C700
+;                                       Num-Lock Keypad-7               4737/4737       C737/C737       4737/4737
+;                                       Left-Shift Keypad-7             4737/4737       C737/C737       4737/4737
+;                                       Right-Shift Keypad-7            4737/4737       C737/C737       4737/4737
+;               47/2A                   Num-Lock Left-Shift Keypad-7    4700/4700       C700/C700
+;               47/36                   Num-Lock Right-Shift Keypad-7   4700/4700       C700/C700
+;               E0 47/E0 C7             Home                           *6700/6700      *E700/E700
+;               E0 47/E0 36             Right-Shift Home               *6700/6700      *E700/E700
+;               E0 2A E0 47/E0 AA       Num-Lock Home                  *6700/6700      *E700/E700
+;       48/C8                           Keypad-8                        4800/4800       C800/C800
+;                                       Num-Lock Keypad-8               4838/4838       C838/C838       4838/4838
+;                                       Left-Shift Keypad-8             4838/4838       C838/C838       4838/4838
+;                                       Right-Shift Keypad-8            4838/4838       C838/C838       4838/4838
+;               48/2A                   Num-Lock Left-Shift Keypad-8    4800/4800       C800/C800
+;               48/36                   Num-Lock Right-Shift Keypad-8   4800/4800       C800/C800
+;               E0 48/E0 C8             Up-Arrow                       *6800/6800      *E800/E800
+;               E0 48/E0 36             Right-Shift Up-Arrow           *6800/6800      *E800/E800
+;               E0 2A E0 48/E0 AA       Num-Lock Up-Arrow              *6800/6800      *E800/E800
+;       49/C9                           Keypad-9                        4900/4900       C900/C900
+;                                       Num-Lock Keypad-9               4939/4939       C939/C939       4939/4939
+;                                       Left-Shift Keypad-9             4939/4939       C939/C939       4939/4939
+;                                       Right-Shift Keypad-9            4939/4939       C939/C939       4939/4939
+;               49/2A                   Num-Lock Left-Shift Keypad-9    4900/4900       C900/C900
+;               49/36                   Num-Lock Right-Shift Keypad-9   4900/4900       C900/C900
+;               E0 49/E0 C9             Page-Up                        *6900/6900      *E900/E900
+;               E0 49/E0 36             Right-Shift Page-Up            *6900/6900      *E900/E900
+;               E0 2A E0 49/E0 AA       Num-Lock Page-Up               *6900/6900      *E900/E900
+;       4A/CA                           Keypad-Minus                    4A2D/4A2D       CA2D/CA2D       4A2D/4A2D
+;       4B/CB                           Keypad-4                        
+;                                       Num-Lock Keypad-4               
+;                                       Left-Shift Keypad-4             
+;                                       Right-Shift Keypad-4            
+;                                       Num-Lock Left-Shift Keypad-4    
+;                                       Num-Lock Right-Shift Keypad-4   
+
+;               E0 4B/E0 CB             Left-Arrow                      
+;                                       Left-Shift Left-Arrow           
+;                                       Right-Shift Left-Arrow          
+;               E0 2A E0 49/E0 C9       Num-Lock Left-Arrow             
+;                                       Num-Lock Left-Shift Left-Arrow  
+;                                       Num-Lock Right-Shift Left-Arrow 
+
+
+;       4C/CC                           Keypad-5                        
+
+;       4D/CD                           Keypad-6                        
+;                                       Num-Lock Keypad-6               
+;               E0 4D/E0 CD             Right-Arrow                     
+;               E0 2A E0 4D/E0 CD       Num-Lock Right-Arrow            
+;                                       Left-Shift Right-Arrow          
+
+;       4E/CE                           Keypad-Plus                     
+
+;       4F/CF                           Keypad-1                        
+;                                       Num-Lock Keypad-1               
+
+;               E0 4F/E0 CF             End                             
+;               E0 2A E0 4F/E0 CF       Num-Lock End                    
+;                                       Left-Shift End                  
+
+;       50/D0                           Keypad-2                        
+;               E0 50/E0 D0             Down-Arrow                      
+;               E0 2A E0 50/E0 D0       Num-Lock Down-Arrow             
+;                                       Left-Shift Down-Arrow           
+
+;       51/D1                           Keypad-3                        5100/5100       
+;               E0 51/E0 D1             Page-Down                       
+;               E0 2A E0 51/E0 AA       Num-Lock Page-Down              
+;                                       Left-Shift Page-Down            
+
+;       52/D2                           Keypad-0                        
+;                                       Num-Lock Keypad-0               
+;                                       Left-Shift Keypad-0             
+;                                       Right-Shift Keypad-0            
+;               52/2A                   Num-Lock Left-Shift Keypad-0    
+;               52/36                   Num-Lock Right-Shift Keypad-0   
+;               E0 52/E0 D2             Insert                          
+;               E0 52/E0 36             Right-Shift Insert              
+;               E0 2A E0 52/E0 AA       Num-Lock Insert                 
+
+;       53/D3                           Keypad-Period                   537F/537F       D37F/D37F       537F/537F
+;                                       Num-Lock Keypad-Period          532E/532E       D32E/D32E       532E/532E
+;               53/2A                   Num-Lock Left-Shift Keypad-Period
+;               53/36                   Num-Lock Right-Shift Keypad-Period
 ;
-;       65/E5           Pause/Break
+;               E0 53/E0 D3             Delete                         *737F/737F      *F37F/F37F      *737F/737F
+;               E0 53/E0 36             Right-Shift Delete             *737F/737F      *F37F/F37F      *737F/737F
+;               E0 2A E0 53/E0 AA       Num-Lock Delete                *737F/737F      *F37F/F37F      *737F/737F
+;       57/D7                           F11                             5700/5700       D700/D700
+;       58/D8                           F12                             5800/5800       D800/D800
+;       59/D9                           
+;       5A/DA                           
+;       5B/DB                           
+;               E0 5B/E0 DB             Windows                         5B00/5B00       DB00/DB00
+;
+;       Custom Key Make/Break Codes
+;
+;       5C/DC                           Keyboard-Enter
+;       5D/DD                           Right-Ctrl
+;       67/E7                           Home
+;       68/E8                           Up-Arrow
+;       69/E9                           Page-Up
+;       6B/EB                           Left-Arrow
+;       6D/ED                           Right-Arrow
+;       6F/EF                           End
+;       70/F0                           Down-Arrow
+;       71/F1                           Page-Down
+;       72/F2                           Insert
+;       73/F3                           Delete
+;       75/F5                           Keyboard-Slash
+;       77/F7                           Print-Scrn
+;       78/F8                           Right-Alt
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  keyboard                                        ;keyboard interrrupt
                         push    eax                                             ;save non-volatile regs
                         push    ebx                                             ;
                         push    ecx                                             ;
-                        push    esi                                             ;
-                        push    edi                                             ;
                         push    ds                                              ;
-                        push    es                                              ;
-;
-;       End the interrupt.
-;
+
                         call    PutPrimaryEndOfInt                              ;send EOI to primary PIC
-;
-;       Address OS data.
-;
+
                         push    EGDTOSDATA                                      ;load OS data selector ...
                         pop     ds                                              ;... into data segment register
-;
-;       Clear keyboard timeout flag
-;
-                        mov     al,EKEYFTIMEOUT                                 ;timeout|extended-code-1
-                        not     al                                              ;controller timeout mask
-                        and     [wbConsoleStatus],al                            ;zero timeout and ext code 1 flags
-;
-;       Reset saved scan and character codes.
-;
-                        mov     edi,wbConsoleScan0                              ;scan code array addr
-                        push    edi                                             ;save scan code array addr
-                        xor     ecx,ecx                                         ;zero reg
-                        mov     al,cl                                           ;zero reg
-                        mov     cl,8                                            ;count
-                        cld                                                     ;forward strings
-                        rep     stosb                                           ;zero scan and char codes
-                        pop     edi                                             ;restore scan code array addr
-;
-;       Address video memory
-;
-;                        push    EGDTCGA                                         ;load CGA data selector ...
-;                        pop     es                                              ;... into extra segment register
-;
-;       Hold shift and lock flags.
-;
+
+                        xor     al,al
+                        mov     [wbConsoleChar],al
+                        mov     [wbConsoleScan],al
+
+                        mov     [wbConsoleScan0],al
+                        mov     [wbConsoleScan1],al
+                        mov     [wbConsoleScan2],al
+                        mov     [wbConsoleScan3],al
+                        mov     [wbConsoleScan4],al
+                        mov     [wbConsoleScan5],al
+
                         mov     bl,[wbConsoleShift]                             ;shift flags
                         mov     bh,[wbConsoleLock]                              ;lock flags
-;
-;       Get the first scan code.
-;
+
                         call    WaitForKeyOutBuffer                             ;controller timeout?
-                        jz      irq1.timeout                                    ;yes, skip ahead
+                        jz      irq1.exit                                       ;yes, skip ahead
                         in      al,EKEYBPORTDATA                                ;read scan code
-                        stosb                                                   ;save scan code 0
-                        mov     ah,al                                           ;copy scan code
-;
-;       If extended code one (e1), get the next five scan codes. Note: Only Pause/Break generates e1. It generates
-;       twin code triplets on make and no break codes. We will return a tailored scan code to indicate pause/break.
-;
-                        cmp     ah,EKEYBCODEEXT1                                ;extended scan code 1?
+                        mov     [wbConsoleScan0],al                             ;save scan code 0
+                        cmp     al,EKEYBCODEEXT1                                ;extended scan code 1?
                         jne     irq1.notext1                                    ;no, branch
                         call    WaitForKeyOutBuffer                             ;controller timeout?
-                        jz      irq1.timeout                                    ;yes, skip ahead
+                        jz      irq1.exit                                       ;yes, skip ahead
                         in      al,EKEYBPORTDATA                                ;read scan code
-                        stosb                                                   ;save scan code 1
-                        call    WaitForKeyOutBuffer                             ;controller timeout?
-                        jz      irq1.timeout                                    ;yes, skip ahead
-                        in      al,EKEYBPORTDATA                                ;read scan code
-                        stosb                                                   ;save scan code 2
-                        call    WaitForKeyOutBuffer                             ;controller timeout?
-                        jz      irq1.timeout                                    ;yes, skip ahead
-                        in      al,EKEYBPORTDATA                                ;read scan code
-                        stosb                                                   ;save scan code 3
-                        call    WaitForKeyOutBuffer                             ;controller timeout?
-                        jz      irq1.timeout                                    ;yes, skip ahead
-                        in      al,EKEYBPORTDATA                                ;read scan code
-                        stosb                                                   ;save scan code 4
-                        call    WaitForKeyOutBuffer                             ;controller timeout?
-                        jz      irq1.timeout                                    ;yes, skip ahead
-                        in      al,EKEYBPORTDATA                                ;read scan code
-                        stosb                                                   ;save scan code 5
-                        mov     ah,EKEYBPAUSEBREAK                              ;pause/break pseudo-code
-                        jmp     irq1.putscan                                    ;display scan codes
-
-
-;
-;       If extended code zero (e0), get the next scan code.
-;
-                        cmp     ah,EKEYBCODEEXT0                                ;extended scan code 0?
-                        jne     irq1.notext0                                    ;no, branch
-                        call    WaitForKeyOutBuffer                             ;controller timeout?
-                        jz      irq1.timeout                                    ;yes, skip ahead
-                        in      al,EKEYBPORTDATA                                ;read scan code 1
-                        stosb                                                   ;save scan code 1
-                        mov     ah,al                                           ;copy scan code 1
-
-
-;
-;       Handle single scan codes that affect the shift flags.
-;       Note: Right-Ctrl and Right-Alt generate extended scan codes E048/B8 and E01D/9D.
-;
-                        mov     al,EKEYFSHIFTLEFT                               ;left shift flag
-                        cmp     ah,EKEYBSHIFTLUP                                ;left shift key up code?
-                        je      irq1.shiftclear                                 ;yes, reset flag
-                        cmp     ah,EKEYBSHIFTLDOWN                              ;left shift key down code?
-                        je      irq1.shiftset                                   ;yes, set flag
-                        mov     al,EKEYFSHIFTRIGHT                              ;right shift flag
-                        cmp     ah,EKEYBSHIFTRUP                                ;right shift key up code?
-                        je      irq1.shiftclear                                 ;yes, reset flag
-                        cmp     ah,EKEYBSHIFTRDOWN                              ;right shift key down code?
-                        je      irq1.shiftset                                   ;yes, set flag
-                        mov     al,EKEYFCTRLLEFT                                ;left control flag
-                        cmp     ah,EKEYBCTRLUP                                  ;control key up code?
-                        je      irq1.shiftclear                                 ;yes, reset flag
-                        cmp     ah,EKEYBCTRLDOWN                                ;control key down code?
-                        je      irq1.shiftset                                   ;yes, set flag
-                        mov     al,EKEYFALTLEFT                                 ;left alt flag
-                        cmp     ah,EKEYBALTUP                                   ;alt key up code?
-                        je      irq1.shiftclear                                 ;yes, reset flag
-                        cmp     ah,EKEYBALTDOWN                                 ;alt key down code?
-                        jne     irq1.locktest                                   ;no, branch
-;
-;       Set or clear shift flags.
-;
-irq1.shiftset           or      bl,al                                           ;set shift flag
-                        jmp     short irq1.shiftsave                            ;skip ahead
-irq1.shiftclear         not     al                                              ;convert flag to mask
-                        and     bl,al                                           ;reset shift flag
-irq1.shiftsave          mov     [wbConsoleShift],bl                             ;save shift flags
-                        jmp     short irq1.putshift                             ;put shift and scan indicators
-;
-;       Handle single scan-codes that affect the lock flags.
-;       Note: Caps-Lock-Up, Num-Lock-Up and Scroll-Lock-Up are ignored.
-;
-irq1.locktest           mov     al,EKEYFLOCKCAPS                                ;caps-lock flag
-                        cmp     ah,EKEYBCAPSDOWN                                ;caps-lock key down code?
-                        je      irq1.lockset                                    ;yes, toggle lamps and flags
-                        mov     al,EKEYFLOCKNUM                                 ;num-lock flag
-                        cmp     ah,EKEYBNUMDOWN                                 ;num-lock key down code?
-                        je      irq1.lockset                                    ;yes, toggle lamps and flags
-                        mov     al,EKEYFLOCKSCROLL                              ;scroll-lock flag
-                        cmp     ah,EKEYBSCROLLDOWN                              ;scroll-lock key down code?
-                        jne     irq1.ext0test                                   ;no,branch
-;
-;       Set or clear lock flags.
-;
-irq1.lockset            xor     bh,al                                           ;toggle lock flag
-                        mov     [wbConsoleLock],bh                              ;save lock flags
-                        call    SetKeyboardLamps                                ;update keyboard lamps
-irq1.putshift           call    PutConsoleOIAShift                              ;OIA shift indicators
-irq1.putscan            call    PutConsoleOIAScan                               ;OIA scan codes
-                        jmp     irq1.exit                                       ;skip ahead
-;
-;       If extended code zero (e0), get the next scan code.
-;
-irq1.ext0test           cmp     ah,EKEYBCODEEXT0                                ;extended scan code 0?
-                        jne     irq1.notext0                                    ;no, branch
-                        call    WaitForKeyOutBuffer                             ;controller timeout?
-                        jz      irq1.timeout                                    ;yes, skip ahead
-                        in      al,EKEYBPORTDATA                                ;read scan code 1
                         mov     [wbConsoleScan1],al                             ;save scan code 1
-                        mov     ah,al                                           ;copy scan code 1
-;
-;       Handle extended e0 scan codes that affect the shift flags (e0 ??).
-;
-                        mov     al,EKEYFCTRLRIGHT                               ;right control flag
-                        cmp     ah,EKEYBCTRLDOWN                                ;control key down code?
-                        je      irq1.shiftset                                   ;yes, set flag
-                        cmp     ah,EKEYBCTRLUP                                  ;control key up code?
-                        je      irq1.shiftclear                                 ;yes, reset flag
-                        mov     al,EKEYFALTRIGHT                                ;right alt flag
-                        cmp     ah,EKEYBALTDOWN                                 ;alt key down code?
-                        je      irq1.shiftset                                    ;yes, set flag
-                        cmp     ah,EKEYBALTUP                                   ;alt key up code?
-                        je      irq1.shiftclear                                 ;yes, reset flag
-;
-;       Handle extended e0 left-shift scan codes (e0 2a/aa e0 ??).
-;
-                        cmp     ah,EKEYBSHIFTLDOWN                              ;left shift down? (e0 2a)
-                        je      irq1.getpair2                                   ;yes, branch
-                        cmp     ah,EKEYBSHIFTLUP                                ;left shift up? (e0 aa)
-                        jne     irq1.notext1                                    ;no, branch
-irq1.getpair2           call    WaitForKeyOutBuffer                             ;controller timeout?
-                        jz      irq1.timeout                                    ;yes, skip ahead
-                        in      al,EKEYBPORTDATA                                ;read scan code 2
+                        call    WaitForKeyOutBuffer                             ;controller timeout?
+                        jz      irq1.exit                                       ;yes, skip ahead
+                        in      al,EKEYBPORTDATA                                ;read scan code
                         mov     [wbConsoleScan2],al                             ;save scan code 2
                         call    WaitForKeyOutBuffer                             ;controller timeout?
-                        jz      irq1.timeout                                    ;yes, skip ahead
-                        in      al,EKEYBPORTDATA                                ;read scan code 3
-                        mov     [wbConsoleScan3],al                             ;read scan code 3
-                        mov     ah,al                                           ;copy scan code
-                        jmp     irq1.notext1                                    ;continue
-
-
-;
-;       If extended code one (e1), get the next scan code.
-;
-irq1.notext0            cmp     ah,EKEYBCODEEXT1                                ;extended scan code 1?
-                        jne     irq1.notext1                                    ;no, branch
-                        call    WaitForKeyOutBuffer                             ;controller timeout?
-                        jz      irq1.timeout                                    ;yes, skip ahead
-                        in      al,EKEYBPORTDATA                                ;read scan code 1
-                        mov     [wbConsoleScan1],al                             ;save scan code 1
-                        mov     ah,al                                           ;copy scan code 1
-;
-;       Handle extended e1 left-control scan codes (e1 1d/9d e0 ??)
-;
-                        cmp     ah,EKEYBCTRLDOWN                                ;left control down? (e1 1d)
-                        je      irq1.getpair4                                   ;yes, branch
-                        cmp     ah,EKEYBCTRLUP                                  ;left control up? (e1 9d)
-                        jne     irq1.notext1                                    ;no, branch
-irq1.getpair4           call    WaitForKeyOutBuffer                             ;controller timeout?
-                        jz      irq1.timeout                                    ;yes, skip ahead
-                        in      al,EKEYBPORTDATA                                ;read scan code 2
-                        mov     [wbConsoleScan2],al                             ;save scan code 2
-                        call    WaitForKeyOutBuffer                             ;controller timeout?
-                        jz      irq1.timeout                                    ;yes, skip ahead
-                        in      al,EKEYBPORTDATA                                ;read scan code 3
+                        jz      irq1.exit                                       ;yes, skip ahead
+                        in      al,EKEYBPORTDATA                                ;read scan code
                         mov     [wbConsoleScan3],al                             ;save scan code 3
                         call    WaitForKeyOutBuffer                             ;controller timeout?
-                        jz      irq1.timeout                                    ;yes, skip ahead
-                        in      al,EKEYBPORTDATA                                ;read scan code 4
+                        jz      irq1.exit                                       ;yes, skip ahead
+                        in      al,EKEYBPORTDATA                                ;read scan code
                         mov     [wbConsoleScan4],al                             ;save scan code 4
                         call    WaitForKeyOutBuffer                             ;controller timeout?
-                        jz      irq1.timeout                                    ;yes, skip ahead
-                        in      al,EKEYBPORTDATA                                ;read scan code 5
+                        jz      irq1.exit                                       ;yes, skip ahead
+                        in      al,EKEYBPORTDATA                                ;read scan code
                         mov     [wbConsoleScan5],al                             ;save scan code 5
-                        mov     ah,al                                           ;copy scan code
-;
-;       Handle extended scan codes that affect the lock flags.
-;       Note: insert-down and insert-up codes differ when num-lock is set.
-;
-irq1.notext1            mov     [wbConsoleScan],ah                              ;save final scan code
-                        mov     al,EKEYFLOCKINSERT                              ;insert-lock flag
-                        cmp     ah,EKEYBINSERTDOWN                              ;insert down code?
-                        je      irq1.lockset                                    ;yes, toggle lamps and flags
+                        jmp     irq1.putscan                                    ;display scan codes
 
-                        jmp     irq1.putscan
+irq1.notext1            cmp     al,EKEYBCODEEXT0                                ;extended scan code 0?
+                        jne     irq1.notext0                                    ;no, branch
+                        call    WaitForKeyOutBuffer                             ;controller timeout?
+                        jz      irq1.exit                                       ;yes, skip ahead
+                        in      al,EKEYBPORTDATA                                ;read scan code
+                        mov     [wbConsoleScan1],al                             ;save scan code 1
+                        cmp     al,EKEYBSHIFTLDOWN                              ;left-shift down (2a)?
+                        je      irq1.getpair2                                   ;yes, get 2nd pair
+                        cmp     al,EKEYBPADASTERISKUP                           ;keypad-asterisk up (b7)?
+                        je      irq1.getpair2                                   ;yes, get 2nd pair
 
+                        mov     ah,EKEYFALTRIGHT                                ;right alt flag
+                        cmp     al,EKEYBALTUP                                   ;alt key up code?
+                        je      irq1.shiftclear                                 ;yes, reset flag
+                        cmp     al,EKEYBALTDOWN                                 ;alt key down code?
+                        je      irq1.shiftset                                   ;yes, set flag
+                        mov     ah,EKEYFLOCKINSERT                              ;insert lock flag
+                        cmp     al,EKEYBINSERTDOWN                              ;insert up code?
+                        je      irq1.locktoggle                                 ;yes, toggle insert
 
-;
-;       Translate scan code to ASCII or NUL
-;
-                        xor     al,al                                           ;assume no ASCII translation
-                        test    ah,EKEYBUP                                      ;release code?
-                        jnz     irq1.130                                        ;yes, skip ahead
-                        mov     esi,tscan2ascii                                 ;scan-to-ascii table address
-                        test    bl,EKEYFSHIFT                                   ;either shift key down?
-                        jz      irq1.notshifted                                 ;no, skip ahead
-                        mov     esi,tscan2shift                                 ;scan-to-shifted table address
-irq1.notshifted         movzx   ecx,ah                                          ;scan code offset
-                        mov     al,[cs:ecx+esi]                                 ;al = ASCII code
+; use a look-up table here
+                        mov     ah,05Ch
+                        cmp     al,EKEYBENTERDOWN                               ;enter key up?
+                        je      irq1.translate
+                        mov     ah,0DCh
+                        cmp     al,EKEYBENTERUP
+                        je      irq1.translate
+                        mov     ah,05Dh
+                        cmp     al,EKEYBCTRLDOWN
+                        je      irq1.translate
+                        mov     ah,0DDh
+                        cmp     al,EKEYBCTRLUP
+                        je      irq1.translate
+                        mov     ah,075h
+                        cmp     al,EKEYBSLASHDOWN
+                        je      irq1.translate
+                        mov     ah,0F5h
+                        cmp     al,EKEYBSLASHUP
+                        je      irq1.translate
+                        jmp     irq1.putscan                                    ;put scan code
 
-                        test    bh,EKEYFLOCKCAPS                                ;caps-lock on?
-                        jz      irq1.100                                        ;no skip ahead
-                        mov     cl,al                                           ;copy ASCII code
-                        and     cl,EASCIICASEMASK                               ;clear case mask of copy
-                        cmp     cl,EASCIIUPPERA                                 ;less than 'A'?
-                        jb      irq1.100                                        ;yes, skip ahead
-                        cmp     cl,EASCIIUPPERZ                                 ;greater than 'Z'?
-                        ja      irq1.100                                        ;yes, skip ahead
-                        xor     al,EASCIICASE                                   ;switch case
+irq1.getpair2           call    WaitForKeyOutBuffer                             ;controller timeout?
+                        jz      irq1.exit                                       ;yes, skip ahead
+                        in      al,EKEYBPORTDATA                                ;read scan code 2
+                        mov     [wbConsoleScan2],al                             ;save scan code 2
+                        call    WaitForKeyOutBuffer                             ;controller timeout?
+                        jz      irq1.exit                                       ;yes, skip ahead
+                        in      al,EKEYBPORTDATA                                ;read scan code 3
+                        mov     [wbConsoleScan3],al                             ;read scan code 3
+                        jmp     irq1.putscan                                    ;display scan code
 
-irq1.100                mov     [wbConsoleChar],al                              ;save ASCII code
-irq1.110                mov     edx,EMSGKEYDOWN                                 ;assume key-down event
-                        test    ah,EKEYBUP                                      ;release scan-code?
-                        jz      irq1.120                                        ;no, skip ahead
-                        mov     edx,EMSGKEYUP                                   ;key-up event
-irq1.120                and     eax,0FFFFh                                      ;clear high-order word
-                        or      edx,eax                                         ;msg id and codes
-                        xor     ecx,ecx                                         ;null param
-                        push    eax                                             ;save codes
-                        call    PutMessage                                      ;put message to console
-                        pop     eax                                             ;restore codes
-                        test    al,al                                           ;ASCII translation?
-                        jz      irq1.130                                        ;no, skip ahead
-                        mov     edx,EMSGKEYCHAR                                 ;key-character event
-                        and     eax,0FFFFh                                      ;clear high-order word
-                        or      edx,eax                                         ;msg id and codes
-                        xor     ecx,ecx                                         ;null param
-                        call    PutMessage                                      ;put message to console
-irq1.130                jmp     irq1.150                                        ;finish keyboard handling
-;
-;       Indicate keyboard timeout
-;
-irq1.timeout            mov     al,EKEYFTIMEOUT                                 ;controller timeout flag
-                        or      [wbConsoleStatus],al                            ;set controller timeout flag
-;
-;       Update the OIA
-;
-irq1.150                call    PutConsoleOIAChar                               ;update operator info area
-;
-;       Enable maskable interrupts.
-;
+irq1.notext0            mov     ah,EKEYFSHIFTLEFT                               ;left shift flag
+                        cmp     al,EKEYBSHIFTLUP                                ;left shift key up code?
+                        je      irq1.shiftclear                                 ;yes, reset flag
+                        cmp     al,EKEYBSHIFTLDOWN                              ;left shift key down code?
+                        je      irq1.shiftset                                   ;yes, set flag
+                        mov     ah,EKEYFSHIFTRIGHT                              ;right shift flag
+                        cmp     al,EKEYBSHIFTRUP                                ;right shift key up code?
+                        je      irq1.shiftclear                                 ;yes, reset flag
+                        cmp     al,EKEYBSHIFTRDOWN                              ;right shift key down code?
+                        je      irq1.shiftset                                   ;yes, set flag
+                        mov     ah,EKEYFCTRLLEFT                                ;left control flag
+                        cmp     al,EKEYBCTRLUP                                  ;control key up code?
+                        je      irq1.shiftclear                                 ;yes, reset flag
+                        cmp     al,EKEYBCTRLDOWN                                ;control key down code?
+                        je      irq1.shiftset                                   ;yes, set flag
+                        mov     ah,EKEYFALTLEFT                                 ;left alt flag
+                        cmp     al,EKEYBALTUP                                   ;alt key up code?
+                        je      irq1.shiftclear                                 ;yes, reset flag
+                        cmp     al,EKEYBALTDOWN                                 ;alt key down code?
+                        je      irq1.shiftset                                   ;no, branch
+                        jmp     irq1.locktest
+
+;irq1.ext0shiftset       nop
+
+irq1.shiftset           or      bl,ah                                           ;set shift flag
+                        jmp     short irq1.shift                                ;skip ahead
+irq1.shiftclear         not     ah                                              ;convert flag to mask
+                        and     bl,ah                                           ;reset shift flag
+irq1.shift              mov     [wbConsoleShift],bl                             ;save shift flags
+                        jmp     irq1.scancode                                   ;put shift and scan indicators
+
+irq1.locktest           mov     ah,EKEYFLOCKCAPS                                ;caps-lock flag
+                        cmp     al,EKEYBCAPSDOWN                                ;caps-lock key down code?
+                        je      irq1.locktoggle                                 ;yes, toggle lamps and flags
+                        mov     ah,EKEYFLOCKNUM                                 ;num-lock flag
+                        cmp     al,EKEYBNUMDOWN                                 ;num-lock key down code?
+                        je      irq1.locktoggle                                 ;yes, toggle lamps and flags
+                        mov     ah,EKEYFLOCKSCROLL                              ;scroll-lock flag
+                        cmp     al,EKEYBSCROLLDOWN                              ;scroll-lock key down code?
+                        je      irq1.locktoggle                                 ;yes, toggle lamps and flags
+                        jmp     irq1.scancode                                   ;continue
+
+irq1.locktoggle         xor     bh,ah                                           ;toggle lock flag
+                        mov     [wbConsoleLock],bh                              ;save lock flags
+                        push    eax
+                        call    SetKeyboardLamps                                ;update keyboard lamps
+                        pop     eax
+
+irq1.scancode           mov     ah,al
+irq1.translate          mov     [wbConsoleScan],ah                              ;save scan code
+                        jmp     irq1.putshift
+
+;                        test    ah,EKEYBUP                                      ;release code?
+;                        jnz     irq1.130                                        ;yes, skip ahead
+;                        mov     esi,tscan2ascii                                 ;scan-to-ascii table address
+;                        test    bl,EKEYFSHIFT                                   ;either shift key down?
+;                        jz      irq1.notshifted                                 ;no, skip ahead
+;                        mov     esi,tscan2shift                                 ;scan-to-shifted table address
+;irq1.notshifted         movzx   ecx,ah                                          ;scan code offset
+;                        mov     al,[cs:ecx+esi]                                 ;al = ASCII code
+;                        test    bh,EKEYFLOCKCAPS                                ;caps-lock on?
+;                        jz      irq1.100                                        ;no skip ahead
+;                        mov     cl,al                                           ;copy ASCII code
+;                        and     cl,EASCIICASEMASK                               ;clear case mask of copy
+;                        cmp     cl,EASCIIUPPERA                                 ;less than 'A'?
+;                        jb      irq1.100                                        ;yes, skip ahead
+;                        cmp     cl,EASCIIUPPERZ                                 ;greater than 'Z'?
+;                        ja      irq1.100                                        ;yes, skip ahead
+;                        xor     al,EASCIICASE                                   ;switch case
+;irq1.100                mov     [wbConsoleChar],al                              ;save ASCII code
+;irq1.110                mov     edx,EMSGKEYDOWN                                 ;assume key-down event
+;                        test    ah,EKEYBUP                                      ;release scan-code?
+;                        jz      irq1.120                                        ;no, skip ahead
+;                        mov     edx,EMSGKEYUP                                   ;key-up event
+;irq1.120                and     eax,0FFFFh                                      ;clear high-order word
+;                        or      edx,eax                                         ;msg id and codes
+;                        xor     ecx,ecx                                         ;null param
+;                        push    eax                                             ;save codes
+;                        call    PutMessage                                      ;put message to console
+;                        pop     eax                                             ;restore codes
+;                        test    al,al                                           ;ASCII translation?
+;                        jz      irq1.130                                        ;no, skip ahead
+;                        mov     edx,EMSGKEYCHAR                                 ;key-character event
+;                        and     eax,0FFFFh                                      ;clear high-order word
+;                        or      edx,eax                                         ;msg id and codes
+;                        xor     ecx,ecx                                         ;null param
+;                        call    PutMessage                                      ;put message to console
+;irq1.130                jmp     irq1.150                                        ;finish keyboard handling
+
+;irq1.150                call    PutConsoleOIAChar                               ;update operator info area
+
+irq1.putshift           call    PutConsoleOIAShift                              ;OIA shift indicators
+irq1.putscan            call    PutConsoleOIAScan                               ;OIA scan codes
 irq1.exit               sti                                                     ;enable maskable interrupts
-;
-;       Restore and return.
-;
-                        pop     es                                              ;restore non-volatile regs
-                        pop     ds                                              ;
-                        pop     edi                                             ;
-                        pop     esi                                             ;
+                        pop     ds                                              ;restore non-volatile regs
                         pop     ecx                                             ;
                         pop     ebx                                             ;
                         pop     eax                                             ;
@@ -2811,6 +2808,42 @@ irq1.exit               sti                                                     
 ;-----------------------------------------------------------------------------------------------------------------------
 ;       Scan-Code to ASCII Translation Tables
 ;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Scan Code to Extended Scan Code
+;
+tscan2ext               db      000h,000h,000h,000h,000h,000h,000h,000h         ;00-07
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;08-0f
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;10-17
+                        db      000h,000h,000h,000h,05Ch,05Dh,000h,000h         ;18-1f  1c->5c,1d->5d
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;20-27
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;28-2f
+                        db      000h,000h,000h,000h,000h,075h,000h,077h         ;30-37  35->75,37->77
+                        db      078h,000h,000h,000h,000h,000h,000h,000h         ;38-3f  38->78
+                        db      000h,000h,000h,000h,000h,000h,000h,067h         ;40-47  47->67
+                        db      068h,069h,000h,06Bh,000h,06Dh,000h,06Fh         ;48-4f  48->68,49->69,4b->6b,4d->6d,4f->6f
+                        db      070h,071h,072h,073h,000h,000h,000h,000h         ;50-57  50->70,51->71,52->72,53->73
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;58-5f
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;60-67
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;68-6f
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;70-77
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;78-7f
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;80-87
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;88-8f
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;90-97
+                        db      000h,000h,000h,000h,0DCh,0DDh,000h,000h         ;98-9f  9c->dc,9d->dd
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;a0-a7
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;a8-af
+                        db      000h,000h,000h,000h,000h,0F5h,000h,0F7h         ;b0-b7  b5->f5,b7->f7
+                        db      0F8h,000h,000h,000h,000h,000h,000h,000h         ;b8-bf  b8->f8
+                        db      000h,000h,000h,000h,000h,000h,000h,0E7h         ;c0-c7  c7->e7
+                        db      0E8h,0E9h,000h,0EBh,000h,0EDh,000h,0EFh         ;c8-cf  c8->e8,c9->e9,cb->eb,cd->ed,cf->ef
+                        db      0F0h,0F1h,0F2h,0F3h,000h,000h,000h,000h         ;d0-d7  d0->f0,d1->f1,d2->f2,d3->f3
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;d8-df
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;e0-e7
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;e8-ef
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;f0-f7
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;f8-ff
+
 tscan2ascii             db      000h,01Bh,031h,032h,033h,034h,035h,036h         ;00-07
                         db      037h,038h,039h,030h,02Dh,03Dh,008h,009h         ;08-0f
                         db      071h,077h,065h,072h,074h,079h,075h,069h         ;10-17
@@ -3391,19 +3424,20 @@ PutConsoleHexWord       push    eax
 ;
 ;       In:             DS      OS data selector
 ;
+;       0         1         2         3         4         5         6         7
+;       01234567890123456789012345678901234567890123456789012345678901234567890123456789
+;       001122334455 SCA XXAA                   C                       ASC        ^CNS
+;
 ;-----------------------------------------------------------------------------------------------------------------------
 PutConsoleOIAScan       push    ebx                                             ;save non-volatile regs
                         push    ecx                                             ;
                         push    esi                                             ;
-;                        push    ds                                              ;
-;                        push    es                                              ;
+                        push    es                                              ;
 ;
 ;       Address OS data and video memory
 ;
-;                        push    EGDTOSDATA                                      ;load OS data selector ...
-;                        pop     ds                                              ;... into data segment register
-;                        push    EGDTCGA                                         ;load CGA selector ...
-;                        pop     es                                              ;... into extra segment register
+                        push    EGDTCGA                                         ;load CGA selector ...
+                        pop     es                                              ;... into extra segment register
 ;
 ;       Display up to six keyboard scan codes
 ;
@@ -3427,6 +3461,13 @@ PutConsoleOIAScan       push    ebx                                             
                         pop     ecx                                             ;restore remaining
                         loop    .10                                             ;next code
 ;
+;       Display scan code returned in messages
+;
+                        mov     al,[wbConsoleScan]
+                        mov     ch,ECONOIAROW
+                        mov     cl,17
+                        call    PutConsoleHexByte
+;
 ;       Display ASCII character
 ;
 ;                        mov     al,[wbConsoleChar]                              ;console ASCII character
@@ -3440,8 +3481,7 @@ PutConsoleOIAScan       push    ebx                                             
 ;
 ;       Restore and return.
 ;
-;.40                     pop     es                                              ;restore non-volatile regs
-;                        pop     ds                                              ;
+.40                     pop     es                                              ;restore non-volatile regs
                         pop     esi                                             ;
                         pop     ecx                                             ;
                         pop     ebx                                             ;
@@ -3478,7 +3518,7 @@ PutConsoleOIAShift      push    ecx                                             
                         test    bl,EKEYFSHIFTLEFT                               ;left-shift indicated?
                         jz      .10                                             ;no, skip ahead
                         mov     al,'S'                                          ;yes, indicate with 'S'
-.10                     mov     cl,14                                           ;indicator column
+.10                     mov     cl,13                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    bl,EKEYFSHIFTRIGHT                              ;right-shift indicated?
@@ -3490,7 +3530,7 @@ PutConsoleOIAShift      push    ecx                                             
                         test    bl,EKEYFCTRLLEFT                                ;left-ctrl indicated?
                         jz      .30                                             ;no, skip ahead
                         mov     al,'C'                                          ;yes, indicate with 'C'
-.30                     mov     cl,15                                           ;indicator column
+.30                     mov     cl,14                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    bl,EKEYFCTRLRIGHT                               ;right-ctrl indicated?
@@ -3502,7 +3542,7 @@ PutConsoleOIAShift      push    ecx                                             
                         test    bl,EKEYFALTLEFT                                 ;left-alt indicated?
                         jz      .50                                             ;no, skip ahead
                         mov     al,'A'                                          ;yes, indicate with 'A'
-.50                     mov     cl,16                                           ;indicator column
+.50                     mov     cl,15                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    bl,EKEYFALTRIGHT                                ;right-alt indicated?
@@ -3533,7 +3573,7 @@ PutConsoleOIAShift      push    ecx                                             
                         test    bh,EKEYFLOCKINSERT
                         jz      .100
                         mov     al,EASCIICARET
-.100                    mov     cl,74
+.100                    mov     cl,75
                         call    SetConsoleChar
 
                         pop     es                                              ;restore non-volatile regs
