@@ -208,44 +208,34 @@ EKEYBWAITLOOP           equ     010000h                                         
                                                                                 ;---------------------------------------
                                                                                 ;       Keyboard Scan Codes
                                                                                 ;---------------------------------------
-;EKEYBESCAPEDOWN         equ     001h                                            ;escape key down
 EKEYBTABDOWN            equ     00Fh                                            ;tab key down
 EKEYBENTERDOWN          equ     01Ch                                            ;enter key down
-;EKEYBCTRLDOWN           equ     01Dh                                            ;control key down
+EKEYBCTRLLDOWN          equ     01Dh                                            ;control key down
 EKEYBSHIFTLDOWN         equ     02Ah                                            ;left shift key down
-;EKEYBSLASHDOWN          equ     035h                                            ;slash key down
-;EKEYBSHIFTRDOWN         equ     036h                                            ;right shift key down
-;EKEYBALTDOWN            equ     038h                                            ;alt key down
-;EKEYBCAPSDOWN           equ     03Ah                                            ;caps-lock down
-;EKEYBNUMDOWN            equ     045h                                            ;num-lock down
-;EKEYBSCROLLDOWN         equ     046h                                            ;scroll-lock down
+EKEYBSHIFTRDOWN         equ     036h                                            ;right shift key down
+EKEYBALTLDOWN           equ     038h                                            ;alt key down
+EKEYBCAPSDOWN           equ     03Ah                                            ;caps-lock down
+EKEYBNUMDOWN            equ     045h                                            ;num-lock down
+EKEYBSCROLLDOWN         equ     046h                                            ;scroll-lock down
 EKEYBUPARROWDOWN        equ     048h                                            ;up-arrow down (e0 48)
 EKEYBLEFTARROWDOWN      equ     04Bh                                            ;left-arrow down (e0 4b)
 EKEYBRIGHTARROWDOWN     equ     04Dh                                            ;right-arrow down (e0 4d)
 EKEYBDOWNARROWDOWN      equ     050h                                            ;down-arrow down (e0 50)
-;EKEYBINSERTDOWN         equ     052h                                            ;insert down (e0 52)
-;EKEYBWINDOWN            equ     05Bh                                            ;windows (R) down
-;EKEYBPAUSEBREAK         equ     065h                                            ;pause/break pseudo code
+EKEYBINSERTDOWN         equ     072h                                            ;insert down (e0 52)
+EKEYBWINDOWN            equ     05Bh                                            ;windows (R) down
+EKEYBCTRLRDOWN          equ     05Dh
+EKEYBALTRDOWN           equ     078h
 EKEYBUP                 equ     080h                                            ;up
-;EKEYBESCAPEUP           equ     081h                                            ;escape key up
-;EKEYBTABUP              equ     08Fh                                            ;tab key up
-;EKEYBENTERUP            equ     09Ch                                            ;enter key up
-;EKEYBCTRLUP             equ     09Dh                                            ;control key up
+EKEYBCTRLLUP            equ     09Dh                                            ;control key up
 EKEYBSHIFTLUP           equ     0AAh                                            ;left shift key up
-;EKEYBSLASHUP            equ     0B5h                                            ;slash key up
-;EKEYBSHIFTRUP           equ     0B6h                                            ;right shift key up
+EKEYBSHIFTRUP           equ     0B6h                                            ;right shift key up
 EKEYBPADASTERISKUP      equ     0B7h                                            ;keypad asterisk up
-;EKEYBALTUP              equ     0B8h                                            ;alt key up
-;EKEYBCAPSUP             equ     0BAh                                            ;caps-lock up
-;EKEYBNUMUP              equ     0C5h                                            ;num-lock up
-;EKEYBSCROLLUP           equ     0C6h                                            ;scroll-lock up
-;EKEYBUPARROWUP          equ     0C8h                                            ;up-arrow up (e0 c8)
-;EKEYBLEFTARROWUP        equ     0CBh                                            ;left-arrow up (e0 cb)
-;EKEYBRIGHTARROWUP       equ     0CDh                                            ;right-arrow up (e0 cd)
-;EKEYBDOWNARROWUP        equ     0D0h                                            ;down-arrow down (e0 d0)
-;EKEYBINSERTUP           equ     0D2h                                            ;insert up (e0 d2)
+EKEYBALTLUP             equ     0B8h                                            ;alt key up
+EKEYBWINUP              equ     0DBh
+EKEYBCTRLRUP            equ     0DDh
 EKEYBCODEEXT0           equ     0E0h                                            ;extended scan code 0
 EKEYBCODEEXT1           equ     0E1h                                            ;extended scan code 1
+EKEYBALTRUP             equ     0F8h
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       8259 Peripheral Interrupt Controller                                    EPIC...
@@ -404,7 +394,7 @@ EKEYFCTRLRIGHT          equ     00001000b                                       
 EKEYFSHIFTRIGHT         equ     00010000b                                       ;right shift
 EKEYFSHIFT              equ     00010010b                                       ;left or right shift
 EKEYFALTRIGHT           equ     00100000b                                       ;right alt
-;EKEYFWIN                equ     01000000b                                       ;windows(R)
+EKEYFWIN                equ     01000000b                                       ;windows(R)
 EKEYFLOCKSCROLL         equ     00000001b                                       ;scroll-lock flag
 EKEYFLOCKNUM            equ     00000010b                                       ;num-lock flag
 EKEYFLOCKCAPS           equ     00000100b                                       ;cap-lock flag
@@ -2699,23 +2689,23 @@ irq1.savescan           mov     [wbConsoleScan],al                              
                         test    byte [wbConsoleShift],EKEYFSHIFT                ;shift key down?
                         jnz     irq1.shifted                                    ;yes, branch
                         mov     al,[cs:tscan2ascii+eax]                         ;lookup from base
-                        jmp     irq1.haveascii                                  ;display scan code
+                        jmp     irq1.checkcaps                                  ;display scan code
 irq1.shifted            mov     al,[cs:tscan2shift+eax]                         ;look from shift
 ;
 ;       If ASCII letter, flip case if caps-lock is on.
 ;
-irq1.haveascii          cmp     al,'A'
-                        jb      irq1.saveascii
-                        cmp     al,'Z'
-                        jbe     irq1.checkcaps
-                        cmp     al,'a'
-                        jb      irq1.saveascii
-                        cmp     al,'z'
-                        ja      irq1.saveascii
-irq1.checkcaps          test    byte [wbConsoleLock],EKEYFLOCKCAPS
-                        jz      irq1.saveascii
-                        xor     al,020h
-irq1.saveascii          mov     [wbConsoleChar],al
+irq1.checkcaps          test    byte [wbConsoleLock],EKEYFLOCKCAPS              ;caps lock on?
+                        jz      irq1.saveascii                                  ;no, branch
+                        cmp     al,'A'                                          ;caps range (low)
+                        jb      irq1.saveascii                                  ;branch if non-alpha
+                        cmp     al,'Z'                                          ;caps range (high)
+                        jbe     irq1.swapcase                                   ;branch if alpha
+                        cmp     al,'a'                                          ;base range (low)
+                        jb      irq1.saveascii                                  ;branch if non-alpha
+                        cmp     al,'z'                                          ;base range (high)
+                        ja      irq1.saveascii                                  ;branch if non-alpha
+irq1.swapcase           xor     al,020h                                         ;swap case bit
+irq1.saveascii          mov     [wbConsoleChar],al                              ;save ASCII char
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Handle shift keys
@@ -2737,94 +2727,94 @@ irq1.saveascii          mov     [wbConsoleChar],al
                         je      irq1.shiftset                                   ;yes, set flag
 
                         mov     ah,EKEYFCTRLLEFT                                ;left control flag
-                        cmp     al,EKEYBCTRLUP                                  ;control key up code?
+                        cmp     al,EKEYBCTRLLUP                                 ;control key up code?
                         je      irq1.shiftclear                                 ;yes, reset flag
-                        cmp     al,EKEYBCTRLDOWN                                ;control key down code?
+                        cmp     al,EKEYBCTRLLDOWN                               ;control key down code?
+                        je      irq1.shiftset                                   ;yes, set flag
+
+                        mov     ah,EKEYFCTRLRIGHT                               ;right control flag
+                        cmp     al,EKEYBCTRLRUP                                 ;right control up?
+                        je      irq1.shiftclear                                 ;yes, reset flag
+                        cmp     al,EKEYBCTRLRDOWN                               ;right control down?
                         je      irq1.shiftset                                   ;yes, set flag
 
                         mov     ah,EKEYFALTLEFT                                 ;left alt flag
-                        cmp     al,EKEYBALTUP                                   ;alt key up code?
+                        cmp     al,EKEYBALTLUP                                  ;alt key up code?
                         je      irq1.shiftclear                                 ;yes, reset flag
-                        cmp     al,EKEYBALTDOWN                                 ;alt key down code?
-                        je      irq1.shiftset
+                        cmp     al,EKEYBALTLDOWN                                ;alt key down code?
+                        je      irq1.shiftset                                   ;yes, set flag
 
                         mov     ah,EKEYFALTRIGHT                                ;right alt flag
-                        cmp     al,EKEYBALTUP                                   ;alt key up code?
+                        cmp     al,EKEYBALTRUP                                  ;alt key up code?
                         je      irq1.shiftclear                                 ;yes, reset flag
-                        cmp     al,EKEYBALTDOWN                                 ;alt key down code?
+                        cmp     al,EKEYBALTRDOWN                                ;alt key down code?
                         je      irq1.shiftset                                   ;yes, set flag
+
+                        mov     ah,EKEYFWIN                                     ;Windows(R) key flag
+                        cmp     al,EKEYBWINUP                                   ;win key up?
+                        je      irq1.shiftclear                                 ;yes, reset flag
+                        cmp     al,EKEYBWINDOWN                                 ;win key down?
+                        je      irq1.shiftset                                   ;yes, set flag
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Handle lock keys
+;
+irq1.locktest           mov     ah,EKEYFLOCKCAPS                                ;caps-lock flag
+                        cmp     al,EKEYBCAPSDOWN                                ;caps-lock key down code?
+                        je      irq1.locktoggle                                 ;yes, toggle lamps and flags
+                        mov     ah,EKEYFLOCKNUM                                 ;num-lock flag
+                        cmp     al,EKEYBNUMDOWN                                 ;num-lock key down code?
+                        je      irq1.locktoggle                                 ;yes, toggle lamps and flags
+                        mov     ah,EKEYFLOCKSCROLL                              ;scroll-lock flag
+                        cmp     al,EKEYBSCROLLDOWN                              ;scroll-lock key down code?
+                        je      irq1.locktoggle                                 ;yes, toggle lamps and flags
+                        mov     ah,EKEYFLOCKINSERT                              ;insert lock flag
+                        cmp     al,EKEYBINSERTDOWN                              ;insert up code?
+                        jne     irq1.putmessage                                 ;no, branch
+
+irq1.locktoggle         xor     bh,ah                                           ;toggle lock flag
+                        mov     [wbConsoleLock],bh                              ;save lock flags
+                        push    eax                                             ;save scan and char
+                        call    SetKeyboardLamps                                ;update keyboard lamps
+                        pop     eax                                             ;restore scan and char
+                        jmp     irq1.putmessage                                 ;put shift and scan indicators
+
+irq1.timeout            mov     al,EKEYFTIMEOUT                                 ;keyboard controller timeout flag
+                        or      byte [wbConsoleStatus],al                       ;set controller timeout
+                        jmp     irq1.putshift                                   ;continue
 
 irq1.shiftset           or      bl,ah                                           ;set shift flag
                         jmp     short irq1.shift                                ;skip ahead
 irq1.shiftclear         not     ah                                              ;convert flag to mask
                         and     bl,ah                                           ;reset shift flag
 irq1.shift              mov     [wbConsoleShift],bl                             ;save shift flags
-                        jmp     irq1.putshift                                   ;put shift and scan indicators
-
-
-;                        mov     ah,EKEYFLOCKINSERT                              ;insert lock flag
-;                        cmp     al,EKEYBINSERTDOWN                              ;insert up code?
-;                        je      irq1.locktoggle                                 ;yes, toggle insert
-
-irq1.locktest           mov     ah,EKEYFLOCKCAPS                                ;caps-lock flag
-;                        cmp     al,EKEYBCAPSDOWN                                ;caps-lock key down code?
-;                        je      irq1.locktoggle                                 ;yes, toggle lamps and flags
-;                        mov     ah,EKEYFLOCKNUM                                 ;num-lock flag
-;                        cmp     al,EKEYBNUMDOWN                                 ;num-lock key down code?
-;                        je      irq1.locktoggle                                 ;yes, toggle lamps and flags
-;                        mov     ah,EKEYFLOCKSCROLL                              ;scroll-lock flag
-;                        cmp     al,EKEYBSCROLLDOWN                              ;scroll-lock key down code?
-;                        je      irq1.locktoggle                                 ;yes, toggle lamps and flags
-;                        jmp     irq1.scancode                                   ;continue
-
-irq1.locktoggle         xor     bh,ah                                           ;toggle lock flag
-                        mov     [wbConsoleLock],bh                              ;save lock flags
-                        push    eax
-                        call    SetKeyboardLamps                                ;update keyboard lamps
-                        pop     eax
-                        jmp     irq1.putshift
-
-;                        test    ah,EKEYBUP                                      ;release code?
-;                        jnz     irq1.130                                        ;yes, skip ahead
-;                        mov     esi,tscan2ascii                                 ;scan-to-ascii table address
-;                        test    bl,EKEYFSHIFT                                   ;either shift key down?
-;                        jz      irq1.notshifted                                 ;no, skip ahead
-;                        mov     esi,tscan2shift                                 ;scan-to-shifted table address
-;irq1.notshifted         movzx   ecx,ah                                          ;scan code offset
-;                        mov     al,[cs:ecx+esi]                                 ;al = ASCII code
-;                        test    bh,EKEYFLOCKCAPS                                ;caps-lock on?
-;                        jz      irq1.100                                        ;no skip ahead
-;                        mov     cl,al                                           ;copy ASCII code
-;                        and     cl,EASCIICASEMASK                               ;clear case mask of copy
-;                        cmp     cl,EASCIIUPPERA                                 ;less than 'A'?
-;                        jb      irq1.100                                        ;yes, skip ahead
-;                        cmp     cl,EASCIIUPPERZ                                 ;greater than 'Z'?
-;                        ja      irq1.100                                        ;yes, skip ahead
-;                        xor     al,EASCIICASE                                   ;switch case
-;irq1.100                mov     [wbConsoleChar],al                              ;save ASCII code
-;irq1.110                mov     edx,EMSGKEYDOWN                                 ;assume key-down event
-;                        test    ah,EKEYBUP                                      ;release scan-code?
-;                        jz      irq1.120                                        ;no, skip ahead
-;                        mov     edx,EMSGKEYUP                                   ;key-up event
-;irq1.120                and     eax,0FFFFh                                      ;clear high-order word
-;                        or      edx,eax                                         ;msg id and codes
-;                        xor     ecx,ecx                                         ;null param
-;                        push    eax                                             ;save codes
-;                        call    PutMessage                                      ;put message to console
-;                        pop     eax                                             ;restore codes
-;                        test    al,al                                           ;ASCII translation?
-;                        jz      irq1.130                                        ;no, skip ahead
-;                        mov     edx,EMSGKEYCHAR                                 ;key-character event
-;                        and     eax,0FFFFh                                      ;clear high-order word
-;                        or      edx,eax                                         ;msg id and codes
-;                        xor     ecx,ecx                                         ;null param
-;                        call    PutMessage                                      ;put message to console
-;irq1.130                jmp     irq1.150                                        ;finish keyboard handling
-
-;irq1.150                call    PutConsoleOIAChar                               ;update operator info area
-
-irq1.timeout            mov     al,EKEYFTIMEOUT                                 ;keyboard controller timeout flag
-                        or      byte [wbConsoleStatus],al                       ;set controller timeout
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Put messages into the message queue.
+;
+irq1.putmessage         mov     al,[wbConsoleChar]                              ;ASCII char
+                        mov     ah,[wbConsoleScan]                              ;scan code
+                        mov     edx,EMSGKEYDOWN                                 ;assume key-down event
+                        test    ah,EKEYBUP                                      ;release scan-code?
+                        jz      irq1.makecode                                   ;no, skip ahead
+                        mov     edx,EMSGKEYUP                                   ;key-up event
+irq1.makecode           and     eax,0FFFFh                                      ;clear high-order word
+                        or      edx,eax                                         ;msg id and codes
+                        xor     ecx,ecx                                         ;null param
+                        push    eax                                             ;save codes
+                        call    PutMessage                                      ;put message to console
+                        pop     eax                                             ;restore codes
+                        test    al,al                                           ;ASCII translation?
+                        jz      irq1.putshift                                   ;no, skip ahead
+                        mov     edx,EMSGKEYCHAR                                 ;key-character event
+                        and     eax,0FFFFh                                      ;clear high-order word
+                        or      edx,eax                                         ;msg id and codes
+                        xor     ecx,ecx                                         ;null param
+                        call    PutMessage                                      ;put message to console
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Update operator information area.
+;
 irq1.putshift           call    PutConsoleOIAShift                              ;OIA shift indicators
 irq1.putscan            call    PutConsoleOIAScan                               ;OIA scan codes
 irq1.exit               sti                                                     ;enable maskable interrupts
@@ -3065,8 +3055,9 @@ svc90                   iretd                                                   
 ;-----------------------------------------------------------------------------------------------------------------------
 tsvc                    tsvce   CompareMemory                                   ;compare memory
                         tsvce   GetConsoleChar                                  ;get character input
+                        tsvce   GetConsoleKeyDown                               ;get key-down event
+                        tsvce   GetConsoleKeyStroke                             ;get keyboard event
                         tsvce   GetConsoleString                                ;get string input
-                        tsvce   GetKeyStroke                                    ;get keyboard event
                         tsvce   HexadecimalToUnsigned                           ;convert hexadecimal string to unsigned integer
                         tsvce   PlaceCursor                                     ;place the cursor at the current loc
                         tsvce   ResetSystem                                     ;reset system using 8042 chip
@@ -3088,12 +3079,16 @@ maxtsvc                 equ     ($-tsvc)/4                                      
                         mov     al,eGetConsoleChar                              ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
-%macro                  getConsoleString 0
-                        mov     al,eGetConsoleString                            ;function code
+%macro                  getConsoleKeyDown 0
+                        mov     al,eGetConsoleKeyDown                           ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
-%macro                  getKeyStroke 0
-                        mov     al,eGetKeyStroke                                ;function code
+%macro                  getConsoleKeyStroke 0
+                        mov     al,eGetConsoleKeyStroke                         ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  getConsoleString 0
+                        mov     al,eGetConsoleString                            ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
 %macro                  hexadecimalToUnsigned 0
@@ -3196,6 +3191,7 @@ UpperCaseString         push    esi                                             
 ;       Console Helper Routines
 ;
 ;       GetConsoleChar
+;       GetConsoleKeyStroke
 ;       GetConsoleString
 ;       NextConsoleColumn
 ;       PreviousConsoleColumn
@@ -3221,30 +3217,37 @@ UpperCaseString         push    esi                                             
 GetConsoleChar.10       call    Yield                                           ;pass control or halt
 GetConsoleChar          call    GetMessage                                      ;get the next message
                         or      eax,eax                                         ;do we have a message?
-                        jz      GetConsoleChar.10                               ;no, skip ahead
-
+                        jz      GetConsoleChar.10                               ;no, continue
                         mov     edx,eax                                         ;save key codes
                         and     edx,0FFFF0000h                                  ;mask for message type
                         cmp     edx,EMSGKEYCHAR                                 ;key-char message?
-                        je      .20
-                        cmp     edx,EMSGKEYDOWN
-                        jne     GetConsoleChar
-
-.20                     and     eax,0000ffffh                                   ;mask for key codes
+                        jne     GetConsoleChar                                  ;no, continue
+                        and     eax,0000ffffh                                   ;mask for key codes
                         ret                                                     ;return
 
-GetKeyStroke.10         call    Yield
-GetKeyStroke            call    GetMessage
+GetConsoleKeyDown.10    call    Yield
+GetConsoleKeyDown       call    GetMessage
                         test    eax,eax
-                        jz      GetKeyStroke.10
-                        mov     edx,eax
-                        and     edx,0FFFF0000h
-                        cmp     edx,EMSGKEYDOWN
-                        je      .20
-                        cmp     edx,EMSGKEYUP
-                        je      .20
-                        cmp     edx,EMSGKEYCHAR
-                        jne     GetKeyStroke
+                        jz      GetConsoleKeyDown.10
+                        mov     edx,eax                                         ;save key codes
+                        and     edx,0FFFF0000h                                  ;mask for message type
+                        cmp     edx,EMSGKEYDOWN                                 ;key-down message?
+                        jne     GetConsoleKeyDown
+                        and     eax,0000ffffh
+                        ret
+
+GetConsoleKeyStroke.10  call    Yield                                           ;pass control or halt
+GetConsoleKeyStroke     call    GetMessage                                      ;get the next message
+                        test    eax,eax                                         ;do we have a message?
+                        jz      GetConsoleKeyStroke.10                          ;no, continue
+                        mov     edx,eax                                         ;save key codes
+                        and     edx,0FFFF0000h                                  ;mask for message type
+                        cmp     edx,EMSGKEYDOWN                                 ;key-down message?
+                        je      .20                                             ;yes, branch
+                        cmp     edx,EMSGKEYUP                                   ;key-up message?
+                        je      .20                                             ;yes, branch
+                        cmp     edx,EMSGKEYCHAR                                 ;char message?
+                        jne     GetConsoleKeyStroke                             ;no, continue
 .20                     ret
 
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -3501,30 +3504,31 @@ PutConsoleOIAScan       push    ebx                                             
                         mov     cl,19
                         call    PutConsoleHexByte
 ;
+;       Display ASCII character.
+;
+                        mov     al,[wbConsoleChar]                              ;console ASCII character
+                        cmp     al,EASCIISPACE                                  ;printable? (lower-bounds)
+                        jb      .35                                             ;no, skip ahead
+                        cmp     al,EASCIITILDE                                  ;printable? (upper-bounds)
+                        jbe     .36                                             ;yes, branch
+.35                     mov     al,EASCIISPACE                                  ;use space for non-printables
+.36                     mov     ch,bh                                           ;OIA row
+                        mov     cl,40                                           ;character display column
+                        call    SetConsoleChar                                  ;display ASCII character
+;
 ;       Display timeout flag.
 ;
-                        mov     al,EKEYFTIMEOUT
+.40                     mov     al,EKEYFTIMEOUT
                         test    byte [wbConsoleStatus],al
-                        jz      .40
+                        jz      .50
                         mov     al,'!'
                         mov     ch,ECONOIAROW
                         mov     cl,79
                         call    SetConsoleChar
 ;
-;       Display ASCII character.
-;
-;                        mov     al,[wbConsoleChar]                              ;console ASCII character
-;                        cmp     al,EASCIISPACE                                  ;printable? (lower-bounds)
-;                        jb      .40                                             ;no, skip ahead
-;                        cmp     al,EASCIITILDE                                  ;printable? (upper-bounds)
-;                        ja      .40                                             ;no, skip ahead
-;                        mov     ch,bh                                           ;OIA row
-;                        mov     cl,40                                           ;character display column
-;                        call    SetConsoleChar                                  ;display ASCII character
-;
 ;       Restore and return.
 ;
-.40                     pop     es                                              ;restore non-volatile regs
+.50                     pop     es                                              ;restore non-volatile regs
                         pop     esi                                             ;
                         pop     ecx                                             ;
                         pop     ebx                                             ;
@@ -4312,7 +4316,7 @@ ConEditField            push    ebx                                             
 ;
 ;       Get a keypress. Exit if attention identifier.
 ;
-.20                     getConsoleChar                                          ;AH = scan; AL = ASCII
+.20                     getConsoleKeyDown                                       ;AH = scan; AL = ASCII
                         cmp     ah,EKEYBENTERDOWN                               ;enter key down?
                         je      .100                                            ;yes, exit
                         cmp     ah,EKEYBTABDOWN                                 ;tab down?
