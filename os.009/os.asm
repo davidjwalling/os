@@ -217,20 +217,20 @@ EKEYBALTLDOWN           equ     038h                                            
 EKEYBCAPSDOWN           equ     03Ah                                            ;caps-lock down
 EKEYBNUMDOWN            equ     045h                                            ;num-lock down
 EKEYBSCROLLDOWN         equ     046h                                            ;scroll-lock down
-EKEYBUPARROWDOWN        equ     048h                                            ;up-arrow down (e0 48)
-EKEYBLEFTARROWDOWN      equ     04Bh                                            ;left-arrow down (e0 4b)
-EKEYBRIGHTARROWDOWN     equ     04Dh                                            ;right-arrow down (e0 4d)
-EKEYBDOWNARROWDOWN      equ     050h                                            ;down-arrow down (e0 50)
-EKEYBINSERTDOWN         equ     072h                                            ;insert down (e0 52)
 EKEYBWINDOWN            equ     05Bh                                            ;windows (R) down
-EKEYBCTRLRDOWN          equ     05Dh
-EKEYBALTRDOWN           equ     078h
+EKEYBCTRLRDOWN          equ     05Dh                                            ;right-control key down
+EKEYBUPARROWDOWN        equ     068h                                            ;up-arrow down (e0 48)
+EKEYBLEFTARROWDOWN      equ     06Bh                                            ;left-arrow down (e0 4b)
+EKEYBRIGHTARROWDOWN     equ     06Dh                                            ;right-arrow down (e0 4d)
+EKEYBDOWNARROWDOWN      equ     070h                                            ;down-arrow down (e0 50)
+EKEYBINSERTDOWN         equ     072h                                            ;insert down (e0 52)
+EKEYBALTRDOWN           equ     078h                                            ;right-alt down
 EKEYBUP                 equ     080h                                            ;up
 EKEYBCTRLLUP            equ     09Dh                                            ;control key up
 EKEYBSHIFTLUP           equ     0AAh                                            ;left shift key up
 EKEYBSHIFTRUP           equ     0B6h                                            ;right shift key up
 EKEYBPADASTERISKUP      equ     0B7h                                            ;keypad asterisk up
-EKEYBALTLUP             equ     0B8h                                            ;alt key up
+EKEYBALTLUP             equ     0B8h                                            ;left alt key up
 EKEYBWINUP              equ     0DBh
 EKEYBCTRLRUP            equ     0DDh
 EKEYBCODEEXT0           equ     0E0h                                            ;extended scan code 0
@@ -2617,14 +2617,14 @@ irq0.20                 sti                                                     
                         not     al                                              ;status flag mask
                         and     byte [wbConsoleStatus],al                       ;clear keyboard timeout indicator
 
-;       Get the first scan code (scan code 0)
+;       Get the first scan code (scan code 0).
 ;
                         call    WaitForKeyOutBuffer                             ;controller timeout?
                         jz      irq1.timeout                                    ;yes, skip ahead
                         in      al,EKEYBPORTDATA                                ;read scan code
                         mov     [wbConsoleScan0],al                             ;save scan code 0
 ;
-;       Handle scan code e1 (pause/break)
+;       Handle scan code e1 (pause/break).
 ;
                         cmp     al,EKEYBCODEEXT1                                ;extended scan code 1?
                         jne     irq1.notext1                                    ;no, branch
@@ -2650,7 +2650,7 @@ irq0.20                 sti                                                     
                         mov     [wbConsoleScan5],al                             ;save scan code 5
                         jmp     irq1.usescan3                                   ;for (e1) use scan code 3
 ;
-;       Handle scan code e0 (e0 ??) or (e0 2a/b7 e0 aa/b7)
+;       Handle scan code e0 (e0 ??) or (e0 2a/b7 e0 aa/b7).
 ;
 irq1.notext1            cmp     al,EKEYBCODEEXT0                                ;extended scan code 0?
                         jne     irq1.savescan                                   ;no, scan code is final
@@ -2682,7 +2682,7 @@ irq1.translate          mov     al,[cs:tscan2ext+eax]                           
 irq1.savescan           mov     [wbConsoleScan],al                              ;save scan code
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Lookup the ASCII base or shifted code
+;       Lookup the ASCII base or shifted code.
 ;
                         and     al,07Fh                                         ;break code
                         movzx   eax,al                                          ;extended index
@@ -2708,7 +2708,7 @@ irq1.swapcase           xor     al,020h                                         
 irq1.saveascii          mov     [wbConsoleChar],al                              ;save ASCII char
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Handle shift keys
+;       Handle shift keys.
 ;
                         mov     bl,[wbConsoleShift]                             ;shift flags
                         mov     bh,[wbConsoleLock]                              ;lock flags
@@ -2757,7 +2757,7 @@ irq1.saveascii          mov     [wbConsoleChar],al                              
                         je      irq1.shiftset                                   ;yes, set flag
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Handle lock keys
+;       Handle lock keys.
 ;
 irq1.locktest           mov     ah,EKEYFLOCKCAPS                                ;caps-lock flag
                         cmp     al,EKEYBCAPSDOWN                                ;caps-lock key down code?
@@ -4772,28 +4772,23 @@ cdHandlerMem            dd      ConHandlerMem - ConCode
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 czPnlMain01             dd      czFldPnlIdCon001                                ;field text
-                        db      0,0,6,0                                         ;row, col, size, index
-                        db      0,0,2,0                                         ;first/last sel, attr, flags
+                        db      0,0,6,0,0,0,7,0                                 ;row col siz ndx 1st nth atr flg
                         dd      czFldTitleCon001
-                        db      0,33,14,0
-                        db      0,0,7,0
+                        db      0,33,14,0,0,0,7,0
                         dd      czFldDatTmCon001
-                        db      0,63,17,0
-                        db      0,0,2,0
+                        db      0,63,17,0,0,0,7,0
                         dd      czFldPrmptCon001
-                        db      23,0,1,0
-                        db      0,0,7,0
+                        db      23,0,1,0,0,0,7,0
 czPnlMainInp            dd      wzConsoleInBuffer
-                        db      23,1,79,0
-                        db      0,0,7,80h
+                        db      23,1,79,0,0,0,7,80h
                         dd      0                                               ;end of panel
 
 czPnlMem001             dd      czFldPnlIdMem001
-                        db      0,0,6,0,0,0,2,0
+                        db      0,0,6,0,0,0,7,0
                         dd      czFldTitleMem001
                         db      0,33,14,0,0,0,7,0
                         dd      czFldDatTmCon001
-                        db      0,63,17,0,0,0,2,0
+                        db      0,63,17,0,0,0,7,0
                         dd      wzFldMenuOptn0
                         db      2,1,1,0,0,0,2,80h
                         dd      wzConsoleMemBuf0
