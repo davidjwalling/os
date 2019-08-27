@@ -2422,12 +2422,12 @@ irq0.20                 sti                                                     
 ;       11/91                           w               W               1177/1157       9177/9157       1177/1157
 ;       12/92                           e               E               1265/1245       9265/9245       1265/1245
 ;       13/93                           r               R               1372/1352       9372/9352       1371/1352
-;       14/94                           t               T               1474
-;       15/95                           y               Y               1579
-;       16/96                           u               U               1675
-;       17/97                           i               I               1769
-;       18/98                           o               O               186F
-;       19/99                           p               P               1970
+;       14/94                           t               T               1474/1454       9474/9454       1474/1454
+;       15/95                           y               Y               1579/1559       9579/9559       1579/1559
+;       16/96                           u               U               1675/1655       9675/9655       1675/1655
+;       17/97                           i               I               1769/1749       9769/9749       1769/1749
+;       18/98                           o               O               186F/184F       986F/984F       186F/184F
+;       19/99                           p               P               1970/1950       9970/9950       1970/1950
 ;       1A/9A                           [               {               1A5B/1A7B       9A5B/9A7B       1A58/1A7B
 ;       1B/9B                           ]               }               1B5D/1B7D       9B5D/9B7D       1B5D/1B7D
 ;       1C/9C                           Enter                           1C00/1C00       9C00/9C00
@@ -2436,14 +2436,14 @@ irq0.20                 sti                                                     
 ;               E0 1D/E0 9D             Right Ctrl                     *5D00/5D00      *DD00/DD00
 ;               E1 1D 45/E1 9D C5       Pause Break                    *6500/6500      *E500/E500
 ;       1E/9E                           a               A               1E61/1E41       9E61/9E41       1E61/1E41
-;       1F/9F                           s               S               1F73
+;       1F/9F                           s               S               1F73/1F53       9F73/9F53       1F73/1F53
 ;       20/A0                           d               D               2064/2044       A064/A044       2064/2044
 ;       21/A1                           f               F               2166/2146       A166/A146       2166/2146
-;       22/A2                           g               G               2267
-;       23/A3                           h               H               2368
-;       24/A4                           j               J               246A
-;       25/A5                           k               K               256B
-;       26/A6                           l               L               266C
+;       22/A2                           g               G               2267/2247       A267/A247       2267/2247
+;       23/A3                           h               H               2368/2348       A368/A348       2368/2348
+;       24/A4                           j               J               246A/244A       A46A/A44A       246A/244A
+;       25/A5                           k               K               256B/254B       A56B/A54B       256B/254B
+;       26/A6                           l               L               266C/264C       A66C/A64C       266C/264C
 ;       27/A7                           ;               :               273B/273A       A73B/A73A       273B/273A
 ;       28/A8                           '               "               2827/2822       A827/A822       2827/2822
 ;       29/A9                           `               ~               2960/297E       A960/A97E       2960/297E
@@ -2610,6 +2610,8 @@ irq0.20                 sti                                                     
 ;
                         push    EGDTOSDATA                                      ;load OS data selector ...
                         pop     ds                                              ;... into data segment register
+                        mov     al,[wbConsoleScan]                              ;previous scan code
+                        mov     [wbConsoleLastScan],al                          ;hold previous scan code
                         xor     al,al                                           ;zero reg
                         mov     [wbConsoleChar],al                              ;zero ASCII char code
                         mov     [wbConsoleScan],al                              ;zero final scan code
@@ -2660,7 +2662,6 @@ irq0.20                 sti                                                     
                         jz      irq1.timeout                                    ;yes, skip ahead
                         in      al,EKEYBPORTDATA                                ;read scan code
                         mov     [wbConsoleScan5],al                             ;save scan code 5 (65)
-
                         mov     al,EKEYBPAUSEBREAKDOWN                          ;extended pause-break scan
                         mov     [wbConsoleScan],al                              ;save final scan code
                         jmp     irq1.putkeydown                                 ;put key-down message and update OIA
@@ -2680,7 +2681,6 @@ irq1.notext1            cmp     al,EKEYBCODEEXT0                                
                         jz      irq1.timeout                                    ;yes, skip ahead
                         in      al,EKEYBPORTDATA                                ;read scan code
                         mov     [wbConsoleScan1],al                             ;save scan code 1
-
                         cmp     al,EKEYBSHIFTLDOWN                              ;left-shift down (2a)?
                         je      irq1.pair2                                      ;yes, get 2nd pair
                         cmp     al,EKEYBPADASTERISKUP                           ;keypad-asterisk up (b7)?
@@ -2700,10 +2700,8 @@ irq1.pair2              call    WaitForKeyOutBuffer                             
                         jz      irq1.timeout                                    ;yes, skip ahead
                         in      al,EKEYBPORTDATA                                ;read scan code 3
                         mov     [wbConsoleScan3],al                             ;read scan code 3
-
                         cmp     al,EKEYBSHIFTLUP                                ;(e0 ?? e0 aa)?
                         je      irq1.usescan1                                   ;yes, use scan code 1
-
                         movzx   eax,byte [wbConsoleScan3]                       ;for (e0 2a) use scan code 3
                         mov     al,[cs:tscan2ext+eax]                           ;translate to alternate scan code
                         mov     [wbConsoleScan],al                              ;save final scan code
@@ -2715,21 +2713,17 @@ irq1.pair2              call    WaitForKeyOutBuffer                             
 ;
 irq1.usescan1           movzx   eax,byte [wbConsoleScan1]                       ;for (e0) use scan code 1
                         mov     al,[cs:tscan2ext+eax]                           ;translate to alternate scan code
-
+                        mov     [wbConsoleScan],al                              ;save final scan code
                         mov     ah,EKEYFCTRLRIGHT                               ;right control flag
                         cmp     al,EKEYBCTRLRUP                                 ;right control up?
                         je      irq1.shiftclear                                 ;yes, reset flag
                         cmp     al,EKEYBCTRLRDOWN                               ;right control down?
                         je      irq1.shiftset                                   ;yes, set flag
-
                         mov     ah,EKEYFALTRIGHT                                ;right alt flag
                         cmp     al,EKEYBALTRUP                                  ;alt key up code?
                         je      irq1.shiftclear                                 ;yes, reset flag
                         cmp     al,EKEYBALTRDOWN                                ;alt key down code?
                         je      irq1.shiftset                                   ;yes, set flag
-
-                        mov     [wbConsoleScan],al
-
                         and     al,07Fh
                         cmp     al,EKEYBPADSLASHDOWN                            ;keypad-slash down?
                         jne     irq1.putkeydown                                 ;no, key-down msg and update OIA
@@ -2739,32 +2733,27 @@ irq1.usescan1           movzx   eax,byte [wbConsoleScan1]                       
 ;
 ;       Handle shift keys.
 ;
-irq1.notext0            mov     [wbConsoleScan],al
-
+irq1.notext0            mov     [wbConsoleScan],al                              ;save final scan code
                         mov     ah,EKEYFSHIFTLEFT                               ;left shift flag
                         cmp     al,EKEYBSHIFTLUP                                ;left shift key up code?
                         je      irq1.shiftclear                                 ;yes, reset flag
                         cmp     al,EKEYBSHIFTLDOWN                              ;left shift key down code?
                         je      irq1.shiftset                                   ;yes, set flag
-
                         mov     ah,EKEYFSHIFTRIGHT                              ;right shift flag
                         cmp     al,EKEYBSHIFTRUP                                ;right shift key up code?
                         je      irq1.shiftclear                                 ;yes, reset flag
                         cmp     al,EKEYBSHIFTRDOWN                              ;right shift key down code?
                         je      irq1.shiftset                                   ;yes, set flag
-
                         mov     ah,EKEYFCTRLLEFT                                ;left control flag
                         cmp     al,EKEYBCTRLLUP                                 ;control key up code?
                         je      irq1.shiftclear                                 ;yes, reset flag
                         cmp     al,EKEYBCTRLLDOWN                               ;control key down code?
                         je      irq1.shiftset                                   ;yes, set flag
-
                         mov     ah,EKEYFALTLEFT                                 ;left alt flag
                         cmp     al,EKEYBALTLUP                                  ;alt key up code?
                         je      irq1.shiftclear                                 ;yes, reset flag
                         cmp     al,EKEYBALTLDOWN                                ;alt key down code?
                         je      irq1.shiftset                                   ;yes, set flag
-
                         mov     ah,EKEYFWIN                                     ;Windows(R) key flag
                         cmp     al,EKEYBWINUP                                   ;win key up?
                         je      irq1.shiftclear                                 ;yes, reset flag
@@ -2788,10 +2777,7 @@ irq1.notext0            mov     [wbConsoleScan],al
                         jne     irq1.getchar                                    ;no, this is a char message
 irq1.locktoggle         xor     bh,ah                                           ;toggle lock flag
                         mov     [wbConsoleLock],bh                              ;save lock flags
-                        ;push    eax                                             ;save scan and char
                         call    SetKeyboardLamps                                ;update keyboard lamps
-                        ;pop     eax                                             ;restore scan and char
-                        ;mov     [wbConsoleScan],al
                         jmp     irq1.putkeydown                                 ;put key-down message and update OIA
 
 irq1.shiftset           or      bl,ah                                           ;set shift flag
@@ -2799,19 +2785,19 @@ irq1.shiftset           or      bl,ah                                           
 irq1.shiftclear         not     ah                                              ;convert flag to mask
                         and     bl,ah                                           ;reset shift flag
 irq1.shift              mov     [wbConsoleShift],bl                             ;save shift flags
-                        jmp     irq1.putkeydown
-
-
-irq1.getchar            mov     dl,al
-                        and     dl,07Fh
-                        movzx   edx,dl
-                        mov     dl,[cs:tscan2ascii+edx]
-                        mov     [wbConsoleChar],dl
+                        jmp     irq1.putkeydown                                 ;put key-down message and update OIA
 ;
 ;       Get ASCII char
 ;
-
-                        jmp     irq1.putmessage                                 ;put key-down message and update OIA
+irq1.getchar            and     al,07Fh                                         ;make code
+                        movzx   eax,al                                          ;table index
+                        test    byte [wbConsoleShift],EKEYFSHIFT                ;left or right shift active?
+                        jz      irq1.noshift                                    ;no, branch
+                        mov     al,[cs:tscan2shift+eax]                         ;shifted ASCII code
+                        jmp     irq1.savechar                                   ;continue
+irq1.noshift            mov     al,[cs:tscan2ascii+eax]                         ;ASCII code
+irq1.savechar           mov     [wbConsoleChar],al                              ;save ASCII character code
+                        jmp     irq1.putmessage                                 ;put key-down, char msgs;  update OIA
 
 ;irq1.notext0            test    byte [wbConsoleLock],EKEYFLOCKNUM               ;num-lock on?
 ;                        jnz     irq1.notnumpad                                  ;yes, use default scan codes
@@ -2826,23 +2812,6 @@ irq1.getchar            mov     dl,al
 ;                        mov     al,[cs:tscankeypad+eax]                         ;translate to numeral equivalent
 ;irq1.notnumpad          mov     [wbConsoleScan],al                              ;save final scan code
 ;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Lookup the ASCII base or shifted code.
-;
-;                        and     al,07fh
-;                        movzx   eax,al
-;                        test    byte [wbConsoleShift],EKEYFSHIFT                ;shift key down?
-;                        jnz     irq1.shifted                                    ;yes, branch
-;                        mov     al,[cs:tscan2ascii+eax]                         ;lookup from base
-;                        jmp     irq1.checkchar                                  ;continue
-;irq1.shifted            mov     al,[cs:tscan2shift+eax]                         ;look from shift
-;irq1.checkchar          test    al,al                                           ;have ASCII?
-;                        jz      irq1.shifttest                                  ;no, continue
-;
-;       ASCII code fixup based on caps-lock/shift status
-;
-;                        mov     [wbConsoleChar],al                              ;save ASCII char
-;                        jmp     irq1.putoia
 ;
 ;       If ASCII letter, flip case if caps-lock is on.
 ;
@@ -2863,34 +2832,30 @@ irq1.getchar            mov     dl,al
 ;
 ;       Put messages into the message queue.
 ;
-irq1.putmessage         jmp     irq1.putoia
-;irq1.putmessage         mov     al,[wbConsoleChar]                              ;ASCII code
-;                        mov     ah,[wbConsoleScan]                              ;final scan code
-;                        test    al,al                                           ;printable char?
-;                        jz      irq1.putkeydown                                 ;no, skip ahead
-;                        mov     edx,EMSGKEYCHAR                                 ;key-character event
-;                        and     eax,0FFFFh                                      ;clear high-order word
-;                        or      edx,eax                                         ;msg id and codes
-;                        xor     ecx,ecx                                         ;null param
-;                        call    PutMessage                                      ;put message to console
-irq1.putkeydown         jmp     irq1.putoia
-;irq1.putkeydown         mov     al,[wbConsoleChar]                              ;ASCII char
-;                        mov     ah,[wbConsoleScan]                              ;scan code
-;                        mov     edx,EMSGKEYDOWN                                 ;assume key-down event
-;                        test    ah,EKEYBUP                                      ;release scan-code?
-;                        jz      irq1.makecode                                   ;no, skip ahead
-;                        mov     edx,EMSGKEYUP                                   ;key-up event
-;irq1.makecode           and     eax,0FFFFh                                      ;clear high-order word
-;                        or      edx,eax                                         ;msg id and codes
-;                        xor     ecx,ecx                                         ;null param
-;                        call    PutMessage                                      ;put message to console
+irq1.putmessage         mov     al,[wbConsoleChar]                              ;ASCII code
+                        mov     ah,[wbConsoleScan]                              ;final scan code
+                        test    al,al                                           ;printable char?
+                        jz      irq1.putkeydown                                 ;no, skip ahead
+                        mov     edx,EMSGKEYCHAR                                 ;key-character event
+                        and     eax,0FFFFh                                      ;clear high-order word
+                        or      edx,eax                                         ;msg id and codes
+                        xor     ecx,ecx                                         ;null param
+                        call    PutMessage                                      ;put message to console
+irq1.putkeydown         mov     al,[wbConsoleChar]                              ;ASCII char
+                        mov     ah,[wbConsoleScan]                              ;scan code
+                        mov     edx,EMSGKEYDOWN                                 ;assume key-down event
+                        test    ah,EKEYBUP                                      ;release scan-code?
+                        jz      irq1.makecode                                   ;no, skip ahead
+                        mov     edx,EMSGKEYUP                                   ;key-up event
+irq1.makecode           and     eax,0FFFFh                                      ;clear high-order word
+                        or      edx,eax                                         ;msg id and codes
+                        xor     ecx,ecx                                         ;null param
+                        call    PutMessage                                      ;put message to console
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Update operator information area.
 ;
-irq1.putoia             mov     al,[wbConsoleScan]
-                        mov     [wbConsoleLastScan],al
-                        call    PutConsoleOIA                                   ;OIA shift indicators
+irq1.putoia             call    PutConsoleOIA                                   ;OIA shift indicators
 irq1.exit               sti                                                     ;enable maskable interrupts
                         pop     ds                                              ;restore non-volatile regs
                         pop     edx                                             ;
