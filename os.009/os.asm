@@ -2792,42 +2792,36 @@ irq1.shift              mov     [wbConsoleShift],bl                             
 irq1.getchar            and     al,07Fh                                         ;make code
                         movzx   eax,al                                          ;table index
                         test    byte [wbConsoleShift],EKEYFSHIFT                ;left or right shift active?
-                        jz      irq1.noshift                                    ;no, branch
+                        jz      irq1.noshift                                    ;no, lower-case
                         mov     al,[cs:tscan2shift+eax]                         ;shifted ASCII code
-                        jmp     irq1.savechar                                   ;continue
+                        jmp     irq1.checkcaps                                  ;continue
 irq1.noshift            mov     al,[cs:tscan2ascii+eax]                         ;ASCII code
-irq1.savechar           mov     [wbConsoleChar],al                              ;save ASCII character code
-                        jmp     irq1.putmessage                                 ;put key-down, char msgs;  update OIA
+irq1.checkcaps          test    byte [wbConsoleLock],EKEYFLOCKCAPS              ;caps-lock?
+                        jz      irq1.checknum                                   ;no, branch
+                        cmp     al,'A'                                          ;caps range (low)
+                        jb      irq1.checknum                                   ;branch if non-alpha
+                        cmp     al,'Z'                                          ;caps range (high)
+                        jbe     irq1.swapcase                                   ;branch if alpha
+                        cmp     al,'a'                                          ;base range (low)
+                        jb      irq1.checknum                                   ;branch if non-alpha
+                        cmp     al,'z'                                          ;base range (high)
+                        ja      irq1.checknum                                   ;branch if non-alpha
+irq1.swapcase           xor     al,020h                                         ;swap case bit
+                        mov     [wbConsoleChar],al                              ;save ASCII char code
+                        jmp     irq1.putmessage                                 ;put char, key-down msgs; update OIA
 
-;irq1.notext0            test    byte [wbConsoleLock],EKEYFLOCKNUM               ;num-lock on?
-;                        jnz     irq1.notnumpad                                  ;yes, use default scan codes
-;                        mov     ah,al
-;                        and     ah,07fh
-;                        cmp     ah,047h                                         ;keypad numeral range (low)
-;                        jb      irq1.notnumpad                                  ;branch if non-numeral
-;                        cmp     ah,053h                                         ;keypad numeral range (high)
-;                        ja      irq1.notnumpad                                  ;branch if non-numeral
-;                        sub     al,047h                                         ;lookup table index
-;                        movzx   eax,al                                          ;extend to register
-;                        mov     al,[cs:tscankeypad+eax]                         ;translate to numeral equivalent
-;irq1.notnumpad          mov     [wbConsoleScan],al                              ;save final scan code
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       If ASCII letter, flip case if caps-lock is on.
-;
-;                        test    byte [wbConsoleLock],EKEYFLOCKCAPS              ;caps lock on?
-;                        jz      irq1.saveascii                                  ;no, branch
-;                        cmp     al,'A'                                          ;caps range (low)
-;                        jb      irq1.saveascii                                  ;branch if non-alpha
-;                        cmp     al,'Z'                                          ;caps range (high)
-;                        jbe     irq1.swapcase                                   ;branch if alpha
-;                        cmp     al,'a'                                          ;base range (low)
-;                        jb      irq1.saveascii                                  ;branch if non-alpha
-;                        cmp     al,'z'                                          ;base range (high)
-;                        ja      irq1.saveascii                                  ;branch if non-alpha
-;irq1.swapcase           xor     al,020h                                         ;swap case bit
-;irq1.saveascii          mov     [wbConsoleChar],al                              ;save ASCII char
-;                        jmp     irq1.putmessage                                 ;continue
+irq1.checknum           test    byte [wbConsoleLock],EKEYFLOCKNUM               ;num-lock on?
+                        jz      irq1.notnum                                     ;no, branch
+                        mov     dl,[wbConsoleScan]                              ;scan code
+                        and     dl,07fh                                         ;make code
+                        cmp     dl,047h                                         ;keypad numeral range (low)
+                        jb      irq1.notnum                                     ;branch if non-numeral
+                        cmp     dl,053h                                         ;keypad numeral range (high)
+                        ja      irq1.notnum                                     ;branch if non-numeral
+                        sub     dl,047h                                         ;lookup table index
+                        movzx   edx,dl                                          ;extend to register
+                        mov     al,[cs:tscankeypad+edx]                         ;translate to numeral equivalent
+irq1.notnum             mov     [wbConsoleChar],al                              ;save ASCII character code
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Put messages into the message queue.
@@ -2867,10 +2861,10 @@ irq1.exit               sti                                                     
 ;       Scan-Code to ASCII Translation Tables
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Keypad numerals-to-directional
+;       Keypad directional to numeral
 ;
-tscankeypad             db      067h,068h,069h,04Ah,068h,04Ch,06Dh,04Eh         ;47-4e  47->67
-                        db      06Fh,070h,071h,072h,073h                        ;4f-53
+tscankeypad             db      037h,038h,039h,02Dh,034h,035h,036h,02Bh         ;47-4e  789-456+
+                        db      031h,032h,033h,030h,02Eh                        ;4f-53  1230.
 ;
 ;       Scan Code to Extended Scan Code
 ;
@@ -2915,9 +2909,9 @@ tscan2ascii             db      000h,01Bh,031h,032h,033h,034h,035h,036h         
                         db      027h,060h,000h,05Ch,07Ah,078h,063h,076h         ;28-2f
                         db      062h,06Eh,06Dh,02Ch,02Eh,02Fh,000h,02Ah         ;30-37
                         db      000h,020h,000h,000h,000h,000h,000h,000h         ;38-3f
-                        db      000h,000h,000h,000h,000h,000h,000h,037h         ;40-47
-                        db      038h,039h,02Dh,034h,035h,036h,02Bh,031h         ;48-4f
-                        db      032h,033h,030h,02Eh,000h,000h,000h,000h         ;50-57
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;40-47
+                        db      000h,000h,02Dh,000h,000h,000h,02Bh,000h         ;48-4f
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;50-57
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;58-5f
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;60-67
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;68-6f
@@ -2932,9 +2926,9 @@ tscan2shift             db      000h,01Bh,021h,040h,023h,024h,025h,05Eh         
                         db      022h,07Eh,000h,07Ch,05Ah,058h,043h,056h         ;a8-af
                         db      042h,04Eh,04Dh,03Ch,03Eh,03Fh,000h,02Ah         ;b0-b7
                         db      000h,020h,000h,000h,000h,000h,000h,000h         ;b8-bf
-                        db      000h,000h,000h,000h,000h,000h,000h,037h         ;c0-c7
-                        db      038h,039h,02Dh,034h,035h,036h,02Bh,031h         ;c8-cf
-                        db      032h,033h,030h,02Eh,000h,000h,000h,000h         ;d0-d7
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;c0-c7
+                        db      000h,000h,02Dh,000h,000h,000h,02Bh,000h         ;c8-cf
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;d0-d7
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;d8-df
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;e0-e7
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;e8-ef
