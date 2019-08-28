@@ -225,6 +225,7 @@ EKEYBLEFTARROWDOWN      equ     06Bh                                            
 EKEYBRIGHTARROWDOWN     equ     06Dh                                            ;right-arrow down (e0 4d)
 EKEYBDOWNARROWDOWN      equ     070h                                            ;down-arrow down (e0 50)
 EKEYBINSERTDOWN         equ     072h                                            ;insert down (e0 52)
+EKEYBDELETEDOWN         equ     073h                                            ;delete down (e0 53)
 EKEYBPADSLASHDOWN       equ     075h                                            ;keypad slash down
 EKEYBALTRDOWN           equ     078h                                            ;right-alt down
 EKEYBUP                 equ     080h                                            ;up
@@ -337,6 +338,7 @@ EASCIICARET             equ     05Eh                                            
 EASCIILOWERA            equ     061h                                            ;'a'
 EASCIILOWERZ            equ     07Ah                                            ;'z'
 EASCIITILDE             equ     07Eh                                            ;'~'
+EASCIIDELETE            equ     07Fh                                            ;del
 EASCIIBORDSGLVERT       equ     0B3h                                            ;vertical single border
 EASCIIBORDSGLUPRRGT     equ     0BFh                                            ;upper-right single border
 EASCIIBORDSGLLWRLFT     equ     0C0h                                            ;lower-left single border
@@ -2506,71 +2508,67 @@ irq0.20                 sti                                                     
 ;       E1 1D 45/E1 9D C5               Pause Break                    *6500/6500      *E500/E500++
 ;
 ;       E0 47/E0 C7                     Home                           *6700/6700      *E700/E700
-;       E0 47/E0 AA                     Num-Lock Home                  *6700/6700      *E700/E700
+;      *E0 47/E0 AA                     Num-Lock Home                  *6700/6700      *E700/E700
 ;       E0 47/E0 2A                     Left-Shift Home                *6700/6700      *E700/E700
 ;       E0 47/E0 36                     Right-Shift Home               *6700/6700      *E700/E700
 ;
 ;       E0 48/E0 C8                     Up-Arrow                       *6800/6800      *E800/E800
-;       E0 48/E0 AA                     Num-Lock Up-Arrow              *6800/6800      *E800/E800
+;      *E0 48/E0 AA                     Num-Lock Up-Arrow              *6800/6800      *E800/E800
 ;       E0 48/E0 2A                     Left-Shift Up-Arrow            *6800/6800      *E800/E800
 ;       E0 48/E0 36                     Right-Shift Up-Arrow           *6800/6800      *E800/E800
-
-
-
-;       E0 49/E0 C9                     Page-Up                        *6900/6900      *E900/E900
-;       E0 49/E0 36                     Right-Shift Page-Up            *6900/6900      *E900/E900
-;       E0 2A E0 49/E0 AA               Num-Lock Page-Up               *6900/6900      *E900/E900
-
-;       E0 4B/E0 CB                     Left-Arrow
-;                                       Left-Shift Left-Arrow
-;                                       Right-Shift Left-Arrow
-;       E0 2A E0 49/E0 C9               Num-Lock Left-Arrow
-;                                       Num-Lock Left-Shift Left-Arrow
-;                                       Num-Lock Right-Shift Left-Arrow
-
-;       E0 53/E0 D3                     Delete                         *737F/737F      *F37F/F37F      *737F/737F
-;       E0 53/E0 36                     Right-Shift Delete             *737F/737F      *F37F/F37F      *737F/737F
-;       E0 2A E0 53/E0 AA               Num-Lock Delete                *737F/737F      *F37F/F37F      *737F/737F
-;       E0 35/E0 B5                     Keypad-Slash                   *752F/752F      *F52F/F52F      *752F/752F
-;       E0 35/E0 36                     Right-Shift Keypad-Slash       *752F/752F      *F52F/F52F      *752F/752F
-;       E0 37/E0 B7 E0 B7               Shift PrntScrn                 *7700/7700      *F700/F700
-;       E0 2A E0 37/E0 B7 E0 AA         PrntScrn                       *7700/7700      *F700/F700
-;       E0 38/E0 B8                     Right Alt                      *7800/7800      *F800/F800
-
-;       E0 4D/E0 CD                     Right-Arrow
-;       E0 2A E0 4D/E0 CD               Num-Lock Right-Arrow
-;                                       Left-Shift Right-Arrow
-;       E0 4F/E0 CF                     End
-;       E0 2A E0 4F/E0 CF               Num-Lock End
-;                                       Left-Shift End
-;       E0 50/E0 D0                     Down-Arrow
-;       E0 2A E0 50/E0 D0               Num-Lock Down-Arrow
-;                                       Left-Shift Down-Arrow
-;       E0 51/E0 D1                     Page-Down
-;       E0 2A E0 51/E0 AA               Num-Lock Page-Down
-;                                       Left-Shift Page-Down
-;       E0 52/E0 D2                     Insert
-;       E0 52/E0 36                     Right-Shift Insert
-;       E0 2A E0 52/E0 AA               Num-Lock Insert
-
-;       Custom Key Make/Break Codes
 ;
-;       5C/DC                           Keyboard-Enter
-;       5D/DD                           Right-Ctrl
-;       65/E5                           Pause-Break
-;       67/E7                           Home
-;       68/E8                           Up-Arrow
-;       69/E9                           Page-Up
-;       6B/EB                           Left-Arrow
-;       6D/ED                           Right-Arrow
-;       6F/EF                           End
-;       70/F0                           Down-Arrow
-;       71/F1                           Page-Down
-;       72/F2                           Insert
-;       73/F3                           Delete
-;       75/F5                           Keyboard-Slash
-;       77/F7                           Print-Scrn
-;       78/F8                           Right-Alt
+;       E0 49/E0 C9                     Page-Up                        *6900/6900      *E900/E900
+;      *E0 49/E0 AA                     Num-Lock Page-Up               *6900/6900      *E900/E900
+;       E0 49/E0 2A                     left-Shift Page-Up             *6900/6900      *E900/E900
+;       E0 49/E0 36                     Right-Shift Page-Up            *6900/6900      *E900/E900
+;
+;       E0 4B/E0 CB                     Left-Arrow                     *6B00/6B00      *EB00/EB00
+;      *E0 4B/E0 AA                     Num-Lock Left-Arrow            *6B00/6B00      *EB00/EB00
+;       E0 4B/E0 2A                     Left-Shift Left-Arrow          *6B00/6B00      *EB00/EB00
+;       E0 4B/E0 36                     Right-Shift Left-Arrow         *6B00/6B00      *EB00/EB00
+;
+;       E0 4D/E0 CD                     Right-Arrow                    *6D00/6D00      *ED00/ED00
+;      *E0 4D/E0 AA                     Num-Lock Right-Arrow           *6D00/6D00      *ED00/ED00
+;       E0 4D/E0 2A                     Left-Shift Right-Arrow         *6D00/6D00      *ED00/ED00
+;       E0 4D/E0 36                     Right-Shift Right-Arrow        *6D00/6D00      *ED00/ED00
+;
+;       E0 4F/E0 CF                     End                            *6F00/6F00      *EF00/EF00
+;      *E0 4F/E0 AA                     Num-Lock End                   *6F00/6F00      *EF00/EF00
+;       E0 4F/E0 2A                     Left-Shift End                 *6F00/6F00      *EF00/EF00
+;       E0 4F/E0 36                     Right-Shift End                *6F00/6F00      *EF00/EF00
+;
+;       E0 50/E0 D0                     Down-Arrow                     *7000/7000      *F000/F000
+;      *E0 50/E0 AA                     Num-Lock Down-Arrow            *7000/7000      *F000/F000
+;       E0 50/E0 2A                     Left-Shift Down-Arrow          *7000/7000      *F000/F000
+;       E0 50/E0 36                     Right-Shift Down-Arrow         *7000/7000      *F000/F000
+;
+;       E0 51/E0 D1                     Page-Down                      *7100/7100      *F100/F100
+;      *E0 51/E0 AA                     Num-Lock Page-Down             *7100/7100      *F100/F100
+;       E0 51/E0 2A                     Left-Shift Page-Down           *7100/7100      *F100/F100
+;       E0 51/E0 36                     Right-Shift Page-Down          *7100/7100      *F100/F100
+;
+;       E0 52/E0 D2                     Insert                         *7200/7200      *F200/F200
+;      *E0 52/E0 AA                     Num-Lock Insert                *7200/7200      *F200/F200
+;       E0 52/E0 2A                     Left-Shift Insert              *7200/7200      *F200/F200
+;       E0 52/E0 36                     Right-Shift Insert             *7200/7200      *F200/F200
+;
+;       E0 53/E0 D3                     Delete                         *737F/737F      *F37F/F37F      *737F/737F
+;      *E0 53/E0 AA                     Num-Lock Delete                *737F/737F      *F37F/F37F      *737F/737F
+;       E0 53/E0 2A                     Left-Shift Delete              *737F/737F      *F37F/F37F      *737F/737F
+;       E0 53/E0 36                     Right-Shift Delete             *737F/737F      *F37F/F37F      *737F/737F
+;
+;      *E0 35/E0 B5                     Keypad-Slash                   *752F/752F      *F52F/F52F      *752F/752F
+;      *E0 35/E0 AA                     Num-Lock Keypad-Slash          *752F/752F      *F52F/F52F      *752F/752F
+;      *E0 35/E0 2A                     Left-Shift Keypad-Slash        *752F/752F      *F52F/F52F      *752F/752F
+;      *E0 35/E0 36                     Right-Shift Keypad-Slash       *752F/752F      *F52F/F52F      *752F/752F
+;
+;       E0 37/E0 B7 E0 AA               PrntScrn                       *7700/7700      *F700/F700
+;      *                                Num-Lock PrntScrn              *7700/7700      *F700/F700
+;       E0 37/E0 B7 E0 B7               Left-Shift PrntScrn            *7700/7700      *F700/F700
+;       E0 37/E0 B7 E0 B7               Right-Shift PrntScrn           *7700/7700      *F700/F700
+;
+;       E0 38/E0 B8                     Right Alt                      *7800/7800      *F800/F800
+;      *E0 38/E0 AA                     Num-Lock Right-Alt             *7800/7800      *F800/F800
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  keyboard                                        ;keyboard interrrupt
@@ -2646,7 +2644,7 @@ irq1.timeout            mov     al,EKEYFTIMEOUT                                 
                         or      byte [wbConsoleStatus],al                       ;set controller timeout
                         jmp     irq1.putoia                                     ;continue
 ;
-;       Take second scan-code pair if the second scan code is 2a or b7.
+;       Take 2nd scan-code pair if scan 1 is b7. Use last scan if scan 1 is 2a, 36 or aa.
 ;
 irq1.notext1            cmp     al,EKEYBCODEEXT0                                ;extended scan code 0?
                         jne     irq1.notext0                                    ;no, scan code is final
@@ -2654,19 +2652,18 @@ irq1.notext1            cmp     al,EKEYBCODEEXT0                                
                         jz      irq1.timeout                                    ;yes, skip ahead
                         in      al,EKEYBPORTDATA                                ;read scan code
                         mov     [wbConsoleScan1],al                             ;save scan code 1
-
                         cmp     al,EKEYBPADASTERISKUP                           ;keypad-asterisk up (b7)?
                         je      irq1.pair2                                      ;yes, get 2nd pair
-                        cmp     al,EKEYBSHIFTLDOWN                              ;left-shift down (2a)?
-                        je      irq1.uselastscan                                ;yes, get 2nd pair
-                        cmp     al,EKEYBSHIFTLUP                                ;left-shift up (aa)?
-                        je      irq1.uselastscan                                ;no, use last scan
-                        cmp     al,036h                                         ;right-shift down?
+                        cmp     al,EKEYBSHIFTLDOWN                              ;left-shift down (2a)? left-shift
+                        je      irq1.uselastscan                                ;yes, use last scan
+                        cmp     al,EKEYBSHIFTLUP                                ;left-shift up (aa)? num-lock
+                        je      irq1.uselastscan                                ;yes, use last scan
+                        cmp     al,EKEYBSHIFTRDOWN                              ;right-shift down (36)? right-shift
                         jne     irq1.usescan1                                   ;no, use scan 1
 irq1.uselastscan        mov     al,[wbConsoleLastScan]                          ;last scan code
-                        or      al,080h                                         ;set break mask
+                        or      al,EKEYBUP                                      ;set break mask
                         mov     [wbConsoleScan],al                              ;save as final scan code
-                        jmp     irq1.putkeydown                                 ;update the OIA
+                        jmp     irq1.checkchar                                  ;check for slash or delete
 ;
 ;       Get the second pair of scan-codes. Use scan code 3 if it is not aa.
 ;
@@ -2685,7 +2682,7 @@ irq1.pair2              call    WaitForKeyOutBuffer                             
                         mov     [wbConsoleScan],al                              ;save final scan code
                         jmp     irq1.putkeydown                                 ;put key-down message and update OIA
 ;
-;       Translate E0 scan codes. Right ctrl and alt set/reset flags. Keypad slash generates ASCII.
+;       Translate E0 scan codes. Right ctrl and alt set/reset flags.
 ;
 irq1.usescan1           movzx   eax,byte [wbConsoleScan1]                       ;for (e0) use scan code 1
                         mov     al,[cs:tscan2ext+eax]                           ;translate to alternate scan code
@@ -2700,10 +2697,17 @@ irq1.usescan1           movzx   eax,byte [wbConsoleScan1]                       
                         je      irq1.shiftclear                                 ;yes, reset flag
                         cmp     al,EKEYBALTRDOWN                                ;alt key down code?
                         je      irq1.shiftset                                   ;yes, set flag
-                        and     al,07Fh                                         ;mask out break bit
+;
+;       Delete and Slash generate ASCII, key-pad or not.
+;
+irq1.checkchar          and     al,07Fh                                         ;mask out break bit
+                        mov     dl,EASCIIDELETE                                 ;ASCII delete
+                        cmp     al,EKEYBDELETEDOWN                              ;delete down?
+                        je      irq1.savechar                                   ;yes, branch
+                        mov     dl,EASCIISLASH                                  ;ASCII slash
                         cmp     al,EKEYBPADSLASHDOWN                            ;keypad-slash down?
-                        jne     irq1.putkeydown                                 ;no, key-down msg and update OIA
-                        mov     byte [wbConsoleChar],EASCIISLASH                ;store ASCII code
+                        jne     irq1.putkeydown                                 ;no, put key-down msg and update OIA
+irq1.savechar           mov     byte [wbConsoleChar],dl                         ;store ASCII code
                         jmp     irq1.putmessage                                 ;put char, key-down msg and upate OIA
 ;
 ;       Set/reset shift flags.
@@ -2903,7 +2907,7 @@ tscan2ascii             db      000h,01Bh,031h,032h,033h,034h,035h,036h         
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;58-5f
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;60-67
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;68-6f
-                        db      000h,000h,000h,000h,000h,02Fh,000h,000h         ;70-77
+                        db      000h,000h,000h,07Fh,000h,02Fh,000h,000h         ;70-77
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;78-7f
 
 tscan2shift             db      000h,01Bh,021h,040h,023h,024h,025h,05Eh         ;80-87
@@ -2920,7 +2924,7 @@ tscan2shift             db      000h,01Bh,021h,040h,023h,024h,025h,05Eh         
                         db      000h,000h,000h,07Fh,000h,000h,000h,000h         ;d8-df
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;e0-e7
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;e8-ef
-                        db      000h,000h,000h,000h,000h,02Fh,000h,000h         ;f0-f7
+                        db      000h,000h,000h,07Fh,000h,02Fh,000h,000h         ;f0-f7
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;f8-ff
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
