@@ -2505,70 +2505,71 @@ irq0.20                 sti                                                     
 ;       E0 1C/E0 9C                     Keypad Enter                   *5C00/5C00      *DC00/DC00
 ;       E0 1D/E0 9D                     Right Ctrl                     *5D00/5D00      *DD00/DD00++
 ;
-;       E1 1D 45/E1 9D C5               Pause Break                    *6500/6500      *E500/E500++
+;       E1 1D 45/E1 9D C5               Pause Break                    *6500/6500      *E500/E500+-
 ;
 ;       E0 47/E0 C7                     Home                           *6700/6700      *E700/E700
-;      *E0 47/E0 AA                     Num-Lock Home                  *6700/6700      *E700/E700
+;       E0 47/E0 AA                     Num-Lock Home                  *6700/6700      *E700/E700
 ;       E0 47/E0 2A                     Left-Shift Home                *6700/6700      *E700/E700
 ;       E0 47/E0 36                     Right-Shift Home               *6700/6700      *E700/E700
 ;
 ;       E0 48/E0 C8                     Up-Arrow                       *6800/6800      *E800/E800
-;      *E0 48/E0 AA                     Num-Lock Up-Arrow              *6800/6800      *E800/E800
+;       E0 48/E0 AA                     Num-Lock Up-Arrow              *6800/6800      *E800/E800
 ;       E0 48/E0 2A                     Left-Shift Up-Arrow            *6800/6800      *E800/E800
 ;       E0 48/E0 36                     Right-Shift Up-Arrow           *6800/6800      *E800/E800
 ;
 ;       E0 49/E0 C9                     Page-Up                        *6900/6900      *E900/E900
-;      *E0 49/E0 AA                     Num-Lock Page-Up               *6900/6900      *E900/E900
+;       E0 49/E0 AA                     Num-Lock Page-Up               *6900/6900      *E900/E900
 ;       E0 49/E0 2A                     left-Shift Page-Up             *6900/6900      *E900/E900
 ;       E0 49/E0 36                     Right-Shift Page-Up            *6900/6900      *E900/E900
 ;
 ;       E0 4B/E0 CB                     Left-Arrow                     *6B00/6B00      *EB00/EB00
-;      *E0 4B/E0 AA                     Num-Lock Left-Arrow            *6B00/6B00      *EB00/EB00
+;       E0 4B/E0 AA                     Num-Lock Left-Arrow            *6B00/6B00      *EB00/EB00
 ;       E0 4B/E0 2A                     Left-Shift Left-Arrow          *6B00/6B00      *EB00/EB00
 ;       E0 4B/E0 36                     Right-Shift Left-Arrow         *6B00/6B00      *EB00/EB00
 ;
 ;       E0 4D/E0 CD                     Right-Arrow                    *6D00/6D00      *ED00/ED00
-;      *E0 4D/E0 AA                     Num-Lock Right-Arrow           *6D00/6D00      *ED00/ED00
+;       E0 4D/E0 AA                     Num-Lock Right-Arrow           *6D00/6D00      *ED00/ED00
 ;       E0 4D/E0 2A                     Left-Shift Right-Arrow         *6D00/6D00      *ED00/ED00
 ;       E0 4D/E0 36                     Right-Shift Right-Arrow        *6D00/6D00      *ED00/ED00
 ;
 ;       E0 4F/E0 CF                     End                            *6F00/6F00      *EF00/EF00
-;      *E0 4F/E0 AA                     Num-Lock End                   *6F00/6F00      *EF00/EF00
+;       E0 4F/E0 AA                     Num-Lock End                   *6F00/6F00      *EF00/EF00
 ;       E0 4F/E0 2A                     Left-Shift End                 *6F00/6F00      *EF00/EF00
 ;       E0 4F/E0 36                     Right-Shift End                *6F00/6F00      *EF00/EF00
 ;
 ;       E0 50/E0 D0                     Down-Arrow                     *7000/7000      *F000/F000
-;      *E0 50/E0 AA                     Num-Lock Down-Arrow            *7000/7000      *F000/F000
+;       E0 50/E0 AA                     Num-Lock Down-Arrow            *7000/7000      *F000/F000
 ;       E0 50/E0 2A                     Left-Shift Down-Arrow          *7000/7000      *F000/F000
 ;       E0 50/E0 36                     Right-Shift Down-Arrow         *7000/7000      *F000/F000
 ;
 ;       E0 51/E0 D1                     Page-Down                      *7100/7100      *F100/F100
-;      *E0 51/E0 AA                     Num-Lock Page-Down             *7100/7100      *F100/F100
+;       E0 51/E0 AA                     Num-Lock Page-Down             *7100/7100      *F100/F100
 ;       E0 51/E0 2A                     Left-Shift Page-Down           *7100/7100      *F100/F100
 ;       E0 51/E0 36                     Right-Shift Page-Down          *7100/7100      *F100/F100
 ;
 ;       E0 52/E0 D2                     Insert                         *7200/7200      *F200/F200
-;      *E0 52/E0 AA                     Num-Lock Insert                *7200/7200      *F200/F200
+;       E0 52/E0 AA                     Num-Lock Insert                *7200/7200      *F200/F200
 ;       E0 52/E0 2A                     Left-Shift Insert              *7200/7200      *F200/F200
 ;       E0 52/E0 36                     Right-Shift Insert             *7200/7200      *F200/F200
 ;
 ;       E0 53/E0 D3                     Delete                         *737F/737F      *F37F/F37F      *737F/737F
-;      *E0 53/E0 AA                     Num-Lock Delete                *737F/737F      *F37F/F37F      *737F/737F
+;       E0 53/E0 AA                     Num-Lock Delete                *737F/737F      *F37F/F37F      *737F/737F
 ;       E0 53/E0 2A                     Left-Shift Delete              *737F/737F      *F37F/F37F      *737F/737F
 ;       E0 53/E0 36                     Right-Shift Delete             *737F/737F      *F37F/F37F      *737F/737F
 ;
-;      *E0 35/E0 B5                     Keypad-Slash                   *752F/752F      *F52F/F52F      *752F/752F
-;      *E0 35/E0 AA                     Num-Lock Keypad-Slash          *752F/752F      *F52F/F52F      *752F/752F
-;      *E0 35/E0 2A                     Left-Shift Keypad-Slash        *752F/752F      *F52F/F52F      *752F/752F
-;      *E0 35/E0 36                     Right-Shift Keypad-Slash       *752F/752F      *F52F/F52F      *752F/752F
+;       E0 35/E0 B5                     Keypad-Slash                   *752F/752F      *F52F/F52F      *752F/752F
+;       E0 35/E0 AA                     Num-Lock Keypad-Slash          *752F/752F      *F52F/F52F      *752F/752F
+;       E0 35/E0 2A                     Left-Shift Keypad-Slash        *752F/752F      *F52F/F52F      *752F/752F
+;       E0 35/E0 36                     Right-Shift Keypad-Slash       *752F/752F      *F52F/F52F      *752F/752F
 ;
 ;       E0 37/E0 B7 E0 AA               PrntScrn                       *7700/7700      *F700/F700
-;      *                                Num-Lock PrntScrn              *7700/7700      *F700/F700
-;       E0 37/E0 B7 E0 B7               Left-Shift PrntScrn            *7700/7700      *F700/F700
-;       E0 37/E0 B7 E0 B7               Right-Shift PrntScrn           *7700/7700      *F700/F700
+;       E0 37/E0 B7 E0 B7               Shift PrntScrn                 *7700/7700      *F700/F700
 ;
 ;       E0 38/E0 B8                     Right Alt                      *7800/7800      *F800/F800
-;      *E0 38/E0 AA                     Num-Lock Right-Alt             *7800/7800      *F800/F800
+;
+;       *  OS Custom Scan Code in Messages
+;       ++ Not testable on OSBoxes
+;       +- Not testable without Pause/Break keyboard
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  keyboard                                        ;keyboard interrrupt
