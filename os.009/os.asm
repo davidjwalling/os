@@ -219,9 +219,9 @@ EKEYBCAPSDOWN           equ     03Ah                                            
 EKEYBNUMDOWN            equ     045h                                            ;num-lock down
 EKEYBSCROLLDOWN         equ     046h                                            ;scroll-lock down
 EKEYBPADINSERTDOWN      equ     052h                                            ;keybpad-insert down
-EKEYBWINDOWN            equ     05Bh                                            ;windows (R) down
-EKEYBPADENTERDOWN       equ     05Ch                                            ;keypad-enter down
-EKEYBCTRLRDOWN          equ     05Dh                                            ;right-control key down
+EKEYBWINLDOWN           equ     05Bh                                            ;left windows (R) down
+EKEYBWINRDOWN           equ     05Ch                                            ;right windows (R) down
+EKEYBCLICKRDOWN         equ     05Dh                                            ;right-click down
 EKEYBPAUSEBREAKDOWN     equ     065h                                            ;pause-break key down
 EKEYBUPARROWDOWN        equ     068h                                            ;up-arrow down (e0 48)
 EKEYBLEFTARROWDOWN      equ     06Bh                                            ;left-arrow down (e0 4b)
@@ -231,14 +231,19 @@ EKEYBINSERTDOWN         equ     072h                                            
 EKEYBDELETEDOWN         equ     073h                                            ;delete down (e0 53)
 EKEYBPADSLASHDOWN       equ     075h                                            ;keypad slash down
 EKEYBALTRDOWN           equ     078h                                            ;right-alt down
+EKEYBPADENTERDOWN       equ     07Ch                                            ;keypad-enter down
+EKEYBCTRLRDOWN          equ     07Dh                                            ;right-control key down
 EKEYBUP                 equ     080h                                            ;up
 EKEYBCTRLLUP            equ     09Dh                                            ;control key up
 EKEYBSHIFTLUP           equ     0AAh                                            ;left shift key up
 EKEYBSHIFTRUP           equ     0B6h                                            ;right shift key up
 EKEYBPADASTERISKUP      equ     0B7h                                            ;keypad asterisk up
 EKEYBALTLUP             equ     0B8h                                            ;left alt key up
-EKEYBWINUP              equ     0DBh                                            ;windows (R) up
-EKEYBCTRLRUP            equ     0DDh                                            ;left-control up
+EKEYBWINLUP             equ     0DBh                                            ;left windows (R) up
+EKEYBWINRUP             equ     0DCh                                            ;right windows (R) up
+EKEYBCLICKRUP           equ     0DDh                                            ;right-click up
+KEYBPADENTERUP          equ     0FCh                                            ;keypad-enter up
+EKEYBCTRLRUP            equ     0FDh                                            ;left-control up
 EKEYBCODEEXT0           equ     0E0h                                            ;extended scan code 0
 EKEYBCODEEXT1           equ     0E1h                                            ;extended scan code 1
 EKEYBALTRUP             equ     0F8h                                            ;right-alt up
@@ -402,7 +407,8 @@ EKEYFCTRLRIGHT          equ     00001000b                                       
 EKEYFSHIFTRIGHT         equ     00010000b                                       ;right shift
 EKEYFSHIFT              equ     00010010b                                       ;left or right shift
 EKEYFALTRIGHT           equ     00100000b                                       ;right alt
-EKEYFWIN                equ     01000000b                                       ;windows(R)
+EKEYFWINLEFT            equ     01000000b                                       ;left windows(R)
+EKEYFWINRIGHT           equ     10000000b                                       ;right windows (R)
 EKEYFLOCKSCROLL         equ     00000001b                                       ;scroll-lock flag
 EKEYFLOCKNUM            equ     00000010b                                       ;num-lock flag
 EKEYFLOCKCAPS           equ     00000100b                                       ;cap-lock flag
@@ -2530,11 +2536,15 @@ irq0.20                 sti                                                     
 ;       57/D7                           F11                             5700/5700       D700/D700
 ;       58/D8                           F12                             5800/5800       D800/D800
 ;
-;       E0 5B/E0 DB                     Windows                         5B00/5B00       DB00/DB00
-;       E0 1C/E0 9C                     Keypad Enter                   *5C00/5C00      *DC00/DC00
-;       E0 1D/E0 9D                     Right Ctrl                     *5D00/5D00      *DD00/DD00++
+;       E0 5B/E0 DB                     Left-Windows                    5B00/5B00       DB00/DB00                 ok
+;       E0 5C/E0 DC                     Right-Windows                   5C00/5C00       DC00/DC00
+;       E0 5D/E0 DD                     Right-Click                     5D00/5D00       DD00/DD00
+
+;       E1 1D 45/E1 9D C5               Pause-Break                    *6500/6500
+;       E1 1D 45/E1 9D C5               Shift Pause-Break              *6500/6500
 ;
-;       E1 1D 45/E1 9D C5               Pause Break                    *6500/6500      *E500/E500+-
+;       E0 46/E0 C6                     Ctrl Pause-Break               *6600/6600
+;       E0 46/E0 C6                     Alt Pause-Break                *6600/6600
 ;
 ;       E0 47/E0 C7                     Home                           *6700/6700      *E700/E700
 ;       E0 47/E0 AA                     Num-Lock Home                  *6700/6700      *E700/E700
@@ -2591,14 +2601,14 @@ irq0.20                 sti                                                     
 ;       E0 35/E0 2A                     Left-Shift Keypad-Slash        *752F/752F      *F52F/F52F      *752F/752F
 ;       E0 35/E0 36                     Right-Shift Keypad-Slash       *752F/752F      *F52F/F52F      *752F/752F
 ;
-;       E0 37/E0 B7 E0 AA               PrntScrn                       *7700/7700      *F700/F700
+;       E0 37/E0 B7 E0 AA               PrntScrn                       *7700/7700      *F700/F700                   ok
 ;       E0 37/E0 B7 E0 B7               Shift PrntScrn                 *7700/7700      *F700/F700
 ;
-;       E0 38/E0 B8                     Right Alt                      *7800/7800      *F800/F800
+;       E0 38/E0 B8                     Right Alt                      *7800/7800      *F800/F800                   ok
+;       E0 1C/E0 9C                     Keypad Enter                   *7C00/7C00      *FC00/FC00                   ok
+;       E0 1D/E0 9D                     Right Ctrl                     *7D00/7D00      *FD00/FD00                   ok
 ;
 ;       *  OS Custom Scan Code in Messages
-;       ++ Not testable on OSBoxes
-;       +- Not testable without Pause/Break keyboard
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  keyboard                                        ;keyboard interrrupt
@@ -2727,6 +2737,16 @@ irq1.usescan1           movzx   eax,byte [wbConsoleScan1]                       
                         je      irq1.shiftclear                                 ;yes, reset flag
                         cmp     al,EKEYBALTRDOWN                                ;alt key down code?
                         je      irq1.shiftset                                   ;yes, set flag
+                        mov     ah,EKEYFWINLEFT                                 ;left win flag
+                        cmp     al,EKEYBWINLUP                                  ;left win up?
+                        je      irq1.shiftclear                                 ;yes, reset flag
+                        cmp     al,EKEYBWINLDOWN                                ;left win down?
+                        je      irq1.shiftset                                   ;yes, set flag
+                        mov     ah,EKEYFWINRIGHT                                ;right win flag
+                        cmp     al,EKEYBWINRUP                                  ;right win up?
+                        je      irq1.shiftclear                                 ;yes, reset flag
+                        cmp     al,EKEYBWINRDOWN                                ;right win down?
+                        je      irq1.shiftset                                   ;yes, set flag
 ;
 ;       An extended scan code pair (e0 52) for the insert key toggles the insert flag.
 ;
@@ -2791,11 +2811,11 @@ irq1.notext0            mov     [wbConsoleScan],al                              
                         je      irq1.shiftclear                                 ;yes, reset flag
                         cmp     al,EKEYBALTLDOWN                                ;alt key down code?
                         je      irq1.shiftset                                   ;yes, set flag
-                        mov     ah,EKEYFWIN                                     ;Windows(R) key flag
-                        cmp     al,EKEYBWINUP                                   ;win key up?
-                        je      irq1.shiftclear                                 ;yes, reset flag
-                        cmp     al,EKEYBWINDOWN                                 ;win key down?
-                        je      irq1.shiftset                                   ;yes, set flag
+;                        mov     ah,EKEYFWINLEFT                                 ;Windows(R) key flag
+;                        cmp     al,EKEYBWINUP                                   ;win key up?
+;                        je      irq1.shiftclear                                 ;yes, reset flag
+;                        cmp     al,EKEYBWINDOWN                                 ;win key down?
+;                        je      irq1.shiftset                                   ;yes, set flag
 ;
 ;       Handle lock keys.
 ;
@@ -2901,7 +2921,7 @@ tscankeypad             db      037h,038h,039h,02Dh,034h,035h,036h,02Bh         
 tscan2ext               db      000h,000h,000h,000h,000h,000h,000h,000h         ;00-07
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;08-0f
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;10-17
-                        db      000h,000h,000h,000h,05Ch,05Dh,000h,000h         ;18-1f  1c->5c,1d->5d
+                        db      000h,000h,000h,000h,07Ch,07Dh,000h,000h         ;18-1f  1c->7c,1d->7d
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;20-27
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;28-2f
                         db      000h,000h,000h,000h,000h,075h,000h,077h         ;30-37  35->75,37->77
@@ -2909,7 +2929,7 @@ tscan2ext               db      000h,000h,000h,000h,000h,000h,000h,000h         
                         db      000h,000h,000h,000h,000h,065h,000h,067h         ;40-47  45->65, 47->67
                         db      068h,069h,04Ah,06Bh,04Ch,06Dh,04Eh,06Fh         ;48-4f  48->68,49->69,4b->6b,4d->6d,4f->6f
                         db      070h,071h,072h,073h,000h,000h,000h,000h         ;50-57  50->70,51->71,52->72,53->73
-                        db      000h,000h,000h,05bh,000h,000h,000h,000h         ;58-5f  5b->5b
+                        db      000h,000h,000h,05Bh,05Ch,05Dh,000h,000h         ;58-5f  5b->5b,5c->5c,5d->5d
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;60-67
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;68-6f
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;70-77
@@ -2917,7 +2937,7 @@ tscan2ext               db      000h,000h,000h,000h,000h,000h,000h,000h         
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;80-87
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;88-8f
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;90-97
-                        db      000h,000h,000h,000h,0DCh,0DDh,000h,000h         ;98-9f  9c->dc,9d->dd
+                        db      000h,000h,000h,000h,0FCh,0FDh,000h,000h         ;98-9f  9c->fc,9d->fd
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;a0-a7
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;a8-af
                         db      000h,000h,000h,000h,000h,0F5h,000h,0F7h         ;b0-b7  b5->f5,b7->f7
@@ -2925,7 +2945,7 @@ tscan2ext               db      000h,000h,000h,000h,000h,000h,000h,000h         
                         db      000h,000h,000h,000h,000h,0E5h,000h,0E7h         ;c0-c7  c5->e5, c7->e7
                         db      0E8h,0E9h,0CAh,0EBh,0CCh,0EDh,0CEh,0EFh         ;c8-cf  c8->e8,c9->e9,cb->eb,cd->ed,cf->ef
                         db      0F0h,0F1h,0F2h,0F3h,000h,000h,000h,000h         ;d0-d7  d0->f0,d1->f1,d2->f2,d3->f3
-                        db      000h,000h,000h,0dbh,000h,000h,000h,000h         ;d8-df  db->db
+                        db      000h,000h,000h,0DBh,0DCh,0DDh,0DEh,000h         ;d8-df  db->db,dc->dc,de->de
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;e0-e7
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;e8-ef
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;f0-f7
@@ -3338,7 +3358,7 @@ PutConsoleHexWord       push    eax                                             
 ;
 ;       0         1         2         3         4         5         6         7
 ;       01234567890123456789012345678901234567890123456789012345678901234567890123456789
-;       001122334455 SCA XXAA                   C                       ASC        ^CNS
+;       001122334455 WSCA XXAA                  C                       ASCW       ^CNS
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 PutConsoleOIA           push    ebx                                             ;save non-volatile regs
@@ -3376,32 +3396,38 @@ PutConsoleOIA           push    ebx                                             
 ;       Display left shift, control, alt indicators
 ;
                         mov     ch,ECONOIAROW                                   ;OIA row
+                        mov     al,EASCIISPACE                                  ;ASCII space
+                        test    byte [wbConsoleShift],EKEYFWINLEFT              ;left-windows indicated?
+                        jz      .35                                             ;no, branch
+                        mov     al,'W'                                          ;yes, indicate with 'W'
+.35                     mov     cl,13                                           ;indicator column
+                        call    SetConsoleChar                                  ;display ASCII indicator
                         mov     al,EASCIISPACE                                  ;space is default character
                         test    byte [wbConsoleShift],EKEYFSHIFTLEFT            ;left-shift indicated?
                         jz      .40                                             ;no, skip ahead
                         mov     al,'S'                                          ;yes, indicate with 'S'
-.40                     mov     cl,13                                           ;indicator column
+.40                     mov     cl,14                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [wbConsoleShift],EKEYFCTRLLEFT             ;left-ctrl indicated?
                         jz      .50                                             ;no, skip ahead
                         mov     al,'C'                                          ;yes, indicate with 'C'
-.50                     mov     cl,14                                           ;indicator column
+.50                     mov     cl,15                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [wbConsoleShift],EKEYFALTLEFT              ;left-alt indicated?
                         jz      .60                                             ;no, skip ahead
                         mov     al,'A'                                          ;yes, indicate with 'A'
-.60                     mov     cl,15                                           ;indicator column
+.60                     mov     cl,16                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
 ;
 ;       Display scan code returned in messages.
 ;
                         mov     al,[wbConsoleScan]                              ;final scan code
-                        mov     cl,17                                           ;column
+                        mov     cl,18                                           ;column
                         call    PutConsoleHexByte                               ;store hex byte
                         mov     al,[wbConsoleChar]                              ;ascii char
-                        mov     cl,19                                           ;column
+                        mov     cl,20                                           ;column
                         call    PutConsoleHexByte                               ;store hex byte
 ;
 ;       Display ASCII character.
@@ -3422,19 +3448,25 @@ PutConsoleOIA           push    ebx                                             
                         test    byte [wbConsoleShift],EKEYFALTRIGHT             ;right-alt indicated?
                         jz      .90                                             ;no, skip ahead
                         mov     al,'A'                                          ;yes, indicate with 'A'
-.90                     mov     cl,62                                           ;indicator column
+.90                     mov     cl,64                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [wbConsoleShift],EKEYFCTRLRIGHT            ;right-ctrl indicated?
                         jz      .100                                            ;no, skip ahead
                         mov     al,'C'                                          ;yes, indicate with 'C'
-.100                    mov     cl,63                                           ;indicator column
+.100                    mov     cl,65                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [wbConsoleShift],EKEYFSHIFTRIGHT           ;right-shift indicated?
                         jz      .110                                            ;no, skip ahead
                         mov     al,'S'                                          ;yes, indicate with 'S'
-.110                    mov     cl,64                                           ;indicator column
+.110                    mov     cl,66                                           ;indicator column
+                        call    SetConsoleChar                                  ;display ASCII character
+                        mov     al,EASCIISPACE                                  ;ASCII space
+                        test    byte [wbConsoleShift],EKEYFWINRIGHT             ;right-windows indicated?
+                        jz      .115                                            ;no, branch
+                        mov     al,'W'                                          ;yes, indicate wiht 'W'
+.115                    mov     cl,67                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
 ;
 ;       Display Insert, Caps, Scroll and Num-Lock indicators.
@@ -3783,10 +3815,13 @@ SetKeyboardLamps        call    WaitForKeyInBuffer                              
                         in      al,EKEYBPORTDATA                                ;read 8042 'ACK' (0fah)
                         call    WaitForKeyInBuffer                              ;wait for input buffer ready
                         mov     al,bh                                           ;set/reset lamps value
+                        and     al,7
                         out     EKEYBPORTDATA,al                                ;send lamps value
                         call    WaitForKeyOutBuffer                             ;wait for 8042 result
                         in      al,EKEYBPORTDATA                                ;read 8042 'ACK' (0fah)
                         ret                                                     ;return
+.timeout                or      byte [wbConsoleStatus],EKEYFTIMEOUT
+                        ret
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        WaitForKeyInBuffer
@@ -3980,6 +4015,7 @@ ConCode                 mov     edi,ECONDATA                                    
                         mov     ecx,ECONDATALEN                                 ;size of OS console data
                         cld                                                     ;forward strings
                         rep     stosb                                           ;initialize data
+                        or      byte [wbConsoleLock],EKEYFLOCKNUM               ;BIOS boots with num-lock on
 ;
 ;       Initialize the Operator Information Area (OIA).
 ;

@@ -2526,16 +2526,20 @@ PutSecondaryEndOfInt    mov     al,EPICEOI                                      
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 SetKeyboardLamps        call    WaitForKeyInBuffer                              ;wait for input buffer ready
+                        jnz     .timeout
                         mov     al,EKEYBCMDLAMPS                                ;set/reset lamps command
                         out     EKEYBPORTDATA,al                                ;send command to 8042
                         call    WaitForKeyOutBuffer                             ;wait for 8042 result
                         in      al,EKEYBPORTDATA                                ;read 8042 'ACK' (0fah)
                         call    WaitForKeyInBuffer                              ;wait for input buffer ready
+                        jnz     .timeout
                         mov     al,bh                                           ;set/reset lamps value
                         out     EKEYBPORTDATA,al                                ;send lamps value
                         call    WaitForKeyOutBuffer                             ;wait for 8042 result
                         in      al,EKEYBPORTDATA                                ;read 8042 'ACK' (0fah)
                         ret                                                     ;return
+.timeout                or      byte [wbConsoleStatus],EKEYFTIMEOUT
+                        ret
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        WaitForKeyInBuffer
@@ -2559,8 +2563,8 @@ WaitForKeyInBuffer      push    ecx                                             
 ;
 ;       Description:    This routine waits for keyboard output buffer to have data to read.
 ;
-;       Out:            ZF      1 = Output buffer has data from controller
-;                               0 = Output buffer empty after timeout
+;       Out:            ZF      0 = Output buffer has data from controller
+;                               1 = Output buffer empty after timeout
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 WaitForKeyOutBuffer     push    ecx                                             ;save non-volatile regs
