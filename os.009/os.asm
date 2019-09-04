@@ -245,11 +245,11 @@ EKEYBALTLUP             equ     0B8h                                            
 EKEYBWINLUP             equ     0DBh                                            ;left windows (R) up
 EKEYBWINRUP             equ     0DCh                                            ;right windows (R) up
 EKEYBCLICKRUP           equ     0DDh                                            ;right-click up
-KEYBPADENTERUP          equ     0FCh                                            ;keypad-enter up
-EKEYBCTRLRUP            equ     0FDh                                            ;left-control up
 EKEYBCODEEXT0           equ     0E0h                                            ;extended scan code 0
 EKEYBCODEEXT1           equ     0E1h                                            ;extended scan code 1
 EKEYBALTRUP             equ     0F8h                                            ;right-alt up
+KEYBPADENTERUP          equ     0FCh                                            ;keypad-enter up
+EKEYBCTRLRUP            equ     0FDh                                            ;left-control up
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       8259 Peripheral Interrupt Controller                                    EPIC...
@@ -645,19 +645,7 @@ wbConsoleRow            resb    1                                               
                                                                                 ;---------------------------------------
                                                                                 ;  set by keyboard interrupt
                                                                                 ;---------------------------------------
-wsKeybData              resb    EKEYBDATAL
-;wbConsoleLastScan       resb    1                                               ;previous scan code
-;wbConsoleChar           resb    1                                               ;ASCII code returned in AL
-;wbConsoleScan           resb    1                                               ;scan code returned in AH
-;wbConsoleScan0          resb    1                                               ;scan code
-;wbConsoleScan1          resb    1                                               ;scan code
-;wbConsoleScan2          resb    1                                               ;scan code
-;wbConsoleScan3          resb    1                                               ;scan code
-;wbConsoleScan4          resb    1                                               ;scan code
-;wbConsoleScan5          resb    1                                               ;scan code
-;wbConsoleStatus         resb    1                                               ;controller status
-;wbConsoleShift          resb    1                                               ;console shift flags
-;wbConsoleLock           resb    1                                               ;console lock flags
+wsKeybData              resb    EKEYBDATAL                                      ;keyboard data
 ECONDATALEN             equ     ($-ECONDATA)                                    ;size of console data area
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -2456,24 +2444,24 @@ irq0.20                 sti                                                     
 ;                                                                       KEYDOWN         KEYUP           CHAR
 ;                                                                       Norm/Shift      Norm/Shift      Norm/Shift
 ;                                                                       AX   AX         AX   AX         AX   AX
-;       01/81                           Escape                          011B/011B       811B/811B       011B/011B   ok
-;       02/82                           1               !               0231/0221       8231/8221       0231/0221   ok
-;       03/83                           2               @               0332/0340       8332/8340       0332/0340   ok
-;       04/84                           3               #               0433/0423       8433/8423       0433/0423   ok
-;       05/85                           4               $               0534/0524       8534/8524       0534/0524   ok
-;       06/86                           5               %               0635/0625       8635/8625       0635/0625   ok
-;       07/87                           6               ^               0736/075E       8736/875E       0736/075E   ok
-;       08/88                           7               &               0837/0826       8837/8826       0837/0826   ok
-;       09/89                           8               *               0938/092A       8938/892A       0938/092A   ok
-;       0A/8A                           9               (               0A39/0A28       8A39/8A28       0A39/9A28   ok
-;       0B/8B                           0               )               0B30/0B29       8B30/8B29       0B30/0B29   ok
-;       0C/8C                           -               _               0C2D/0C5F       8C2D/8C5F       0C2D/0C5F   ok
-;       0D/8D                           =               +               0D3D/0D2B       8D3D/8D2B       0D3D/0D2B   ok
-;       0E/8E                           Backspace                       0E08/0E08       8E08/8E08       0E08/0E08   ok
-;       0F/8F                           Tab                             0F09/0F09       8F09/8F09       0F09/0F09   ok
-;       10/90                           q               Q               1071/1051       9071/9051       1071/1051   ok
-;       11/91                           w               W               1177/1157       9177/9157       1177/1157   ok
-;       12/92                           e               E               1265/1245       9265/9245       1265/1245   ok
+;       01/81                           Escape                          011B/011B       811B/811B       011B/011B
+;       02/82                           1               !               0231/0221       8231/8221       0231/0221
+;       03/83                           2               @               0332/0340       8332/8340       0332/0340
+;       04/84                           3               #               0433/0423       8433/8423       0433/0423
+;       05/85                           4               $               0534/0524       8534/8524       0534/0524
+;       06/86                           5               %               0635/0625       8635/8625       0635/0625
+;       07/87                           6               ^               0736/075E       8736/875E       0736/075E
+;       08/88                           7               &               0837/0826       8837/8826       0837/0826
+;       09/89                           8               *               0938/092A       8938/892A       0938/092A
+;       0A/8A                           9               (               0A39/0A28       8A39/8A28       0A39/9A28
+;       0B/8B                           0               )               0B30/0B29       8B30/8B29       0B30/0B29
+;       0C/8C                           -               _               0C2D/0C5F       8C2D/8C5F       0C2D/0C5F
+;       0D/8D                           =               +               0D3D/0D2B       8D3D/8D2B       0D3D/0D2B
+;       0E/8E                           Backspace                       0E08/0E08       8E08/8E08       0E08/0E08
+;       0F/8F                           Tab                             0F09/0F09       8F09/8F09       0F09/0F09
+;       10/90                           q               Q               1071/1051       9071/9051       1071/1051
+;       11/91                           w               W               1177/1157       9177/9157       1177/1157
+;       12/92                           e               E               1265/1245       9265/9245       1265/1245
 ;       13/93                           r               R               1372/1352       9372/9352       1371/1352
 ;       14/94                           t               T               1474/1454       9474/9454       1474/1454
 ;       15/95                           y               Y               1579/1559       9579/9559       1579/1559
@@ -2483,10 +2471,10 @@ irq0.20                 sti                                                     
 ;       19/99                           p               P               1970/1950       9970/9950       1970/1950
 ;       1A/9A                           [               {               1A5B/1A7B       9A5B/9A7B       1A58/1A7B
 ;       1B/9B                           ]               }               1B5D/1B7D       9B5D/9B7D       1B5D/1B7D
-;       1C/9C                           Enter                           1C00/1C00       9C00/9C00                   ok
-;       1D/9D                           Left Ctrl                       1D00/1D00       9D00/9D00                   ok
-;       1E/9E                           a               A               1E61/1E41       9E61/9E41       1E61/1E41   ok
-;       1F/9F                           s               S               1F73/1F53       9F73/9F53       1F73/1F53   ok
+;       1C/9C                           Enter                           1C00/1C00       9C00/9C00
+;       1D/9D                           Left Ctrl                       1D00/1D00       9D00/9D00
+;       1E/9E                           a               A               1E61/1E41       9E61/9E41       1E61/1E41
+;       1F/9F                           s               S               1F73/1F53       9F73/9F53       1F73/1F53
 ;       20/A0                           d               D               2064/2044       A064/A044       2064/2044
 ;       21/A1                           f               F               2166/2146       A166/A146       2166/2146
 ;       22/A2                           g               G               2267/2247       A267/A247       2267/2247
@@ -2497,10 +2485,10 @@ irq0.20                 sti                                                     
 ;       27/A7                           ;               :               273B/273A       A73B/A73A       273B/273A
 ;       28/A8                           '               "               2827/2822       A827/A822       2827/2822
 ;       29/A9                           `               ~               2960/297E       A960/A97E       2960/297E
-;       2A/AA                           Left Shift                      2A00/2A00       AA00/AA00                   ok
-;       2B/AB                           \               |               2B5C/2B7C       AB5C/AB7C       2B5C/2B7C   ok
-;       2C/AC                           z               Z               2C7A/2C5A       AC7A/AC5A       2C7A/2C5A   ok
-;       2D/AD                           x               X               2D78/2D58       AD78/AD58       2D78/2D58   ok
+;       2A/AA                           Left Shift                      2A00/2A00       AA00/AA00
+;       2B/AB                           \               |               2B5C/2B7C       AB5C/AB7C       2B5C/2B7C
+;       2C/AC                           z               Z               2C7A/2C5A       AC7A/AC5A       2C7A/2C5A
+;       2D/AD                           x               X               2D78/2D58       AD78/AD58       2D78/2D58
 ;       2E/AE                           c               C               2E63/2E43       AE63/AE43       2E63/2E43
 ;       2F/AF                           v               V               2F76/2F56       AF76/AF56       2F76/2F56
 ;       30/B0                           b               B               3062/3042       B062/B042       3062/3042
@@ -2509,122 +2497,122 @@ irq0.20                 sti                                                     
 ;       33/B3                           ,               <               332C/333C       B32C/B33C       332C/333C
 ;       34/B4                           .               >               342E/343E       B42E/B43E       342E/343E
 ;       35/B5                           /               ?               352F/353F       B52F/B53F       352F/353F
-;       36/B6                           Right Shift                     3600/3600       B600/B600                   ok
-;       37/B7                           Keypad *                        372A/372A       B72A/B72A       372A/372A   ok
-;       38/B8                           Left Alt                        3800/3800       B800/B800                   ok
-;       39/B9                           Spacebar                        3920/3920       B920/B920       3920/3920   ok
-;       3A/BA                           Caps Lock                       3A00/3A00       BA00/BA00                   ok
-;       3B/BB                           F1                              3B00/3B00       BB00/BB00                   ok
-;       3C/BC                           F2                              3C00/3C00       BC00/BC00                   ok
-;       3D/BD                           F3                              3D00/3D00       BD00/BD00                   ok
-;       3E/BE                           F4                              3E00/3E00       BE00/BE00                   ok
-;       3F/BF                           F5                              3F00/3F00       BF00/BF00                   ok
-;       40/C0                           F6                              4000/4000       C000/C000                   ok
-;       41/C1                           F7                              4100/4100       C100/C100                   ok
-;       42/C2                           F8                              4200/4200       C200/C200                   ok
-;       43/C3                           F9                              4300/4300       C300/C300                   ok
-;       44/C4                           F10                             4400/4400       C400/C400                   ok
-;       45/C5                           Num-Lock                        4500/4500       C500/C500                   ok
-;       46/C6                           Scroll-Lock                     4600/4600       C600/C600                   ok
-;       47/C7                           Keypad-7                        4700/4700       C700/C700                   ok
-;       47/C7                           Num-Lock Keypad-7               4737/4737       C737/C737       4737/4737   ok
-;       48/C8                           Keypad-8                        4800/4800       C800/C800                   ok
-;       48/C8                           Num-Lock Keypad-8               4838/4838       C838/C838       4838/4838   ok
-;       49/C9                           Keypad-9                        4900/4900       C900/C900                   ok
-;       49/C9                           Num-Lock Keypad-9               4939/4939       C939/C939       4939/4939   ok
-;       4A/CA                           Keypad-Minus                    4A2D/4A2D       CA2D/CA2D       4A2D/4A2D   ok
-;       4B/CB                           Keypad-4                        4B00/4B00       CB00/CB00                   ok
-;       4B/CB                           Num-Lock Keypad-4               4B34/4B34       CB34/CB34       4B34/4B34   ok
-;       4C/CC                           Keypad-5                        4C00/4C00       CC00/CC00                   ok
-;       4C/CC                           Num-Lock Keypad-5               4C35/4C35       CC35/CC35       4C35/4C35   ok
-;       4D/CD                           Keypad-6                        4D00/4D00       CD00/CD00                   ok
-;       4D/CD                           Num-Lock Keypad-6               4D36/4D36       CD36/CD36       4D36/4D36   ok
-;       4E/CE                           Keypad-Plus                     4E2B/4E2B       CE2B/CE2B       4E2B/4E2B   ok
-;       4F/CF                           Keypad-1                        4F00/4F00       CF00/CF00                   ok
-;       4F/CF                           Num-Lock Keypad-1               4F31/4F31       CF31/CF31       4F31/4F31   ok
-;       50/D0                           Keypad-2                        5000/5000       D000/D000                   ok
-;       50/D0                           Num-Lock Keypad-2               5032/5032       D032/D032       5032/5032   ok
-;       51/D1                           Keypad-3                        5100/5100       D100/D100                   ok
-;       51/D1                           Num-Lock Keypad-3               5133/5133       D133/D133       5133/5133   ok
-;       52/D2                           Keypad-0                        5200/5200       D200/D200                   ok
-;       52/D2                           Num-Lock Keypad-0               5230/5230       D230/D230       5230/5230   ok
-;       53/D3                           Keypad-Period                   537F/537F       D37F/D37F       537F/537F   ok
-;       53/D3                           Num-Lock Keypad-Period          532E/532E       D32E/D32E       532E/532E   ok
-;       54/D4                           Alt-PrntScrn                    5400/5400       D400/D400                   ok
-;       57/D7                           F11                             5700/5700       D700/D700                   ok
-;       58/D8                           F12                             5800/5800       D800/D800                   ok
+;       36/B6                           Right Shift                     3600/3600       B600/B600
+;       37/B7                           Keypad *                        372A/372A       B72A/B72A       372A/372A
+;       38/B8                           Left Alt                        3800/3800       B800/B800
+;       39/B9                           Spacebar                        3920/3920       B920/B920       3920/3920
+;       3A/BA                           Caps Lock                       3A00/3A00       BA00/BA00
+;       3B/BB                           F1                              3B00/3B00       BB00/BB00
+;       3C/BC                           F2                              3C00/3C00       BC00/BC00
+;       3D/BD                           F3                              3D00/3D00       BD00/BD00
+;       3E/BE                           F4                              3E00/3E00       BE00/BE00
+;       3F/BF                           F5                              3F00/3F00       BF00/BF00
+;       40/C0                           F6                              4000/4000       C000/C000
+;       41/C1                           F7                              4100/4100       C100/C100
+;       42/C2                           F8                              4200/4200       C200/C200
+;       43/C3                           F9                              4300/4300       C300/C300
+;       44/C4                           F10                             4400/4400       C400/C400
+;       45/C5                           Num-Lock                        4500/4500       C500/C500
+;       46/C6                           Scroll-Lock                     4600/4600       C600/C600
+;       47/C7                           Keypad-7                        4700/4700       C700/C700
+;       47/C7                           Num-Lock Keypad-7               4737/4737       C737/C737       4737/4737
+;       48/C8                           Keypad-8                        4800/4800       C800/C800
+;       48/C8                           Num-Lock Keypad-8               4838/4838       C838/C838       4838/4838
+;       49/C9                           Keypad-9                        4900/4900       C900/C900
+;       49/C9                           Num-Lock Keypad-9               4939/4939       C939/C939       4939/4939
+;       4A/CA                           Keypad-Minus                    4A2D/4A2D       CA2D/CA2D       4A2D/4A2D
+;       4B/CB                           Keypad-4                        4B00/4B00       CB00/CB00
+;       4B/CB                           Num-Lock Keypad-4               4B34/4B34       CB34/CB34       4B34/4B34
+;       4C/CC                           Keypad-5                        4C00/4C00       CC00/CC00
+;       4C/CC                           Num-Lock Keypad-5               4C35/4C35       CC35/CC35       4C35/4C35
+;       4D/CD                           Keypad-6                        4D00/4D00       CD00/CD00
+;       4D/CD                           Num-Lock Keypad-6               4D36/4D36       CD36/CD36       4D36/4D36
+;       4E/CE                           Keypad-Plus                     4E2B/4E2B       CE2B/CE2B       4E2B/4E2B
+;       4F/CF                           Keypad-1                        4F00/4F00       CF00/CF00
+;       4F/CF                           Num-Lock Keypad-1               4F31/4F31       CF31/CF31       4F31/4F31
+;       50/D0                           Keypad-2                        5000/5000       D000/D000
+;       50/D0                           Num-Lock Keypad-2               5032/5032       D032/D032       5032/5032
+;       51/D1                           Keypad-3                        5100/5100       D100/D100
+;       51/D1                           Num-Lock Keypad-3               5133/5133       D133/D133       5133/5133
+;       52/D2                           Keypad-0                        5200/5200       D200/D200
+;       52/D2                           Num-Lock Keypad-0               5230/5230       D230/D230       5230/5230
+;       53/D3                           Keypad-Period                   537F/537F       D37F/D37F       537F/537F
+;       53/D3                           Num-Lock Keypad-Period          532E/532E       D32E/D32E       532E/532E
+;       54/D4                           Alt-PrntScrn                    5400/5400       D400/D400
+;       57/D7                           F11                             5700/5700       D700/D700
+;       58/D8                           F12                             5800/5800       D800/D800
 ;
-;       E0 5B/E0 DB                     Left-Windows                    5B00/5B00       DB00/DB00                   ok
-;       E0 5C/E0 DC                     Right-Windows                   5C00/5C00       DC00/DC00                   ok
-;       E0 5D/E0 DD                     Right-Click                     5D00/5D00       DD00/DD00                   ok
+;       E0 5B/E0 DB                     Left-Windows                    5B00/5B00       DB00/DB00
+;       E0 5C/E0 DC                     Right-Windows                   5C00/5C00       DC00/DC00
+;       E0 5D/E0 DD                     Right-Click                     5D00/5D00       DD00/DD00
 
-;       E1 1D 45/E1 9D C5               Pause-Break                    *6500/6500      *E500/E500                   ok
-;       E1 1D 45/E1 9D C5               Shift Pause-Break              *6500/6500      *E500/E500                   ok
-;       E1 1D 45/E1 9D C5               Alt Pause-Break                *6500/6500      *E500/E500                   ok
+;       E1 1D 45/E1 9D C5               Pause-Break                    *6500/6500      *E500/E500
+;       E1 1D 45/E1 9D C5               Shift Pause-Break              *6500/6500      *E500/E500
+;       E1 1D 45/E1 9D C5               Alt Pause-Break                *6500/6500      *E500/E500
 ;
-;       E0 46/E0 C6                     Ctrl Pause-Break               *6600/6600      *E600/E600                   ok
+;       E0 46/E0 C6                     Ctrl Pause-Break               *6600/6600      *E600/E600
 ;
-;       E0 47/E0 C7                     Home                           *6700/6700      *E700/E700                   ok
-;       E0 47/E0 AA                     Num-Lock Home                  *6700/6700      *E700/E700                   ok
-;       E0 47/E0 2A                     Left-Shift Home                *6700/6700      *E700/E700                   ok
-;       E0 47/E0 36                     Right-Shift Home               *6700/6700      *E700/E700                   ok
+;       E0 47/E0 C7                     Home                           *6700/6700      *E700/E700
+;       E0 47/E0 AA                     Num-Lock Home                  *6700/6700      *E700/E700
+;       E0 47/E0 2A                     Left-Shift Home                *6700/6700      *E700/E700
+;       E0 47/E0 36                     Right-Shift Home               *6700/6700      *E700/E700
 ;
-;       E0 48/E0 C8                     Up-Arrow                       *6800/6800      *E800/E800                   ok
-;       E0 48/E0 AA                     Num-Lock Up-Arrow              *6800/6800      *E800/E800                   ok
-;       E0 48/E0 2A                     Left-Shift Up-Arrow            *6800/6800      *E800/E800                   ok
-;       E0 48/E0 36                     Right-Shift Up-Arrow           *6800/6800      *E800/E800                   ok
+;       E0 48/E0 C8                     Up-Arrow                       *6800/6800      *E800/E800
+;       E0 48/E0 AA                     Num-Lock Up-Arrow              *6800/6800      *E800/E800
+;       E0 48/E0 2A                     Left-Shift Up-Arrow            *6800/6800      *E800/E800
+;       E0 48/E0 36                     Right-Shift Up-Arrow           *6800/6800      *E800/E800
 ;
-;       E0 49/E0 C9                     Page-Up                        *6900/6900      *E900/E900                   ok
-;       E0 49/E0 AA                     Num-Lock Page-Up               *6900/6900      *E900/E900                   ok
-;       E0 49/E0 2A                     left-Shift Page-Up             *6900/6900      *E900/E900                   ok
-;       E0 49/E0 36                     Right-Shift Page-Up            *6900/6900      *E900/E900                   ok
+;       E0 49/E0 C9                     Page-Up                        *6900/6900      *E900/E900
+;       E0 49/E0 AA                     Num-Lock Page-Up               *6900/6900      *E900/E900
+;       E0 49/E0 2A                     left-Shift Page-Up             *6900/6900      *E900/E900
+;       E0 49/E0 36                     Right-Shift Page-Up            *6900/6900      *E900/E900
 ;
-;       E0 4B/E0 CB                     Left-Arrow                     *6B00/6B00      *EB00/EB00                   ok
-;       E0 4B/E0 AA                     Num-Lock Left-Arrow            *6B00/6B00      *EB00/EB00                   ok
-;       E0 4B/E0 2A                     Left-Shift Left-Arrow          *6B00/6B00      *EB00/EB00                   ok
-;       E0 4B/E0 36                     Right-Shift Left-Arrow         *6B00/6B00      *EB00/EB00                   ok
+;       E0 4B/E0 CB                     Left-Arrow                     *6B00/6B00      *EB00/EB00
+;       E0 4B/E0 AA                     Num-Lock Left-Arrow            *6B00/6B00      *EB00/EB00
+;       E0 4B/E0 2A                     Left-Shift Left-Arrow          *6B00/6B00      *EB00/EB00
+;       E0 4B/E0 36                     Right-Shift Left-Arrow         *6B00/6B00      *EB00/EB00
 ;
-;       E0 4D/E0 CD                     Right-Arrow                    *6D00/6D00      *ED00/ED00                   ok
-;       E0 4D/E0 AA                     Num-Lock Right-Arrow           *6D00/6D00      *ED00/ED00                   ok
-;       E0 4D/E0 2A                     Left-Shift Right-Arrow         *6D00/6D00      *ED00/ED00                   ok
-;       E0 4D/E0 36                     Right-Shift Right-Arrow        *6D00/6D00      *ED00/ED00                   ok
+;       E0 4D/E0 CD                     Right-Arrow                    *6D00/6D00      *ED00/ED00
+;       E0 4D/E0 AA                     Num-Lock Right-Arrow           *6D00/6D00      *ED00/ED00
+;       E0 4D/E0 2A                     Left-Shift Right-Arrow         *6D00/6D00      *ED00/ED00
+;       E0 4D/E0 36                     Right-Shift Right-Arrow        *6D00/6D00      *ED00/ED00
 ;
-;       E0 4F/E0 CF                     End                            *6F00/6F00      *EF00/EF00                   ok
-;       E0 4F/E0 AA                     Num-Lock End                   *6F00/6F00      *EF00/EF00                   ok
-;       E0 4F/E0 2A                     Left-Shift End                 *6F00/6F00      *EF00/EF00                   ok
-;       E0 4F/E0 36                     Right-Shift End                *6F00/6F00      *EF00/EF00                   ok
+;       E0 4F/E0 CF                     End                            *6F00/6F00      *EF00/EF00
+;       E0 4F/E0 AA                     Num-Lock End                   *6F00/6F00      *EF00/EF00
+;       E0 4F/E0 2A                     Left-Shift End                 *6F00/6F00      *EF00/EF00
+;       E0 4F/E0 36                     Right-Shift End                *6F00/6F00      *EF00/EF00
 ;
-;       E0 50/E0 D0                     Down-Arrow                     *7000/7000      *F000/F000                   ok
-;       E0 50/E0 AA                     Num-Lock Down-Arrow            *7000/7000      *F000/F000                   ok
-;       E0 50/E0 2A                     Left-Shift Down-Arrow          *7000/7000      *F000/F000                   ok
-;       E0 50/E0 36                     Right-Shift Down-Arrow         *7000/7000      *F000/F000                   ok
+;       E0 50/E0 D0                     Down-Arrow                     *7000/7000      *F000/F000
+;       E0 50/E0 AA                     Num-Lock Down-Arrow            *7000/7000      *F000/F000
+;       E0 50/E0 2A                     Left-Shift Down-Arrow          *7000/7000      *F000/F000
+;       E0 50/E0 36                     Right-Shift Down-Arrow         *7000/7000      *F000/F000
 ;
-;       E0 51/E0 D1                     Page-Down                      *7100/7100      *F100/F100                   ok
-;       E0 51/E0 AA                     Num-Lock Page-Down             *7100/7100      *F100/F100                   ok
-;       E0 51/E0 2A                     Left-Shift Page-Down           *7100/7100      *F100/F100                   ok
-;       E0 51/E0 36                     Right-Shift Page-Down          *7100/7100      *F100/F100                   ok
+;       E0 51/E0 D1                     Page-Down                      *7100/7100      *F100/F100
+;       E0 51/E0 AA                     Num-Lock Page-Down             *7100/7100      *F100/F100
+;       E0 51/E0 2A                     Left-Shift Page-Down           *7100/7100      *F100/F100
+;       E0 51/E0 36                     Right-Shift Page-Down          *7100/7100      *F100/F100
 ;
-;       E0 52/E0 D2                     Insert                         *7200/7200      *F200/F200                   ok
-;       E0 52/E0 AA                     Num-Lock Insert                *7200/7200      *F200/F200                   ok
-;       E0 52/E0 2A                     Left-Shift Insert              *7200/7200      *F200/F200                   ok
-;       E0 52/E0 36                     Right-Shift Insert             *7200/7200      *F200/F200                   ok
+;       E0 52/E0 D2                     Insert                         *7200/7200      *F200/F200
+;       E0 52/E0 AA                     Num-Lock Insert                *7200/7200      *F200/F200
+;       E0 52/E0 2A                     Left-Shift Insert              *7200/7200      *F200/F200
+;       E0 52/E0 36                     Right-Shift Insert             *7200/7200      *F200/F200
 ;
-;       E0 53/E0 D3                     Delete                         *737F/737F      *F37F/F37F      *737F/737F   ok
-;       E0 53/E0 AA                     Num-Lock Delete                *737F/737F      *F37F/F37F      *737F/737F   ok
-;       E0 53/E0 2A                     Left-Shift Delete              *737F/737F      *F37F/F37F      *737F/737F   ok
-;       E0 53/E0 36                     Right-Shift Delete             *737F/737F      *F37F/F37F      *737F/737F   ok
+;       E0 53/E0 D3                     Delete                         *737F/737F      *F37F/F37F      *737F/737F
+;       E0 53/E0 AA                     Num-Lock Delete                *737F/737F      *F37F/F37F      *737F/737F
+;       E0 53/E0 2A                     Left-Shift Delete              *737F/737F      *F37F/F37F      *737F/737F
+;       E0 53/E0 36                     Right-Shift Delete             *737F/737F      *F37F/F37F      *737F/737F
 ;
-;       E0 35/E0 B5                     Keypad-Slash                   *752F/752F      *F52F/F52F      *752F/752F   ok
-;       E0 35/E0 AA                     Num-Lock Keypad-Slash          *752F/752F      *F52F/F52F      *752F/752F   ok
-;       E0 35/E0 2A                     Left-Shift Keypad-Slash        *752F/752F      *F52F/F52F      *752F/752F   ok
-;       E0 35/E0 36                     Right-Shift Keypad-Slash       *752F/752F      *F52F/F52F      *752F/752F   ok
+;       E0 35/E0 B5                     Keypad-Slash                   *752F/752F      *F52F/F52F      *752F/752F
+;       E0 35/E0 AA                     Num-Lock Keypad-Slash          *752F/752F      *F52F/F52F      *752F/752F
+;       E0 35/E0 2A                     Left-Shift Keypad-Slash        *752F/752F      *F52F/F52F      *752F/752F
+;       E0 35/E0 36                     Right-Shift Keypad-Slash       *752F/752F      *F52F/F52F      *752F/752F
 ;
-;       E0 37/E0 B7 E0 AA               PrntScrn                       *7700/7700      *F700/F700                   ok
-;       E0 37/E0 B7 E0 B7               Shift/Ctrl PrntScrn            *7700/7700      *F700/F700                   ok
+;       E0 37/E0 B7 E0 AA               PrntScrn                       *7700/7700      *F700/F700
+;       E0 37/E0 B7 E0 B7               Shift/Ctrl PrntScrn            *7700/7700      *F700/F700
 ;
-;       E0 38/E0 B8                     Right Alt                      *7800/7800      *F800/F800                   ok
-;       E0 1C/E0 9C                     Keypad Enter                   *7C00/7C00      *FC00/FC00                   ok
-;       E0 1D/E0 9D                     Right Ctrl                     *7D00/7D00      *FD00/FD00                   ok
+;       E0 38/E0 B8                     Right Alt                      *7800/7800      *F800/F800
+;       E0 1C/E0 9C                     Keypad Enter                   *7C00/7C00      *FC00/FC00
+;       E0 1D/E0 9D                     Right Ctrl                     *7D00/7D00      *FD00/FD00
 ;
 ;       *OS Custom Scan Code in Messages
 ;
@@ -3851,13 +3839,10 @@ ResetSystem             mov     ecx,001fffffh                                   
 ;       In:             BH      00000CNS (C:Caps Lock,N:Num Lock,S:Scroll Lock)
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-SetKeyboardLamps        push    ebx
-                        push    esi
-                        mov     esi,wsKeybData
-
-;                        mov     bh,[wbConsoleLock]
-                        mov     bh,[esi+KEYBDATA.lock]
-
+SetKeyboardLamps        push    ebx                                             ;save non-volatile regs
+                        push    esi                                             ;
+                        mov     esi,wsKeybData                                  ;keyboard data addr
+                        mov     bh,[esi+KEYBDATA.lock]                          ;lock flags
                         call    WaitForKeyInBuffer                              ;wait for input buffer ready
                         mov     al,EKEYBCMDLAMPS                                ;set/reset lamps command
                         out     EKEYBPORTDATA,al                                ;send command to 8042
@@ -3865,13 +3850,13 @@ SetKeyboardLamps        push    ebx
                         in      al,EKEYBPORTDATA                                ;read 8042 'ACK' (0fah)
                         call    WaitForKeyInBuffer                              ;wait for input buffer ready
                         mov     al,bh                                           ;set/reset lamps value
-                        and     al,7
+                        and     al,7                                            ;mask for lamp switches
                         out     EKEYBPORTDATA,al                                ;send lamps value
                         call    WaitForKeyOutBuffer                             ;wait for 8042 result
                         in      al,EKEYBPORTDATA                                ;read 8042 'ACK' (0fah)
-                        pop     esi
-                        pop     ebx
-                        ret
+                        pop     esi                                             ;restore non-volatile regs
+                        pop     ebx                                             ;
+                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        WaitForKeyInBuffer
@@ -4080,19 +4065,13 @@ ConCode                 mov     edi,ECONDATA                                    
 ;       Set num-lock and update lamps
 ;       Display the initial OIA
 ;
-;                        yield
-
-;                        or      byte [wbConsoleLock],EKEYFLOCKNUM               ;BIOS boots with num-lock on
                         or      byte [wsKeybData+KEYBDATA.lock],EKEYFLOCKNUM    ;BIOS boots with num-lock on
-
                         setKeyboardLamps
                         putConsoleOIA
 ;
 ;       Set the current panel to Main, clear and redraw all fields.
 ;
                         call    ConMain                                         ;initialize panel
-;                        call    ConClearPanel                                   ;clear panel rows
-;                        call    ConDrawFields                                   ;draw panel fields
 ;
 ;       Place the cursor at the current field index.
 ;
@@ -4128,7 +4107,6 @@ ConCode                 mov     edi,ECONDATA                                    
                         cmp     ah,EKEYBTABDOWN                                 ;tab down?
                         jne     .100                                            ;no, branch
 
-;                        test    byte [wbConsoleShift],EKEYFSHIFT                ;left or right shift?
                         test    byte [wsKeybData+KEYBDATA.shift],EKEYFSHIFT                        
 
                         jz      .80                                             ;no, tab forward
@@ -4213,9 +4191,6 @@ ConCode                 mov     edi,ECONDATA                                    
                         jb      .20                                             ;no, next message
                         cmp     al,EASCIITILDE                                  ;printable range? (high)
                         ja      .20                                             ;no, next message
-
-                        ; move following characters if insert mode
-
                         mov     [ecx+edx],al                                    ;store char in buffer
                         inc     dl                                              ;advance index
                         cmp     dl,[ebx+6]                                      ;end of field?
