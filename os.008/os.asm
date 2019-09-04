@@ -7,7 +7,7 @@
 ;       Description:    In this sample program, an "int6" command is added to generate an invalid opcode interrupt.
 ;                       The interrupt handler displays the contents of registers at the time of the interrupt.
 ;
-;       Revised:        17 June 2019
+;       Revised:        2 September 2019
 ;
 ;       Assembly:       nasm os.asm -f bin -o os.dat     -l os.dat.lst     -DBUILDBOOT
 ;                       nasm os.asm -f bin -o os.dsk     -l os.dsk.lst     -DBUILDDISK
@@ -158,7 +158,7 @@
 ;       EKEYF...        Keyboard status flags
 ;       EKRN...         Kernel values (fixed locations and sizes)
 ;       ELDT...         Local Descriptor Table (LDT) selector values
-;       EMSG...         Message identifers
+;       EMSG...         Message identifiers
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -337,12 +337,13 @@ EBIOSFNKEYSTATUS        equ     001h                                            
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 EASCIIBACKSPACE         equ     008h                                            ;backspace
-EASCIITAB               equ     009h                                            ;tab
 EASCIILINEFEED          equ     00Ah                                            ;line feed
 EASCIIRETURN            equ     00Dh                                            ;carriage return
 EASCIIESCAPE            equ     01Bh                                            ;escape
 EASCIISPACE             equ     020h                                            ;space
 EASCIISLASH             equ     02Fh                                            ;slash
+EASCIIZERO              equ     030h                                            ;zero
+EASCIININE              equ     039h                                            ;nine
 EASCIIUPPERA            equ     041h                                            ;'A'
 EASCIIUPPERZ            equ     05Ah                                            ;'Z'
 EASCIICARET             equ     05Eh                                            ;'^'
@@ -439,18 +440,25 @@ EMSGKEYCHAR             equ     041020000h                                      
 ;       Structures
 ;
 ;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       KEYBDATA
+;
+;       The KEYBDATA structure holds variables used to handle keyboard events.
+;
+;-----------------------------------------------------------------------------------------------------------------------
 struc                   KEYBDATA
-.scan0                  resb    1
-.scan1                  resb    1
-.scan2                  resb    1
-.scan3                  resb    1
-.scan                   resb    1
-.char                   resb    1
-.last                   resb    1
-.shift                  resb    1
-.lock                   resb    1
-.status                 resb    1
-EKEYBDATAL              equ     ($-.scan0)
+.scan0                  resb    1                                               ;1st scan code
+.scan1                  resb    1                                               ;2nd scan code
+.scan2                  resb    1                                               ;3rd scan code
+.scan3                  resb    1                                               ;4th scan code
+.scan                   resb    1                                               ;active scan code
+.char                   resb    1                                               ;ASCII character
+.last                   resb    1                                               ;previous scan code
+.shift                  resb    1                                               ;shift flags (shift, ctrl, alt, win)
+.lock                   resb    1                                               ;lock flags (caps, num, scroll, insert)
+.status                 resb    1                                               ;status (timeout)
+EKEYBDATAL              equ     ($-.scan0)                                      ;structure length
 endstruc
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -2822,7 +2830,6 @@ irq1.checknum           test    byte [esi+KEYBDATA.lock],EKEYFLOCKNUM           
                         movzx   edx,dl                                          ;extend to register
                         mov     al,[cs:tscankeypad+edx]                         ;translate to numeral equivalent
 irq1.notnum             mov     [esi+KEYBDATA.char],al                          ;save ASCII character code
-
 ;
 ;       Put messages into the message queue.
 ;
@@ -3098,11 +3105,11 @@ svc90                   iretd                                                   
 tsvc                    tsvce   CompareMemory                                   ;compare memory
                         tsvce   GetConsoleMessage                               ;get message
                         tsvce   PlaceCursor                                     ;place the cursor at the current loc
-                        tsvce   PutConsoleOIA
+                        tsvce   PutConsoleOIA                                   ;display the operator information area
                         tsvce   ResetSystem                                     ;reset system using 8042 chip
-                        tsvce   SetKeyboardLamps
+                        tsvce   SetKeyboardLamps                                ;turn keboard LEDs on or off
                         tsvce   UpperCaseString                                 ;upper-case string
-                        tsvce   Yield
+                        tsvce   Yield                                           ;yield to system
 maxtsvc                 equ     ($-tsvc)/4                                      ;function out of range
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -3262,9 +3269,9 @@ PutConsoleHexByte       push    eax                                             
                         call    .10                                             ;make ASCII and store
                         pop     eax                                             ;byte value
                         and     al,0Fh                                          ;lo-order nybble
-.10                     or      al,030h                                         ;apply ASCII zone
-                        cmp     al,03Ah                                         ;numeric?
-                        jb      .20                                             ;yes, skip ahead
+.10                     or      al,EASCIIZERO                                   ;apply ASCII zone
+                        cmp     al,EASCIININE                                   ;numeric?
+                        jbe     .20                                             ;yes, skip ahead
                         add     al,7                                            ;add ASCII offset for alpha
 .20                     call    SetConsoleChar                                  ;display ASCII character
                         ret                                                     ;return
@@ -4267,33 +4274,51 @@ ConHandlerMain          push    ebx                                             
 ConTakeToken            push    esi                                             ;save non-volatile regs
                         push    edi                                             ;
                         push    es                                              ;
+;
+;       Address source and target; null-terminate target buffer.
+;
                         push    ds                                              ;load data segment selector ...
                         pop     es                                              ;... into extra segment reg
                         mov     esi,edx                                         ;source buffer address
                         mov     edi,ebx                                         ;target buffer address
                         mov     byte [edi],0                                    ;null-terminate target buffer
+;
+;       Trim leading space; exit if no token.
+;
                         cld                                                     ;forward strings
 .10                     lodsb                                                   ;load byte
                         cmp     al,EASCIISPACE                                  ;space?
                         je      .10                                             ;yes, continue
                         test    al,al                                           ;end of line?
                         jz      .40                                             ;yes, branch
+;
+;       Store non-spaces into target buffer.
+;
 .20                     stosb                                                   ;store byte
                         lodsb                                                   ;load byte
                         test    al,al                                           ;end of line?
                         jz      .40                                             ;no, continue
                         cmp     al,EASCIISPACE                                  ;space?
                         jne     .20                                             ;no, continue
+;
+;       Walk over spaces trailing the stored token; point to final space.
+;
 .30                     lodsb                                                   ;load byte
                         cmp     al,EASCIISPACE                                  ;space?
                         je      .30                                             ;yes, continue
                         dec     esi                                             ;pre-position
+;
+;       Null-terminate target buffer; advance remaining source bytes.
+;
 .40                     mov     byte [edi],0                                    ;terminate buffer
                         mov     edi,edx                                         ;source buffer address
 .50                     lodsb                                                   ;remaining byte
                         stosb                                                   ;move to front of buffer
                         test    al,al                                           ;end of line?
                         jnz     .50                                             ;no, continue
+;
+;       Restore and return.
+;
                         pop     es                                              ;restore non-volatile regs
                         pop     edi                                             ;
                         pop     esi                                             ;
@@ -4306,28 +4331,46 @@ ConTakeToken            push    esi                                             
 ;
 ;       input:          DS:EDX  command address
 ;
-;       output:         EAX     >=0     = command nbr
-;                               0       = unknown command
+;       output:         EAX     !ECONJMPTBLCNT = command nbr
+;                               ECONJMPTBLCNT = no match fond
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ConDetermineCommand     push    ebx                                             ;save non-volatile regs
                         push    ecx                                             ;
                         push    esi                                             ;
                         push    edi                                             ;
+;
+;       Upper-case the command; prepare to search command table.
+;
                         upperCaseString                                         ;upper-case string at EDX
                         mov     esi,tConCmdTbl                                  ;commands table
                         xor     edi,edi                                         ;intialize command number
                         cld                                                     ;forward strings
+;
+;       Exit if end of table.
+;
 .10                     lodsb                                                   ;command length
                         movzx   ecx,al                                          ;command length
                         jecxz   .20                                             ;branch if end of table
+;
+;       Compare command to table entry; exit if match.
+;
                         mov     ebx,esi                                         ;table entry address
                         add     esi,ecx                                         ;next table entry address
                         compareMemory                                           ;compare byte arrays at EDX, EBX
                         jecxz   .20                                             ;branch if equal
+;
+;       Next table element.
+;
                         inc     edi                                             ;increment command nbr
                         jmp     .10                                             ;repeat
+;
+;       Return command number or ECONJMPTBLCNT.
+;
 .20                     mov     eax,edi                                         ;command number
+;
+;       Restore and return.
+;
                         pop     edi                                             ;restore non-volatile regs
                         pop     esi                                             ;
                         pop     ecx                                             ;
@@ -4339,13 +4382,20 @@ ConDetermineCommand     push    ebx                                             
 ;
 ;       Description:    This routine clears a panel field to nulls.
 ;
-;       In:             EBX     panel field address
+;       In:             DS:EBX  panel field address
+;                       ES:     OS data segment
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ConClearField           push    ebx                                             ;save non-volatile regs
                         push    edi                                             ;
+;
+;       Exit if no field.
+;
                         test    ebx,ebx                                         ;have field?
                         jz      .10                                             ;no, exit
+;
+;       Reset cursor index to zero; exit if no size or no buffer.
+;
                         xor     al,al                                           ;zero register
                         mov     byte [ebx+7],al                                 ;zero cursor index
                         movzx   ecx,byte [ebx+6]                                ;field size?
@@ -4353,8 +4403,14 @@ ConClearField           push    ebx                                             
                         mov     edi,[ebx]                                       ;field bufer
                         test    edi,edi                                         ;field buffer?
                         jz      .10                                             ;no, exit
+;
+;       Reset field to nulls.
+;
                         cld                                                     ;forward strings
                         rep     stosb                                           ;clear buffer
+;
+;       Restore and return.
+;
 .10                     pop     edi                                             ;restore non-volatile regs
                         pop     ebx                                             ;
                         ret                                                     ;return
@@ -4382,11 +4438,13 @@ ConInt6                 ud2                                                     
 ;
 ;       Description:    This routine sets the current panel to the main panel (CON001).
 ;
+;       In:             ES:     OS data segment
+;
 ;-----------------------------------------------------------------------------------------------------------------------
 ConMain                 push    ecx                                             ;save non-volatile regs
                         push    edi                                             ;
 ;
-;       Initialize panel handler, definition, field
+;       Initialize current handler, panel, field.
 ;
                         mov     eax,[cdHandlerMain]                             ;main panel handler CS-relative addr
                         mov     [wdConsoleHandler],eax                          ;set panel handler addr
@@ -4399,7 +4457,9 @@ ConMain                 push    ecx                                             
 ;
                         call    ConClearPanel                                   ;clear panel
                         call    ConDrawFields                                   ;draw fields
-
+;
+;       Restore and return.
+;
                         pop     edi                                             ;restore non-volatile regs
                         pop     ecx                                             ;
                         ret                                                     ;return
@@ -4408,7 +4468,7 @@ ConMain                 push    ecx                                             
 ;       Constants
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-cdHandlerMain           dd      ConHandlerMain - ConCode
+cdHandlerMain           dd      ConHandlerMain - ConCode                        ;main panel code segment offset
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Panels
@@ -4418,6 +4478,9 @@ cdHandlerMain           dd      ConHandlerMain - ConCode
 ;                       3.      Field constant text or field values MUST be comprised of printable characters.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+                                                                                ;---------------------------------------
+                                                                                ;  Main Panel
+                                                                                ;---------------------------------------
 czPnlCon001             dd      czFldPnlIdCon001                                ;field text
                         db      0,0,6,0,0,0,7,0                                 ;row col siz ndx 1st nth atr flg
                         dd      czFldTitleCon001

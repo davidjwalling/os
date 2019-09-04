@@ -7,7 +7,7 @@
 ;       Description:    In this sample, the console task is expanded to support the "mem" and "memory" commands to
 ;                       display the memory panel and "main" to return to the main panel.
 ;
-;       Revised:        17 June 2019
+;       Revised:        2 September 2019
 ;
 ;       Assembly:       nasm os.asm -f bin -o os.dat     -l os.dat.lst     -DBUILDBOOT
 ;                       nasm os.asm -f bin -o os.dsk     -l os.dsk.lst     -DBUILDDISK
@@ -158,7 +158,7 @@
 ;       EKEYF...        Keyboard status flags
 ;       EKRN...         Kernel values (fixed locations and sizes)
 ;       ELDT...         Local Descriptor Table (LDT) selector values
-;       EMSG...         Message identifers
+;       EMSG...         Message identifiers
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -337,15 +337,17 @@ EBIOSFNKEYSTATUS        equ     001h                                            
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 EASCIIBACKSPACE         equ     008h                                            ;backspace
-EASCIITAB               equ     009h                                            ;tab
 EASCIILINEFEED          equ     00Ah                                            ;line feed
 EASCIIRETURN            equ     00Dh                                            ;carriage return
 EASCIIESCAPE            equ     01Bh                                            ;escape
 EASCIISPACE             equ     020h                                            ;space
 EASCIISLASH             equ     02Fh                                            ;slash
+EASCIIZERO              equ     030h                                            ;zero
+EASCIININE              equ     039h                                            ;nine
 EASCIIUPPERA            equ     041h                                            ;'A'
 EASCIIUPPERZ            equ     05Ah                                            ;'Z'
 EASCIICARET             equ     05Eh                                            ;'^'
+EASCIIUNDERSCORE        equ     05Fh                                            ;'_'
 EASCIILOWERA            equ     061h                                            ;'a'
 EASCIILOWERZ            equ     07Ah                                            ;'z'
 EASCIITILDE             equ     07Eh                                            ;'~'
@@ -439,18 +441,25 @@ EMSGKEYCHAR             equ     041020000h                                      
 ;       Structures
 ;
 ;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       KEYBDATA
+;
+;       The KEYBDATA structure holds variables used to handle keyboard events.
+;
+;-----------------------------------------------------------------------------------------------------------------------
 struc                   KEYBDATA
-.scan0                  resb    1
-.scan1                  resb    1
-.scan2                  resb    1
-.scan3                  resb    1
-.scan                   resb    1
-.char                   resb    1
-.last                   resb    1
-.shift                  resb    1
-.lock                   resb    1
-.status                 resb    1
-EKEYBDATAL              equ     ($-.scan0)
+.scan0                  resb    1                                               ;1st scan code
+.scan1                  resb    1                                               ;2nd scan code
+.scan2                  resb    1                                               ;3rd scan code
+.scan3                  resb    1                                               ;4th scan code
+.scan                   resb    1                                               ;active scan code
+.char                   resb    1                                               ;ASCII character
+.last                   resb    1                                               ;previous scan code
+.shift                  resb    1                                               ;shift flags (shift, ctrl, alt, win)
+.lock                   resb    1                                               ;lock flags (caps, num, scroll, insert)
+.status                 resb    1                                               ;status (timeout)
+EKEYBDATAL              equ     ($-.scan0)                                      ;structure length
 endstruc
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -594,30 +603,30 @@ wzConsoleToken          resb    80                                              
                                                                                 ;---------------------------------------
                                                                                 ;  memory panel fields
                                                                                 ;---------------------------------------
-wzConsoleMemBuf0        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........
-wzConsoleMemBuf1        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBuf2        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBuf3        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBuf4        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........
-wzConsoleMemBuf5        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBuf6        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBuf7        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBuf8        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........
-wzConsoleMemBuf9        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBufA        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBufB        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBufC        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........
-wzConsoleMemBufD        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBufE        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBufF        resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBuf10       resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBuf11       resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBuf12       resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
-wzConsoleMemBuf13       resb    80                                              ;aaaaaaaa xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx
+wzConsoleMemBuf0        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
+wzConsoleMemBuf1        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
+wzConsoleMemBuf2        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
+wzConsoleMemBuf3        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
+wzConsoleMemBuf4        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
+wzConsoleMemBuf5        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
+wzConsoleMemBuf6        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
+wzConsoleMemBuf7        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
+wzConsoleMemBuf8        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
+wzConsoleMemBuf9        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
+wzConsoleMemBufA        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
+wzConsoleMemBufB        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
+wzConsoleMemBufC        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
+wzConsoleMemBufD        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
+wzConsoleMemBufE        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
+wzConsoleMemBufF        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
+wzConsoleMemBuf10       resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
+wzConsoleMemBuf11       resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
+wzConsoleMemBuf12       resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
+wzConsoleMemBuf13       resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
                                                                                 ;---------------------------------------
                                                                                 ;  reusable menu option input
                                                                                 ;---------------------------------------
-wzFldMenuOptn0          resb    2                                               ;menu option 0
+wzFldMenuOptn0          resb    2                                               ;menu option 0  _\0
 wzFldMenuOptn1          resb    2                                               ;menu option 1
 wzFldMenuOptn2          resb    2                                               ;menu option 2
 wzFldMenuOptn3          resb    2                                               ;menu option 3
@@ -2869,7 +2878,6 @@ irq1.checknum           test    byte [esi+KEYBDATA.lock],EKEYFLOCKNUM           
                         movzx   edx,dl                                          ;extend to register
                         mov     al,[cs:tscankeypad+edx]                         ;translate to numeral equivalent
 irq1.notnum             mov     [esi+KEYBDATA.char],al                          ;save ASCII character code
-
 ;
 ;       Put messages into the message queue.
 ;
@@ -3146,12 +3154,12 @@ tsvc                    tsvce   CompareMemory                                   
                         tsvce   GetConsoleMessage                               ;get message
                         tsvce   HexadecimalToUnsigned                           ;convert hexadecimal string to unsigned integer
                         tsvce   PlaceCursor                                     ;place the cursor at the current loc
-                        tsvce   PutConsoleOIA
+                        tsvce   PutConsoleOIA                                   ;display the operator information area
                         tsvce   ResetSystem                                     ;reset system using 8042 chip
-                        tsvce   SetKeyboardLamps
+                        tsvce   SetKeyboardLamps                                ;turn keboard LEDs on or off
                         tsvce   UnsignedToHexadecimal                           ;convert unsigned integer to hexadecimal string
                         tsvce   UpperCaseString                                 ;upper-case string
-                        tsvce   Yield
+                        tsvce   Yield                                           ;yield to system
 maxtsvc                 equ     ($-tsvc)/4                                      ;function out of range
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -3319,9 +3327,9 @@ PutConsoleHexByte       push    eax                                             
                         call    .10                                             ;make ASCII and store
                         pop     eax                                             ;byte value
                         and     al,0Fh                                          ;lo-order nybble
-.10                     or      al,030h                                         ;apply ASCII zone
-                        cmp     al,03Ah                                         ;numeric?
-                        jb      .20                                             ;yes, skip ahead
+.10                     or      al,EASCIIZERO                                   ;apply ASCII zone
+                        cmp     al,EASCIININE                                   ;numeric?
+                        jbe     .20                                             ;yes, skip ahead
                         add     al,7                                            ;add ASCII offset for alpha
 .20                     call    SetConsoleChar                                  ;display ASCII character
                         ret                                                     ;return
@@ -3607,9 +3615,9 @@ UnsignedToHexadecimal   push    edi                                             
 .10                     rol     edx,4                                           ;next hi-order nybble in bits 0-3
                         mov     al,dl                                           ;????bbbb
                         and     al,00Fh                                         ;mask out bits 4-7
-                        or      al,030h                                         ;mask in ascii zone
-                        cmp     al,03Ah                                         ;A through F?
-                        jb      .20                                             ;no, skip ahead
+                        or      al,EASCIIZERO                                   ;mask in ascii zone
+                        cmp     al,EASCIININE                                   ;A through F?
+                        jbe     .20                                             ;no, skip ahead
                         add     al,7                                            ;41h through 46h
 .20                     stosb                                                   ;store hexnum
                         loop    .10                                             ;next nybble
@@ -4015,7 +4023,7 @@ section                 conmque                                                 
 ;                               |  Console Task Task State Segment (TSS)        |
 ;                       004800  +-----------------------------------------------+
 ;                               |  Console Task Message Queue                   |
-;       CS:IP --------> 005000  +-----------------------------------------------+ CS:0000
+;       CS,CS:IP -----> 005000  +-----------------------------------------------+ CS:0000
 ;                               |  Console Task Code                            |
 ;                               |  Console Task Constants                       |
 ;                       006000  +===============================================+
@@ -4106,9 +4114,7 @@ ConCode                 mov     edi,ECONDATA                                    
 ;
                         cmp     ah,EKEYBTABDOWN                                 ;tab down?
                         jne     .100                                            ;no, branch
-
-                        test    byte [wsKeybData+KEYBDATA.shift],EKEYFSHIFT                        
-
+                        test    byte [wsKeybData+KEYBDATA.shift],EKEYFSHIFT     ;shift?
                         jz      .80                                             ;no, tab forward
 ;
 ;       Handle backward-tab.
@@ -4447,28 +4453,37 @@ ConHandlerMem           push    ebx                                             
                         je      .10                                             ;yes, branch
                         clc                                                     ;event not handled
                         jmp     .90                                             ;branch
-
-; the following is generic command handling
-
+;
+;       Take the first token from the input bufer.
+;
 .10                     mov     edx,wzConsoleInBuffer                           ;console input buffer addr
                         mov     ebx,wzConsoleToken                              ;token buffer
                         call    ConTakeToken                                    ;take first command token
-
+;
+;       Determine which command was entered.
+;
                         mov     edx,wzConsoleToken                              ;token buffer
                         call    ConDetermineCommand                             ;determine if this is a command
                         cmp     eax,ECONJMPTBLCNT                               ;command number in range?
                         jnb     .20                                             ;no, branch
+;
+;       Call the command handler.
+;
                         shl     eax,2                                           ;convert number to array offset
                         mov     edx,tConJmpTbl                                  ;command handler address table base
                         mov     eax,[edx+eax]                                   ;command handler address
                         call    eax                                             ;handler command
-
+;
+;       Clear and redraw the command field; place the cursor.
+;
 .20                     mov     ebx,czPnlMenuInp                                ;panel input field
                         call    ConClearField                                   ;clear the field
                         call    ConDrawField                                    ;draw the field
                         call    ConPutCursor                                    ;place the cursor
                         stc                                                     ;event is handled
-
+;
+;       Restore and return.
+;
 .90                     pop     ebx                                             ;restore non-volatile regs
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -4489,33 +4504,51 @@ ConHandlerMem           push    ebx                                             
 ConTakeToken            push    esi                                             ;save non-volatile regs
                         push    edi                                             ;
                         push    es                                              ;
+;
+;       Address source and target; null-terminate target buffer.
+;
                         push    ds                                              ;load data segment selector ...
                         pop     es                                              ;... into extra segment reg
                         mov     esi,edx                                         ;source buffer address
                         mov     edi,ebx                                         ;target buffer address
                         mov     byte [edi],0                                    ;null-terminate target buffer
+;
+;       Trim leading space; exit if no token.
+;
                         cld                                                     ;forward strings
 .10                     lodsb                                                   ;load byte
                         cmp     al,EASCIISPACE                                  ;space?
                         je      .10                                             ;yes, continue
                         test    al,al                                           ;end of line?
                         jz      .40                                             ;yes, branch
+;
+;       Store non-spaces into target buffer.
+;
 .20                     stosb                                                   ;store byte
                         lodsb                                                   ;load byte
                         test    al,al                                           ;end of line?
                         jz      .40                                             ;no, continue
                         cmp     al,EASCIISPACE                                  ;space?
                         jne     .20                                             ;no, continue
+;
+;       Walk over spaces trailing the stored token; point to final space.
+;
 .30                     lodsb                                                   ;load byte
                         cmp     al,EASCIISPACE                                  ;space?
                         je      .30                                             ;yes, continue
                         dec     esi                                             ;pre-position
+;
+;       Null-terminate target buffer; advance remaining source bytes.
+;
 .40                     mov     byte [edi],0                                    ;terminate buffer
                         mov     edi,edx                                         ;source buffer address
 .50                     lodsb                                                   ;remaining byte
                         stosb                                                   ;move to front of buffer
                         test    al,al                                           ;end of line?
                         jnz     .50                                             ;no, continue
+;
+;       Restore and return.
+;
                         pop     es                                              ;restore non-volatile regs
                         pop     edi                                             ;
                         pop     esi                                             ;
@@ -4528,28 +4561,46 @@ ConTakeToken            push    esi                                             
 ;
 ;       input:          DS:EDX  command address
 ;
-;       output:         EAX     >=0     = command nbr
-;                               0       = unknown command
+;       output:         EAX     !ECONJMPTBLCNT = command nbr
+;                               ECONJMPTBLCNT = no match fond
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ConDetermineCommand     push    ebx                                             ;save non-volatile regs
                         push    ecx                                             ;
                         push    esi                                             ;
                         push    edi                                             ;
+;
+;       Upper-case the command; prepare to search command table.
+;
                         upperCaseString                                         ;upper-case string at EDX
                         mov     esi,tConCmdTbl                                  ;commands table
                         xor     edi,edi                                         ;intialize command number
                         cld                                                     ;forward strings
+;
+;       Exit if end of table.
+;
 .10                     lodsb                                                   ;command length
                         movzx   ecx,al                                          ;command length
                         jecxz   .20                                             ;branch if end of table
+;
+;       Compare command to table entry; exit if match.
+;
                         mov     ebx,esi                                         ;table entry address
                         add     esi,ecx                                         ;next table entry address
                         compareMemory                                           ;compare byte arrays at EDX, EBX
                         jecxz   .20                                             ;branch if equal
+;
+;       Next table element.
+;
                         inc     edi                                             ;increment command nbr
                         jmp     .10                                             ;repeat
+;
+;       Return command number or ECONJMPTBLCNT.
+;
 .20                     mov     eax,edi                                         ;command number
+;
+;       Restore and return.
+;
                         pop     edi                                             ;restore non-volatile regs
                         pop     esi                                             ;
                         pop     ecx                                             ;
@@ -4561,13 +4612,20 @@ ConDetermineCommand     push    ebx                                             
 ;
 ;       Description:    This routine clears a panel field to nulls.
 ;
-;       In:             EBX     panel field address
+;       In:             DS:EBX  panel field address
+;                       ES:     OS data segment
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ConClearField           push    ebx                                             ;save non-volatile regs
                         push    edi                                             ;
+;
+;       Exit if no field.
+;
                         test    ebx,ebx                                         ;have field?
                         jz      .10                                             ;no, exit
+;
+;       Reset cursor index to zero; exit if no size or no buffer.
+;
                         xor     al,al                                           ;zero register
                         mov     byte [ebx+7],al                                 ;zero cursor index
                         movzx   ecx,byte [ebx+6]                                ;field size?
@@ -4575,8 +4633,14 @@ ConClearField           push    ebx                                             
                         mov     edi,[ebx]                                       ;field bufer
                         test    edi,edi                                         ;field buffer?
                         jz      .10                                             ;no, exit
+;
+;       Reset field to nulls.
+;
                         cld                                                     ;forward strings
                         rep     stosb                                           ;clear buffer
+;
+;       Restore and return.
+;
 .10                     pop     edi                                             ;restore non-volatile regs
                         pop     ebx                                             ;
                         ret                                                     ;return
@@ -4604,6 +4668,8 @@ ConInt6                 ud2                                                     
 ;
 ;       Description:    This routine sets the current panel to the main panel (CON001).
 ;
+;       In:             ES:     OS data segment
+;
 ;-----------------------------------------------------------------------------------------------------------------------
 ConMain                 push    ecx                                             ;save non-volatile regs
                         push    edi                                             ;
@@ -4612,13 +4678,13 @@ ConMain                 push    ecx                                             
 ;
                         mov     edi,wzFldMenuOptn0                              ;first menu option storage
                         xor     eax,eax                                         ;zero reg
-                        mov     al,'_'                                          ;input placeholder
+                        mov     al,EASCIIUNDERSCORE                             ;input placeholder
                         xor     ecx,ecx                                         ;zero reg
                         mov     cl,5                                            ;input field count
                         cld                                                     ;forward strings
                         rep     stosw                                           ;reset input fields
 ;
-;       Initialize panel handler, definition, field
+;       Initialize current handler, panel, field.
 ;
                         mov     eax,[cdHandlerMain]                             ;main panel handler CS-relative addr
                         mov     [wdConsoleHandler],eax                          ;set panel handler addr
@@ -4631,7 +4697,9 @@ ConMain                 push    ecx                                             
 ;
                         call    ConClearPanel                                   ;clear panel
                         call    ConDrawFields                                   ;draw fields
-
+;
+;       Restore and return.
+;
                         pop     edi                                             ;restore non-volatile regs
                         pop     ecx                                             ;
                         ret                                                     ;return
@@ -4641,7 +4709,9 @@ ConMain                 push    ecx                                             
 ;
 ;       Description:    This routine handles the MEMORY command and its MEM alias.
 ;
-;       Input:          wzConsoleInBuffer contains parameter(s)
+;       In:             ES:     OS data segment
+;
+;                       wzConsoleInBuffer contains parameter(s)
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ConMem                  push    ebx                                             ;save non-volatile regs
@@ -4659,10 +4729,12 @@ ConMem                  push    ebx                                             
                         mov     edx,wzConsoleToken                              ;first param as token address
                         hexadecimalToUnsigned                                   ;convert string token to unsigned
                         mov     [wdConsoleMemBase],eax                          ;save console memory address
-
+;
+;       Initialize panel storage areas.
+;
 .10                     mov     edi,wzFldMenuOptn0                              ;first menu option storage
                         xor     eax,eax                                         ;zero reg
-                        mov     al,'_'                                          ;input placeholder
+                        mov     al,EASCIIUNDERSCORE                             ;input placeholder
                         xor     ecx,ecx                                         ;zero reg
                         mov     cl,20                                           ;input field count
                         cld                                                     ;forward strings
@@ -4683,7 +4755,7 @@ ConMem                  push    ebx                                             
                         mov     ecx,esi                                         ;console memory address
                         unsignedToHexadecimal                                   ;convert unsigned address to hex string
                         add     edi,8                                           ;end of memory addr hexnum
-                        mov     al,' '                                          ;ascii space delimiter
+                        mov     al,EASCIISPACE                                  ;ascii space delimiter
                         stosb                                                   ;store delimiter
 ;
 ;       Output 16 ASCII hexadecimal byte values for the row.
@@ -4691,21 +4763,21 @@ ConMem                  push    ebx                                             
                         xor     ecx,ecx                                         ;zero register
                         mov     cl,16                                           ;loop count
 .30                     push    ecx                                             ;save loop count
-                        mov     al,' '                                          ;ascii space
+                        mov     al,EASCIISPACE                                  ;ascii space
                         stosb                                                   ;store delimiter
                         lodsb                                                   ;memory byte
                         mov     ah,al                                           ;memory byte
                         shr     al,4                                            ;high-order in bits 3-0
-                        or      al,30h                                          ;apply ascii numeric zone
-                        cmp     al,3ah                                          ;numeric range?
-                        jb      .40                                             ;yes, skip ahead
+                        or      al,EASCIIZERO                                   ;apply ascii numeric zone
+                        cmp     al,EASCIININE                                   ;numeric range?
+                        jbe     .40                                             ;yes, skip ahead
                         add     al,7                                            ;adjust ascii for 'A'-'F'
 .40                     stosb                                                   ;store ascii hexadecimal of high-order
                         mov     al,ah                                           ;low-order in bits 3-0
                         and     al,0fh                                          ;mask out high-order bits
-                        or      al,30h                                          ;apply ascii numeric zone
-                        cmp     al,3ah                                          ;numeric range?
-                        jb      .50                                             ;yes, skip ahead
+                        or      al,EASCIIZERO                                   ;apply ascii numeric zone
+                        cmp     al,EASCIININE                                   ;numeric range?
+                        jbe     .50                                             ;yes, skip ahead
                         add     al,7                                            ;adjust ascii for 'A'-'F'
 .50                     stosb                                                   ;store ascii hexadecimal of low-order
                         pop     ecx                                             ;loop count
@@ -4713,23 +4785,25 @@ ConMem                  push    ebx                                             
 ;
 ;       Output printable ASCII character section for the row.
 ;
-                        mov     al,' '                                          ;ascii space
+                        mov     al,EASCIISPACE                                  ;ascii space
                         stosb                                                   ;store delimiter
                         stosb                                                   ;store delimiter
                         sub     esi,16                                          ;reset source pointer
                         mov     cl,16                                           ;loop count
 .60                     lodsb                                                   ;source byte
-                        cmp     al,32                                           ;printable? (low-range test)
+                        cmp     al,EASCIISPACE                                  ;printable? (low-range test)
                         jb      .70                                             ;no, skip ahead
-                        cmp     al,128                                          ;printable? (high-range test)
-                        jb      .80                                             ;yes, skip ahead
-.70                     mov     al,' '                                          ;display space instead of printable
+                        cmp     al,EASCIITILDE                                  ;printable? (high-range test)
+                        jbe     .80                                             ;yes, skip ahead
+.70                     mov     al,EASCIISPACE                                  ;display space instead of printable
 .80                     stosb                                                   ;store printable ascii byte
                         loop    .60                                             ;next source byte
+                        xor     al,al                                           ;zero reg
+                        stosb                                                   ;null-terminate buffer
 ;
 ;       Display constructed output buffer and newline.
 ;
-                        add     ebx,80                                          ;next contiguous output buffer addr
+                        add     ebx,68                                          ;next contiguous output buffer addr
 ;
 ;       Repeat until all lines displayed and preserve source address.
 ;
@@ -4737,7 +4811,7 @@ ConMem                  push    ebx                                             
                         loop    .20                                             ;next row
                         mov     [wdConsoleMemBase],esi                          ;update console memory address
 ;
-;       Update the current panel identifier.
+;       Update the handler, panel and field identifiers.
 ;
                         mov     eax,[cdHandlerMem]                              ;mem panel handler
                         mov     [wdConsoleHandler],eax                          ;set panel handler addr
@@ -4745,7 +4819,9 @@ ConMem                  push    ebx                                             
                         mov     [wdConsolePanel],eax                            ;set panel template addr
                         mov     eax,czPnlMenuInp                                ;menu panel command field addr
                         mov     [wdConsoleField],eax                            ;set active field
-
+;
+;       Clear and redraw the panel.
+;
                         call    ConClearPanel                                   ;clear the panel
                         call    ConDrawFields                                   ;draw panel fields
 ;
@@ -4761,8 +4837,8 @@ ConMem                  push    ebx                                             
 ;       Constants
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-cdHandlerMain           dd      ConHandlerMain - ConCode
-cdHandlerMem            dd      ConHandlerMem - ConCode
+cdHandlerMain           dd      ConHandlerMain - ConCode                        ;main panel code segment offset
+cdHandlerMem            dd      ConHandlerMem - ConCode                         ;memory panel code segment offset
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Panels
@@ -4772,6 +4848,9 @@ cdHandlerMem            dd      ConHandlerMem - ConCode
 ;                       3.      Field constant text or field values MUST be comprised of printable characters.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+                                                                                ;---------------------------------------
+                                                                                ;  Main Panel
+                                                                                ;---------------------------------------
 czPnlCon001             dd      czFldPnlIdCon001                                ;field text
                         db      0,0,6,0,0,0,7,0                                 ;row col siz ndx 1st nth atr flg
                         dd      czFldTitleCon001
@@ -4803,7 +4882,9 @@ czPnlCon001             dd      czFldPnlIdCon001                                
 czPnlConInp             dd      wzConsoleInBuffer
                         db      23,1,79,0,0,0,7,80h
                         dd      0                                               ;end of panel
-
+                                                                                ;---------------------------------------
+                                                                                ;  Memory Display Panel
+                                                                                ;---------------------------------------
 czPnlMem001             dd      czFldPnlIdMem001
                         db      0,0,6,0,0,0,7,0
                         dd      czFldTitleMem001

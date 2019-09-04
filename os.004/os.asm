@@ -7,7 +7,7 @@
 ;       Description:    This sample program extends the loader to validate the CPU type and place the CPU into
 ;                       protected mode.
 ;
-;       Revised:        17 June 2019
+;       Revised:        2 September 2019
 ;
 ;       Assembly:       nasm os.asm -f bin -o os.dat     -l os.dat.lst     -DBUILDBOOT
 ;                       nasm os.asm -f bin -o os.dsk     -l os.dsk.lst     -DBUILDDISK
@@ -285,6 +285,7 @@ EBIOSFNKEYSTATUS        equ     001h                                            
 ;-----------------------------------------------------------------------------------------------------------------------
 EASCIIRETURN            equ     00Dh                                            ;carriage return
 EASCIIESCAPE            equ     01Bh                                            ;escape
+EASCIISPACE             equ     020h                                            ;space
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Operating System Values
@@ -456,8 +457,15 @@ wbClockDays             resb    1                                               
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ECONDATA                equ     ($)
-wdConsolePanel          resd    1                                               ;console panel definition address
+                                                                                ;---------------------------------------
+                                                                                ;  panel handling
+                                                                                ;---------------------------------------
+wdConsolePanel          resd    1                                               ;panel definition addr
+wdConsoleField          resd    1                                               ;active field definition addr
 wzConsoleInBuffer       resb    80                                              ;command input buffer
+                                                                                ;---------------------------------------
+                                                                                ;  cursor placement
+                                                                                ;---------------------------------------
 wbConsoleColumn         resb    1                                               ;console column
 wbConsoleRow            resb    1                                               ;console row
 ECONDATALEN             equ     ($-ECONDATA)                                    ;size of console data area
@@ -963,7 +971,7 @@ Prep                    mov     si,czPrepMsg10                                  
                         cmp     al,6                                            ;diskette removed?
                         je      .110                                            ;yes, continue
                         mov     si,czPrepMsgErr80                               ;drive timed out message
-                        cmp     al,80H                                          ;drive timed out?
+                        cmp     al,80h                                          ;drive timed out?
                         je      .110                                            ;yes, continue
                         mov     si,czPrepMsgErrXX                               ;unknown error message
 .110                    call    BootPrint                                       ;display result message
@@ -2177,12 +2185,24 @@ section                 conmque                                                 
 ;                               |  Console Task Task State Segment (TSS)        |
 ;                       004800  +-----------------------------------------------+
 ;                               |  Console Task Message Queue                   |
-;       CS,CS:IP -----> 005000  +-----------------------------------------------+ CS:0000
+;       CS:IP --------> 005000  +-----------------------------------------------+ CS:0000
 ;                               |  Console Task Code                            |
 ;                               |  Console Task Constants                       |
 ;                       006000  +===============================================+
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+;=======================================================================================================================
+;
+;       Console Task Routines
+;
+;       ConCode                 Console task entry point
+;       ConClearPanel           Clear the panel area of video memory to spaces
+;       ConDrawFields           Draw the panel fields to video memory
+;       ConDrawField            Draw a panel field to video memory
+;       ConPutCursor            Place the cursor at the current index into the current field
+;       ConMain                 Handle the main command
+;
+;=======================================================================================================================
 section                 concode vstart=05000h                                   ;labels relative to 5000h
 ;
 ;       Initialize console work areas to low values.
@@ -2193,98 +2213,217 @@ ConCode                 mov     edi,ECONDATA                                    
                         cld                                                     ;forward strings
                         rep     stosb                                           ;initialize data
 ;
-;       Initialize the active panel variables.
+;       Initialize the Operator Information Area (OIA).
 ;
-                        mov     eax,czPnlCon001                                 ;initial console panel
-                        mov     [wdConsolePanel],eax                            ;save panel template address
+                        push    es                                              ;save extra segment
+                        push    EGDTCGA                                         ;load CGA video selector...
+                        pop     es                                              ;...into extra segment reg
+                        mov     edi,ECONROWS*ECONROWBYTES                       ;target offset
+                        mov     eax,ECONOIADWORD                                ;OIA attribute and space
+                        mov     ecx,ECONROWDWORDS                               ;double-words per row
+                        rep     stosd                                           ;reset OIA
+                        pop     es                                              ;restore extra segment
 ;
-;       Address the console screen memory.
+;       Set the current panel to Main, clear and redraw all fields.
+;
+                        call    ConMain                                         ;initialize panel
+;
+;       Place the cursor at the current field index.
+;
+                        call    ConPutCursor                                    ;place the cursor
+;
+;       Enter halt loop
+;
+.10                     sti                                                     ;enable interrupts
+                        hlt                                                     ;halt until interrupt
+                        jmp     .10                                             ;continue halt loop
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConClearPanel
+;
+;       Description:    This routine clears the console panel video memory. The panel field buffer values
+;                       are not disturbed.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConClearPanel           push    ecx                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    es                                              ;
+;
+;       Clear panel rows.
+;
+                        push    EGDTCGA                                         ;load CGA video selector...
+                        pop     es                                              ;...into extra segment reg
+                        xor     edi,edi                                         ;target offset
+                        mov     eax,ECONCLEARDWORD                              ;initialization value
+                        mov     ecx,ECONROWS*ECONROWDWORDS                      ;double-words to clear
+                        cld                                                     ;forward strings
+                        rep     stosd                                           ;reset screen body
+;
+;       Restore and return.
+;
+                        pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConDrawFields
+;
+;       Description:    This routine draws the panel fields. If there is no active input field, the first input
+;                       field of the panel is set as the active field.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConDrawFields           push    ebx                                             ;save non-volatile regs
+;
+;       Exit if no panel
+;
+                        mov     ebx,[wdConsolePanel]                            ;panel definition addr
+                        test    ebx,ebx                                         ;have panel?
+                        jz      .30                                             ;no, branch
+;
+;       Loop until end of panel
+;
+.10                     cmp     dword [ebx],0                                   ;end of panel?
+                        je      .30                                             ;yes, branch
+;
+;       If input field and we have no active field, set as active field
+;
+                        test    byte [ebx+11],80h                               ;input field?
+                        jz      .20                                             ;no, branch
+                        cmp     dword [wdConsoleField],0                        ;have active field?
+                        jne     .20                                             ;yes, branch
+                        mov     [wdConsoleField],ebx                            ;set active field
+;
+;       Draw the field and loop to the next field.
+;
+.20                     call    ConDrawField                                    ;draw field
+                        lea     ebx,[ebx+12]                                    ;next field addr
+                        jmp     .10                                             ;next field
+;
+;       Restore and return.
+;
+.30                     pop     ebx                                             ;restore non-volatile regs
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConDrawField
+;
+;       Description:    This routine draws the contents of a panel field.
+;
+;       In:             DS:EBX  field definition address
+;                               [ebx+0]         field buffer address
+;                               [ebx+4]         row (0-23)
+;                               [ebx+5]         column (0,79)
+;                               [ebx+6]         size (0-255)
+;                               [ebx+7]         cursor index (0-255)
+;                               [ebx+8]         1st selected index (0-255)
+;                               [ebx+9]         last selected index (0-255)
+;                               [ebx+10]        attribute
+;                               [ebx+11]        flags
+;                                               80h = input field
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConDrawField            push    ecx                                             ;save non-volatile regs
+                        push    esi                                             ;
+                        push    edi                                             ;
+                        push    es                                              ;
+;
+;       Exit if no field or zero size.
+;
+                        test    ebx,ebx                                         ;have field?
+                        jz      .30                                             ;no, exit
+                        movzx   ecx,byte [ebx+6]                                ;have size?
+                        jecxz   .30                                             ;no, exit
+;
+;       Address video memory.
 ;
                         push    EGDTCGA                                         ;load CGA video selector...
                         pop     es                                              ;...into extra segment reg
 ;
-;       Initialize the Operator Information Area (OIA) (This is done once).
-;
-                        mov     edi,ECONROWS*ECONROWBYTES                       ;target offset
-                        mov     ecx,ECONROWDWORDS                               ;double-words per row
-                        mov     eax,ECONOIADWORD                                ;OIA attribute and space
-                        rep     stosd                                           ;reset OIA
-;
-;       Clear the console rows. (This is done after every attention key).
-;
-.20                     xor     edi,edi                                         ;target offset
-                        mov     ecx,ECONROWS*ECONROWDWORDS                      ;double-words to clear
-                        mov     eax,ECONCLEARDWORD                              ;initialization value
-                        rep     stosd                                           ;reset screen body
-;
-;       Reset the row and column.
-;
-                        xor     eax,eax                                         ;zero register
-                        mov     [wbConsoleRow],al                               ;zero console row
-                        mov     [wbConsoleColumn],al                            ;zero console column
-;
-;       Load the field address from the panel. Exit loop if address is null.
-;
-                        mov     ebx,[wdConsolePanel]                            ;panel field addr
-.30                     mov     esi,[ebx]                                       ;field buffer addr
-                        test    esi,esi                                         ;end of panel?
-                        jz      .70                                             ;yes, exit loop
-;
-;       Load the field row, column, color and length.
-;
-                        mov     ch,[ebx+4]                                      ;row
-                        mov     cl,[ebx+5]                                      ;column
-                        mov     dh,[ebx+6]                                      ;color
-                        mov     dl,[ebx+7]                                      ;length
-;
-;       Test the row high-bit for input field indication.
-;
-                        test    ch,080h                                         ;input field?
-                        jz      .40                                             ;no, branch
-                        and     ch,07Fh                                         ;clear input field indicator
-;
-;       Save the row and column if this is the first input field.
-;
-                        mov     al,[wbConsoleRow]                               ;console row
-                        test    al,[wbConsoleColumn]                            ;already have an input field?
-                        jnz     .40                                             ;yes, branch
-                        mov     [wbConsoleRow],ch                               ;update console row
-                        mov     [wbConsoleColumn],cl                            ;update console column
-;
 ;       Compute the target offset.
 ;
-.40                     movzx   eax,ch                                          ;row
+                        movzx   eax,byte [ebx+4]                                ;row
                         mov     ah,ECONCOLS                                     ;columns per row
                         mul     ah                                              ;row offset
-                        add     al,cl                                           ;add column
+                        add     al,byte [ebx+5]                                 ;add column
                         adc     ah,0                                            ;handle overflow
                         shl     eax,1                                           ;two-bytes per column
                         mov     edi,eax                                         ;target offset
 ;
-;       Display the field contents.
+;       Display field characters.
 ;
-                        movzx   ecx,dl                                          ;length
-                        jecxz   .60                                             ;branch if zero-length
-                        mov     ah,dh                                           ;color
-.50                     lodsb                                                   ;field character
+                        mov     ah,[ebx+10]                                     ;attribute
+                        cld                                                     ;forward strings
+                        mov     esi,[ebx]                                       ;field buffer addr
+                        test    esi,esi                                         ;have field buffer?
+                        jz      .20                                             ;no, exit
+.10                     lodsb                                                   ;field character
                         test    al,al                                           ;end of value?
-                        jz      .60                                             ;yes, branch
-                        stosw                                                   ;store character and color
-                        loop    .50                                             ;next character
-.60                     add     ebx,8                                           ;next field addr
-                        jmp     short .30                                       ;next field
+                        jz      .20                                             ;yes, branch
+                        stosw                                                   ;store character with attribute
+                        dec     ecx                                             ;decrement remaining size
+                        jecxz   .30                                             ;exit if field full
+                        jmp     .10                                             ;next character
 ;
-;       Place the cursor at the input field.
+;       Clear the remaining field.
 ;
-.70                     mov     ah,[wbConsoleRow]                               ;field row
-                        mov     al,[wbConsoleColumn]                            ;field column
-                        placeCursor                                             ;position the cursor
+.20                     mov     al,EASCIISPACE                                  ;ASCII space
+                        rep     stosw                                           ;store space with attribute
 ;
-;       Enter halt loop
+;       Restore and return.
 ;
-.80                     sti                                                     ;enable interrupts
-                        hlt                                                     ;halt until interrupt
-                        jmp     .80                                             ;continue halt loop
+.30                     pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     esi                                             ;
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConPutCursor
+;
+;       Description:    This routine places the cursor at the current index into the current field.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConPutCursor            push    ecx                                             ;save non-volatile regs
+                        mov     ecx,[wdConsoleField]                            ;current field?
+                        jecxz   .10                                             ;no, branch
+                        mov     al,[ecx+4]                                      ;field row
+                        mov     [wbConsoleRow],al                               ;set current row
+                        mov     al,[ecx+5]                                      ;field column
+                        add     al,[ecx+7]                                      ;field offset
+                        mov     [wbConsoleColumn],al                            ;set curren tcol
+                        placeCursor                                             ;place the cursor
+.10                     pop     ecx                                             ;restore non-volatile regs
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConMain
+;
+;       Description:    This routine sets the current panel to the main panel (CON001).
+;
+;       In:             ES:     OS data segment
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConMain                 push    ecx                                             ;save non-volatile regs
+                        push    edi                                             ;
+;
+;       Initialize current panel, field.
+;
+                        mov     eax,czPnlCon001                                 ;main panel addr
+                        mov     [wdConsolePanel],eax                            ;set panel addr
+                        mov     eax,czPnlConInp                                 ;main panel command field addr
+                        mov     [wdConsoleField],eax                            ;set active field
+;
+;       Clear panel video memory and draw fields
+;
+                        call    ConClearPanel                                   ;clear panel
+                        call    ConDrawFields                                   ;draw fields
+;
+;       Restore and return.
+;
+                        pop     edi                                             ;restore non-volatile regs
+                        pop     ecx                                             ;
+                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Constants
@@ -2299,26 +2438,29 @@ ConCode                 mov     edi,ECONDATA                                    
 ;                       3.      Field constant text or field values MUST be comprised of printable characters.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+                                                                                ;---------------------------------------
+                                                                                ;  Main Panel
+                                                                                ;---------------------------------------
 czPnlCon001             dd      czFldPnlIdCon001                                ;field text
-                        db      00,00,02h,06                                    ;flags+row, col, attr, length
+                        db      0,0,6,0,0,0,7,0                                 ;row col siz ndx 1st nth atr flg
                         dd      czFldTitleCon001
-                        db      00,33,07h,14
+                        db      0,33,14,0,0,0,7,0
                         dd      czFldDatTmCon001
-                        db      00,63,02h,17
+                        db      0,63,17,0,0,0,7,0
                         dd      czFldPrmptCon001
-                        db      23,00,07h,01
-                        dd      wzConsoleInBuffer
-                        db      128+23,01,07h,79
+                        db      23,0,1,0,0,0,7,0
+czPnlConInp             dd      wzConsoleInBuffer
+                        db      23,1,79,0,0,0,7,80h
                         dd      0                                               ;end of panel
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Strings
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-czFldPnlIdCon001        db      "CON001"                                        ;main console panel id
-czFldTitleCon001        db      "OS Version 1.0"                                ;main console panel title
-czFldDatTmCon001        db      "DD-MMM-YYYY HH:MM"                             ;panel date and time template
-czFldPrmptCon001        db      ":"                                             ;command prompt
+czFldPnlIdCon001        db      "CON001",0                                      ;main console panel id
+czFldTitleCon001        db      "OS Version 1.0",0                              ;main console panel title
+czFldDatTmCon001        db      "DD-MMM-YYYY HH:MM",0                           ;panel date and time template
+czFldPrmptCon001        db      ":",0                                           ;command prompt
                         times   4096-($-$$) db 0h                               ;zero fill to end of section
 %endif
 %ifdef BUILDDISK

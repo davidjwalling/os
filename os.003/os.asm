@@ -694,7 +694,7 @@ Prep                    mov     si,czPrepMsg10                                  
                         cmp     al,6                                            ;diskette removed?
                         je      .110                                            ;yes, continue
                         mov     si,czPrepMsgErr80                               ;drive timed out message
-                        cmp     al,80H                                          ;drive timed out?
+                        cmp     al,80h                                          ;drive timed out?
                         je      .110                                            ;yes, continue
                         mov     si,czPrepMsgErrXX                               ;unknown error message
 .110                    call    BootPrint                                       ;display result message
