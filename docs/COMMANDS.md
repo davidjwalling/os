@@ -12,8 +12,8 @@ a data/index.dat      Add the file "index.dat" in the data folder of the current
 a o,/home             Add the folder "/home" to the file system root node
 a /home/taxes/        Add the folder "/home/taxes" to the file system root node (implicit type)
 ```
--- Memory allocations complete and display the memory allocations (l m) panel.
--- File and folder allocations complete and display the file and folder list (l) panel. 
+- Memory allocations complete and display the memory allocations (l m) panel.
+- File and folder allocations complete and display the file and folder list (l) panel. 
 ### Copy
 ```
 c readme.md,copy.md   Copy the file "readme.md" to "copy.md"
