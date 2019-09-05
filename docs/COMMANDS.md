@@ -71,3 +71,33 @@ p myprogram           Stop the task named "myprogram"
 v i,readme.md          View the file "readme.md"
 v readme.md            View the file "readme.md" (implicit type specifier)
 ```
+### Sample Command Resolution
+```
+a                      Error: Add/Allocate implicit type (m) requires parameters
+a -1                   Error: Add/Allocate implicit type (m) requires positive, non-zero size
+a 0                    Error: Add/Allocate implicit type (m) requires positive, non-zero size
+a 1                    Add/Allocate implicit type (m) and unit (b) allocates minimum block of 256 bytes
+a 257                  Add/Allocate implicit type (m) and unit (b) allocates in multiples of 16, or 262 bytes
+a 1024b                Add/Allocate implicit type (m) allocates 1024 bytes
+a 32k                  Add/Allocate implicit type (m) allocates 32 kilobytes
+a 16m                  Add/Allocate implicit type (m) allocates 64 megabytes
+a m,                   Error: Add/Allocate explicit type (m) requires parameters
+a m,x                  Error: Add/Allocate explicit type (m) requires positive, non-zero size
+a m,16k                Add/Allocate allocates 16 kilobytes
+
+a m                    Add/Allocate deduced type (i) creates zero-length file "m" in the current folder
+                       Note: "m" is a valid type specifier. But here it is interpreted as a file name 
+                       because the size/unit subparameter is missing.
+a x                    Add/Allocate deduced type (i) creates zero-length file "x" in the current folder
+a readme               Add/Allocate creates zero-length file "readme" in the current folder
+a "readme"             Add/Allocate creates zero-length file "readme" in the current folder
+a ./readme             Add/Allocate creates zero-length file "readme" in the current folder
+a /readme              Add/Allocate creates zero-length file "readme" in the root folder
+a new/readme           Add/Allocate creates zero-length file "readme" in folder "new" in the current folder
+
+a i,readme
+a new/                 Add/Allocate creates folder "new" in the current folder
+a /new/                Add/Allocate creates folder "new" in the root folder
+a "text file"          Add/Allocate creates the folder "text file" in the current folder
+
+```
