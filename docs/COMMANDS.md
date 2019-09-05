@@ -1,5 +1,4 @@
 # OS Commands
-## Command List
 ### Add/Allocate
 ```
 a m,500               Allocate 500 bytes
