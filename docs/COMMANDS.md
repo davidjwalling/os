@@ -1,6 +1,6 @@
 # OS Commands
 ## Command List
-### A Add/Allocate
+### Add/Allocate
 - The Add/Allocate command adds a resource to the system.
 - A resource can be an allocated memory space or a data set.
 - The maximum size of a single memory allocation is 2GB.
@@ -24,7 +24,7 @@ a /home/robert/       Add the folder "/home/robert" to the file system root node
 a i,readme.md         Add the file "readme.md" in the current folder
 a data/index.dat      Add the file "index.dat" in the data folder of the current folder
 ```
-### <u>D</u>elete/Deallocate
+++Delete/Deallocate++
 - The Delete/Deallocate command removes a resource from the system.
 ```
 d 120040              Deallocate the memory block at address 120040
@@ -32,7 +32,7 @@ d m,745030            Deallocate the memory block at address 745030
 d readme.md           Delete the file named "readme.md" in the current folder
 d oldfiles/           Delete the folder "oldfiles" and its contents
 ```
-### L List
+### List
 - The List command lists system resources.
 ```
 l                     List files and folders in the current folder
