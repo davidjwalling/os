@@ -1,4 +1,4 @@
-# OS Commands
+# Commands
 ### Add/Allocate
 ```
 a 2048                Allocate 2048 bytes (implicit type and units)
