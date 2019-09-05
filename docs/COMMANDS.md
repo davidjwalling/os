@@ -19,6 +19,10 @@ d oldfiles/           Delete the folder "oldfiles" and its contents
 ```
 ### Inquire/Info
 ```
+i                     Inquire summary system information
+i d                   Inquire summary system device information
+i d,s                 Inquire summary system storage device information
+i m                   Inquire summary system memory information
 ```
 ### List
 ```
@@ -29,8 +33,9 @@ l d                   List devices
 l d,a                 List audio devices
 l d,s                 List storage devices
 l m                   List memory allocations
+l t                   List active tasks
 ```
-Sample Memory Allocation List
+Sample Memory Allocation List Panel
 ```
 0         1         2         3         4         5         6         7
 01234567890123456789012345678901234567890123456789012345678901234567890123456789
@@ -40,4 +45,12 @@ LST001                       Memory Allocation List             DD-MM-YYYY HH:MM
  _  00010000-00013FFF   16KB~
  
 :____________________________________________________
+```
+### Start
+```
+s myprogram           Start a task on the executable file "myprogram"
+```
+### Stop
+```
+p myprogram           Stop the task named "myprogram"
 ```
