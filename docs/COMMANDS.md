@@ -136,6 +136,6 @@ a new/readme          Add/Allocate creates zero-length file "readme" in folder "
 
 a new/                Add/Allocate creates folder "new" in the current folder
 a /new/               Add/Allocate creates folder "new" in the root folder
-a f,new               Add/Allocate creates folder "new" in the current folder
-a f,/new/             Add/Allocate creates folder "new" in the root folder
+a o,new               Add/Allocate creates folder "new" in the current folder
+a o,/new/             Add/Allocate creates folder "new" in the root folder
 ```
