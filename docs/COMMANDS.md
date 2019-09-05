@@ -24,7 +24,7 @@ a /home/robert/       Add the folder "/home/robert" to the file system root node
 a i,readme.md         Add the file "readme.md" in the current folder
 a data/index.dat      Add the file "index.dat" in the data folder of the current folder
 ```
-### D Delete/Deallocate
+### <u>D</u>elete/Deallocate
 - The Delete/Deallocate command removes a resource from the system.
 ```
 d 120040              Deallocate the memory block at address 120040
