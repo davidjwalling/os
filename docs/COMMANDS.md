@@ -58,9 +58,22 @@ LST001                       Memory Allocation List             DD-MM-YYYY HH:MM
  
 :____________________________________________________
 ```
+### Move/Rename
+```
+m readme,newname      Non-destrucdtive rename file "readme" to "newname"
+m readme,newname,r    Destructive rename file "readme" to "newname"
+m readme,/            Non-destructive move file "readme" to the root folder
+m readme,/,r          Destructive move file "readme" to the root folder
+
+m taxes/,newname      Non-destructive rename folder "taxes" to "newname"
+m taxes/,newname,r    Destructive rename folder "taxes" to "newname"
+m taxes/,backup/      Non-destructive move folder "taxes" into folder "backup"
+m taxes/,backup/,r    Desctructive move folder "taxes" into folder "backup"
+```
 ### Start
 ```
 s myprogram           Start a task on the executable file "myprogram"
+myprogram             Start a task on the executable file "myprogram" (implicit command)
 ```
 ### Stop
 ```
@@ -86,18 +99,18 @@ a m,x                  Error: Add/Allocate explicit type (m) requires positive, 
 a m,16k                Add/Allocate allocates 16 kilobytes
 
 a m                    Add/Allocate deduced type (i) creates zero-length file "m" in the current folder
-                       Note: "m" is a valid type specifier. But here it is interpreted as a file name 
-                       because the size/unit subparameter is missing.
 a x                    Add/Allocate deduced type (i) creates zero-length file "x" in the current folder
 a readme               Add/Allocate creates zero-length file "readme" in the current folder
 a "readme"             Add/Allocate creates zero-length file "readme" in the current folder
+a i,readme             Add/Allocate creates zero-length file "readme" in the current folder
 a ./readme             Add/Allocate creates zero-length file "readme" in the current folder
 a /readme              Add/Allocate creates zero-length file "readme" in the root folder
 a new/readme           Add/Allocate creates zero-length file "readme" in folder "new" in the current folder
 
-a i,readme
 a new/                 Add/Allocate creates folder "new" in the current folder
 a /new/                Add/Allocate creates folder "new" in the root folder
-a "text file"          Add/Allocate creates the folder "text file" in the current folder
+a f,new                Add/Allocate creates folder "new" in the current folder
+a f,/new/              Add/Allocate creates folder "new" in the root folder
+
 
 ```
