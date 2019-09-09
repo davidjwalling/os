@@ -14,40 +14,40 @@ OS is provided as a learning resource. All code is intended to be fully-function
 
 OS is presented in a progressive series of subprojects that incrementally introduce and demonstrate concepts. Additional subprojects may be added from time to time as the project progresses.
 
-Part I			Boot to Protected Mode
+### Part I. Boot to Protected Mode
 
-	os.001		A simple boot sector that displays a message.
-	os.002		A boot sector that loads and runs a program that displays a message.
-	os.003		Creates osprep.com, a utility to write the boot sector to a diskette.
-	os.004		Expands the loader to enter protected mode and start a task.
+[os.001](docs/OS001.md)	A simple boot sector that displays a message.  
+os.002]		A boot sector that loads and runs a program that displays a message.  
+os.003]		Creates `osprep.com`, a utility to write the boot sector to a diskette.  
+os.004]		Expands the loader to enter protected mode and start a task.  
 
-Part II 		Interrupts, Messages and Commands
+### Part II. Interrupts, Messages and Commands
 
-	os.005		Add keyboard interrupt handler to display characters and shift status in information area.
-	os.006		Add a message queue handler to send keyboard messages to a task.
-	os.007		Add support for "shutdown", "quit" and "exit" commands.
-	os.008		Add an "int6" command to demonstrate CPU interrupt handling.
+os.005		Add keyboard interrupt handler to display characters and shift status in information area.  
+os.006		Add a message queue handler to send keyboard messages to a task.  
+os.007		Add support for "shutdown", "quit" and "exit" commands.  
+os.008		Add an "int6" command to demonstrate CPU interrupt handling.  
 
-Part III		Memory and Clock
+### Part III. Memory and Clock
 
-	os.009		Add "mem" and "memory" commands to display memory and "main" to return to the main panel.
-	os.010		Add simple memory allocation and deallocation routines and "malloc" and "free" test routines.
-	os.011		Add memory-size reporting from BIOS and Real-Time Clock (RTC) chip.
-	os.012		Add "date", "time" and related commands with RTC chip support.
+os.009		Add "mem" and "memory" commands to display memory and "main" to return to the main panel.  
+os.010		Add simple memory allocation and deallocation routines and "malloc" and "free" test routines.  
+os.011		Add memory-size reporting from BIOS and Real-Time Clock (RTC) chip.  
+os.012		Add "date", "time" and related commands with RTC chip support.  
 
-Part IV			Network Adapter, Part I
+### Part IV. Network Adapter, Part I
 
-	os.013		Add logic to probe for and list PCI devices using the "pciprobe" or "lspci" commands.
-	os.014		Add code to display ethernet adapter memory i/o address and i/o port.
-	os.015		Add code to initialize and reset discovered PCI network adapter.
-	os.016		Add code to receive an Ethernet frame.
+os.013		Add logic to probe for and list PCI devices using the "pciprobe" or "lspci" commands.  
+os.014		Add code to display ethernet adapter memory i/o address and i/o port.  
+os.015		Add code to initialize and reset discovered PCI network adapter.  
+os.016		Add code to receive an Ethernet frame.  
 
-Part V			Tasks
+### Part V. Tasks
 
-	os.017		Add a second task manually and IRQ0-driven task switching.
-	os.018		Add support to load a task from disk.
-	os.019		Add commands to start, stop and list tasks.
-	os.020		Add code to configure tasks to run on start-up.
+os.017		Add a second task manually and IRQ0-driven task switching.  
+os.018		Add support to load a task from disk.  
+os.019		Add commands to start, stop and list tasks.  
+os.020		Add code to configure tasks to run on start-up.  
 
 ## Assembly
 
@@ -104,7 +104,7 @@ Physical Machine Installation:
 
 Network Support:
 
-	OS includes native support for the Intel(R) PRO/1000 MT Server (82545EM) network adapter. Virtual machine
+	OS includes native support for the Intel(R) PRO/1000 MT Desktop (82540EM) network adapter. Virtual machine
 	installations may select this adapter type in the network configuration of the VM. Configure this VM network
 	adapter using bridged networking to access the host system's network.
 
