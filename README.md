@@ -66,7 +66,7 @@ Click on the subproject name below for details.
 <tr><td></td><td>B</td><td>Using an alternate disk utility, transfer the entirety of os.dsk to the physical floppy disk, or copy only os.dat to the boot sector. Copy os.com to the diskette. Boot the system with the floppy disk inserted in Drive A:.</td></tr>
 </table>
 
-### Network Support:
+### Network Support
 
 - OS includes native support for the Intel :registered: PRO/1000 MT Desktop (82540EM) network adapter.
 - Virtual machine installations may select this adapter type in the network configuration of the VM.

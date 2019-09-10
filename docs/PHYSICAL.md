@@ -1,17 +1,17 @@
 ### OS Target Platform Example
 The program samples presented here were tested using the following physical components. Other x86 PC-Compatible components my be substituted.
 ### Components
-- Intel :registered: Pentium :registered: MMX 233 MHz Processor Part# BP80503233 (SL293) 2.8V
-- Intel :registered: 555A Rev 3.2 Socket 7 Motherboard
+- Intel:registered: Pentium :registered: MMX 233 MHz Processor Part# BP80503233 (SL293) 2.8V
+- Intel:registered: 555A Rev 3.2 Socket 7 Motherboard
 - 64MB EDO DRAM
 - Mitsumi D359M3 Internal 3.5" 1.44 MB Floppy Drive
 - Number Nine #9FX Motion 771 SVGA
-- Dell :registered: U2412M 24 inch LCD monitor
-- Dell :registered: RT7D20 104-Key Standard US Layout Windows Keyboard via PS/2 to 5-pin DIN adapter.
-### Intel® Pentium® MMX 233 MHz Processor Part# BP80503233 (SL293) 2.8V
+- Dell:registered: U2412M 24 inch LCD monitor
+- Dell:registered: RT7D20 104-Key Standard US Layout Windows Keyboard via PS/2 to 5-pin DIN adapter.
+### Intel:registered: Pentium® MMX 233 MHz Processor Part# BP80503233 (SL293) 2.8V
 <img src="../images/os001_Pentium_001.jpg"/>
 
-### Intel® 555A Rev 3.2 Socket 7 Motherboard
+### Intel:registered: 555A Rev 3.2 Socket 7 Motherboard
 <img src="../images/os001_Intel555A_001.jpg"/><br>
 <img src="../images/os001_Intel555A_002.jpg"/>
 
@@ -25,12 +25,12 @@ The program samples presented here were tested using the following physical comp
 ### Number Nine #9FX Motion 771 SVGA
 <img src="../images/os001_NumberNine_9FX_Motion771_001.jpg"/>
 
-### Dell® U2412M 24 inch LCD monitor with Dell RT7D20 104-Key Standard US Layout Windows Keyboard via PS/2 to 5-pin DIN adapter (not shown).
+### Dell:registered: U2412M 24 inch LCD monitor with Dell:registered: RT7D20 104-Key Standard US Layout Windows Keyboard via PS/2 to 5-pin DIN adapter (not shown).
 <img src="../images/os001_DellMonitor_U2412M_001.jpg"/>
 
 ### BIOS Boot to MS-DOS
 - We have two installed Mitsumi D359M3 Internal 3.5" 1.44 MB Floppy Drives shown as "A" and "B".
-- Here we have booted to MS-DOS installed on a floppy disk in Drive A:.
+- Here we have booted to DOS installed on a floppy disk in Drive A:.
 
 <img src="../images/os001_BIOS_001.jpg"/>
 
