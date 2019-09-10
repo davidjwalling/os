@@ -10,13 +10,15 @@
 
 	OS is a series of subprojects that introduce and demonstrate design and coding concepts.
 	Additional subprojects may be added from time to time as the project develops.
+	
+	Click on the subproject name below for detailed notes.
 
-#### Part I. Boot to Protected Mode
-
-[os.001](docs/OS001.md)		A simple boot sector that displays a message.
-os.002]		A boot sector that loads and runs a program that displays a message.
-os.003]		Creates `osprep.com`, a utility to write the boot sector to a diskette.
-os.004]		Expands the loader to enter protected mode and start a task.
+<table width="100%">
+<tr width="100%"><td><span><a href="docs/OS001.md">os.001</a></span></td><td>A simple boot sector that displays a message and waits for a key-press</td></tr>
+<tr><td><span><a href="docs/OS002.md">os.002</a></span></td><td>A boot sector that loads and runs a program that displays a message and waits for a key</td></tr>
+<tr><td><span><a href="docs/OS003.md">os.003</a></span></td><td>Creates the osprep.com utility that writes the boot sector to a diskette</td></tr>
+<tr><td><span><a href="docs/OS004.md">os.004</a></span></td><td>Expands the loader to enter protected mode and start a task</td></tr>
+</table>
 
 #### Part II. Interrupts, Messages and Commands
 
