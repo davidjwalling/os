@@ -1,14 +1,14 @@
 ### OS Target Platform Example
 The program samples presented here were tested using the following physical components. Other x86 PC-Compatible components my be substituted.
 ### Components
-- Intel:registered: Pentium :registered: MMX 233 MHz Processor Part# BP80503233 (SL293) 2.8V
+- Intel:registered: Pentium:registered: MMX 233 MHz Processor Part# BP80503233 (SL293) 2.8V
 - Intel:registered: 555A Rev 3.2 Socket 7 Motherboard
 - 64MB EDO DRAM
 - Mitsumi D359M3 Internal 3.5" 1.44 MB Floppy Drive
 - Number Nine #9FX Motion 771 SVGA
 - Dell:registered: U2412M 24 inch LCD monitor
 - Dell:registered: RT7D20 104-Key Standard US Layout Windows Keyboard via PS/2 to 5-pin DIN adapter.
-### Intel:registered: Pentium® MMX 233 MHz Processor Part# BP80503233 (SL293) 2.8V
+### Intel:registered: Pentium:registered: MMX 233 MHz Processor Part# BP80503233 (SL293) 2.8V
 <img src="../images/os001_Pentium_001.jpg"/>
 
 ### Intel:registered: 555A Rev 3.2 Socket 7 Motherboard
