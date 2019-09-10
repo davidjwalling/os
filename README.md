@@ -1,6 +1,6 @@
 ### OS
 
-Copyright  2010-2019 David J. Walling. MIT License.
+Copyright (C) 2010-2019 David J. Walling. MIT License.
 
 - A simple operating system for x86-based PC-compatible systems.
 - A series of subprojects that demonstrate design and coding concepts.
