@@ -1,9 +1,11 @@
 ### OS
 
-	OS demonstrates assembly-language programming, hardware I/O techniques and standard protocol implementations in the form of a rudimentary operating system for x86-based PC-compatible systems.
-	OS is provided as a learning resource. All code is intended to be fully-functional.
 	Copyright (C) 2010-2019 David J. Walling. MIT License.
 
+	OS demonstrates assembly-language programming, hardware I/O techniques and standard protocol
+	implementations in the form of a rudimentary operating system for x86-based PC-compatible systems.
+	OS is provided as a learning resource. All code is intended to be fully-functional.
+	
 ### Subprojects
 
 	OS is a series of subprojects that introduce and demonstrate design and coding concepts.
