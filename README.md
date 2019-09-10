@@ -2,10 +2,10 @@
 
 Copyright (C) 2010-2019 David J. Walling. MIT License.
 
-- A rudimentary operating system for x86-based PC-compatible systems.
-- A series of subprojects that introduce and demonstrate design and coding concepts.
-- Demonstrates assembly-language programming, hardware I/O techniques and protocol implemenation.
-- Provided as a learning resource. All code is intended to be fully-functional.
+- A simple operating system for x86-based PC-compatible systems.
+- A series of subprojects that demonstrate design and coding concepts.
+- Assembly-language, hardware I/O and protocol examples.
+- Fully-functional code as a learning resource.
 
 Click on the subproject name below for details.
 
@@ -34,9 +34,9 @@ Click on the subproject name below for details.
 
 ### Assembly
 
-- OS is assembled on this site using NASM (Netwide Asssembler) version 2.14.02.
-- The make.bat file is provided to assemble and link on Windows using NASM and ALINK.
-- The Makefile file is provided to assemple and link on Linux using NASM and ld.
+- Samples assembled using NASM (Netwide Asssembler) version 2.14.02.
+- make.bat assembles and links on Windows using NASM and ALINK.
+- Makefile assembles and links on Linux using NASM and ld.
 
 ### Directives
 
