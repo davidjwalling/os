@@ -1,55 +1,50 @@
-## OS
+### OS
 
-	Copyright (C) 2010-2019 David J. Walling
+	OS demonstrates assembly-language programming, hardware I/O techniques and standard protocol implementations in the form of a rudimentary operating system for x86-based PC-compatible systems.
+	OS is provided as a learning resource. All code is intended to be fully-functional.
+	Copyright (C) 2010-2019 David J. Walling. MIT License.
 
-## Synopsis
+### Subprojects
 
-OS demonstrates assembly-language programming, hardware I/O techniques and standard protocol implementations in the form of a rudimentary operating system for x86-based PC-compatible systems.
+	OS is a series of subprojects that introduce and demonstrate design and coding concepts.
+	Additional subprojects may be added from time to time as the project develops.
 
-## Motivation
+#### Part I. Boot to Protected Mode
 
-OS is provided as a learning resource. All code is intended to be fully-functional.
+[os.001](docs/OS001.md)	A simple boot sector that displays a message.
+os.002]		A boot sector that loads and runs a program that displays a message.
+os.003]		Creates `osprep.com`, a utility to write the boot sector to a diskette.
+os.004]		Expands the loader to enter protected mode and start a task.
 
-## Subprojects
+#### Part II. Interrupts, Messages and Commands
 
-OS is presented in a progressive series of subprojects that incrementally introduce and demonstrate concepts. Additional subprojects may be added from time to time as the project progresses.
+os.005		Add keyboard interrupt handler to display characters and shift status in information area.
+os.006		Add a message queue handler to send keyboard messages to a task.
+os.007		Add support for "shutdown", "quit" and "exit" commands.
+os.008		Add an "int6" command to demonstrate CPU interrupt handling.
 
-### Part I. Boot to Protected Mode
+#### Part III. Memory and Clock
 
-[os.001](docs/OS001.md)	A simple boot sector that displays a message.  
-os.002]		A boot sector that loads and runs a program that displays a message.  
-os.003]		Creates `osprep.com`, a utility to write the boot sector to a diskette.  
-os.004]		Expands the loader to enter protected mode and start a task.  
+os.009		Add "mem" and "memory" commands to display memory and "main" to return to the main panel.
+os.010		Add simple memory allocation and deallocation routines and "malloc" and "free" test routines.
+os.011		Add memory-size reporting from BIOS and Real-Time Clock (RTC) chip.
+os.012		Add "date", "time" and related commands with RTC chip support.
 
-### Part II. Interrupts, Messages and Commands
+#### Part IV. Network Adapter, Part I
 
-os.005		Add keyboard interrupt handler to display characters and shift status in information area.  
-os.006		Add a message queue handler to send keyboard messages to a task.  
-os.007		Add support for "shutdown", "quit" and "exit" commands.  
-os.008		Add an "int6" command to demonstrate CPU interrupt handling.  
+os.013		Add logic to probe for and list PCI devices using the "pciprobe" or "lspci" commands.
+os.014		Add code to display ethernet adapter memory i/o address and i/o port.
+os.015		Add code to initialize and reset discovered PCI network adapter.
+os.016		Add code to receive an Ethernet frame.
 
-### Part III. Memory and Clock
+#### Part V. Tasks
 
-os.009		Add "mem" and "memory" commands to display memory and "main" to return to the main panel.  
-os.010		Add simple memory allocation and deallocation routines and "malloc" and "free" test routines.  
-os.011		Add memory-size reporting from BIOS and Real-Time Clock (RTC) chip.  
-os.012		Add "date", "time" and related commands with RTC chip support.  
+os.017		Add a second task manually and IRQ0-driven task switching.
+os.018		Add support to load a task from disk.
+os.019		Add commands to start, stop and list tasks.
+os.020		Add code to configure tasks to run on start-up.
 
-### Part IV. Network Adapter, Part I
-
-os.013		Add logic to probe for and list PCI devices using the "pciprobe" or "lspci" commands.  
-os.014		Add code to display ethernet adapter memory i/o address and i/o port.  
-os.015		Add code to initialize and reset discovered PCI network adapter.  
-os.016		Add code to receive an Ethernet frame.  
-
-### Part V. Tasks
-
-os.017		Add a second task manually and IRQ0-driven task switching.  
-os.018		Add support to load a task from disk.  
-os.019		Add commands to start, stop and list tasks.  
-os.020		Add code to configure tasks to run on start-up.  
-
-## Assembly
+### Assembly
 
 Assembling the source code requires NASM (the Netwide Assembler) or a compatible assembler.
 
@@ -70,7 +65,7 @@ Assembly Directives:
 	BUILDCOM	Create os.com, the operating system kernel program.
 	BUILDPREP	Create osprep.com, a utility to write the boot sector to a diskette.
 
-## Installation
+### Installation
 
 The project's make file produces the following output:
 
@@ -108,11 +103,7 @@ Network Support:
 	installations may select this adapter type in the network configuration of the VM. Configure this VM network
 	adapter using bridged networking to access the host system's network.
 
-## Contributors
+### Contributors
 
 	David J. Walling		Email:		david@davidjwalling.com
 					Twitter:	@davidjwalling
-
-## License
-
-	OS is licensed under the terms of the MIT License.
