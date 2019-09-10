@@ -13,7 +13,7 @@
 
 #### Part I. Boot to Protected Mode
 
-[os.001](docs/OS001.md)	A simple boot sector that displays a message.
+[os.001](docs/OS001.md)		A simple boot sector that displays a message.
 os.002]		A boot sector that loads and runs a program that displays a message.
 os.003]		Creates `osprep.com`, a utility to write the boot sector to a diskette.
 os.004]		Expands the loader to enter protected mode and start a task.
