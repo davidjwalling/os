@@ -1,11 +1,13 @@
 ### OS
 
-Copyright (C) 2010-2019 David J. Walling. MIT License.
+Copyright :copyright: 2010-2019 David J. Walling. MIT License.
 
 - A simple operating system for x86-based PC-compatible systems.
 - A series of subprojects that demonstrate design and coding concepts.
 - Assembly-language, hardware I/O and protocol examples.
 - Fully-functional code as a learning resource.
+
+<span><i>No Windows. No Linux. No Mac. No "Management Engine". No Problem.</i></span>
 
 Click on the subproject name below for details.
 

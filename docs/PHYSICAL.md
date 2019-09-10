@@ -1,4 +1,5 @@
-### OS Target Platform
+### OS Target Platform Example
+The program samples presented here were tested using the following physical components. Other x86 PC-Compatible components my be substituted.
 ### Components
 - Intel® Pentium® MMX 233 MHz Processor Part# BP80503233 (SL293) 2.8V
 - Intel® 555A Rev 3.2 Socket 7 Motherboard
