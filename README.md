@@ -68,7 +68,7 @@ Click on the subproject name below for details.
 
 ### Network Support:
 
-- OS includes native support for the Intel(R) PRO/1000 MT Desktop (82540EM) network adapter.
+- OS includes native support for the Intel :registered: PRO/1000 MT Desktop (82540EM) network adapter.
 - Virtual machine installations may select this adapter type in the network configuration of the VM.
 - Configure this VM network adapter using bridged networking to access the host system's network.
 
