@@ -18,7 +18,7 @@ The program samples presented here were tested using the following physical comp
 ### 64MB EDO DRAM
 <img src="../images/os001_64MB_EDO_DRAM_001.jpg"/>
 
-### Mitsumi D359M3 Internal 3.5" 1.44 MB Floppy Drive
+### Mitsumi D359M3 Internal 3.5" 1.44 MB Floppy Drive x 2
 <img src="../images/os001_MitsumiD359M3_Front_001.jpg"/><br>
 <img src="../images/os001_MitsumiD359M3_Back_001.jpg"/>
 
@@ -29,9 +29,6 @@ The program samples presented here were tested using the following physical comp
 <img src="../images/os001_DellMonitor_U2412M_001.jpg"/>
 
 ### BIOS Boot to MS-DOS
-- We have two installed Mitsumi D359M3 Internal 3.5" 1.44 MB Floppy Drives shown as "A" and "B".
-- Here we have booted to DOS installed on a floppy disk in Drive A:.
-
 <img src="../images/os001_BIOS_001.jpg"/>
 
 ### Sabrent N533 External Floppy Disk Drive
