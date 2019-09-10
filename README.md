@@ -2,13 +2,12 @@
 
 Copyright (C) 2010-2019 David J. Walling. MIT License.
 
-- OS demonstrates assembly-language programming, hardware I/O techniques and protocol implemenation.
-- OS is a rudimentary operating system for x86-based PC-compatible systems.
-- OS is provided as a learning resource. All code is intended to be fully-functional.
-- OS is a series of subprojects that introduce and demonstrate design and coding concepts.
-- Additional subprojects may be added from time to time as the project develops.
+- A rudimentary operating system for x86-based PC-compatible systems.
+- A series of subprojects that introduce and demonstrate design and coding concepts.
+- Demonstrates assembly-language programming, hardware I/O techniques and protocol implemenation.
+- Provided as a learning resource. All code is intended to be fully-functional.
 
-Click on the subproject name below for detailed notes.
+Click on the subproject name below for details.
 
 <table>
 <tr><td><a href="docs/OS001.md">os.001</a></td><td>A boot sector that displays a message and waits for a key-press</td></tr>
@@ -60,8 +59,8 @@ Click on the subproject name below for detailed notes.
 ### Installation
 
 <table cols=3>
-<tr><td colspan=2>Virtual</td><td>Configure a virtual machine instance to boot from a floppy drive disk image and select the os.dsk file as the disk image for Floppy Device 0. Select a base memory minimum setting of 4MB or higher.</td></tr>
-<tr><td>Physical</td><td>A</td><td>Transfer os.dat, os.com and osprep.com to a host system configured with a physical floppy drive and DOS. Execute the osprep.com to copy os.dat to the diskette. Copy os.com to the the diskette. Boot the system with the floppy disk inserted in Drive A:.</td></tr>
+<tr><td colspan=2><a href="docs/VIRTUAL.md">Virtual</a></td><td>Configure a virtual machine instance to boot from a floppy drive disk image and select the os.dsk file as the disk image for Floppy Device 0. Select a base memory minimum setting of 4MB or higher.</td></tr>
+<tr><td><a href="docs/PHYSICAL.md">Physical</a></td><td>A</td><td>Transfer os.dat, os.com and osprep.com to a host system configured with a physical floppy drive and DOS. Execute the osprep.com to copy os.dat to the diskette. Copy os.com to the the diskette. Boot the system with the floppy disk inserted in Drive A:.</td></tr>
 <tr><td></td><td>B</td><td>Using an alternate disk utility, transfer the entirety of os.dsk to the physical floppy disk, or copy only os.dat to the boot sector. Copy os.com to the diskette. Boot the system with the floppy disk inserted in Drive A:.</td></tr>
 </table>
 
@@ -74,6 +73,5 @@ Click on the subproject name below for detailed notes.
 ### Contributors
 
 <table>
-<tr><td>David J. Walling</td><td>Email: david@davidjwalling.com</td></tr>
-<tr><td></td><td>Twitter: @davidjwalling</td></tr>
+<tr><td>David J. Walling</td><td>Email: david@davidjwalling.com</td><td>Twitter: @davidjwalling</td></tr>
 </table>
