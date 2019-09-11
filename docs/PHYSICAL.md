@@ -25,11 +25,11 @@ The program samples presented here were tested using the following physical comp
 ### Number Nine #9FX Motion 771 SVGA
 <img src="../images/os001_NumberNine_9FX_Motion771_001.jpg"/>
 
-### Dell:registered: U2412M 24 inch LCD monitor with Dell:registered: RT7D20 104-Key Standard US Layout Windows Keyboard via PS/2 to 5-pin DIN adapter (not shown).
+### Dell:registered: U2412M 24 inch LCD monitor  Dell:registered: RT7D20 104-Key Standard US Layout Windows Keyboard  via PS/2 to 5-pin DIN adapter
 <img src="../images/os001_DellMonitor_U2412M_001.jpg"/>
 
-### BIOS Boot to MS-DOS
-<img src="../images/os001_BIOS_001.jpg"/>
+### BIOS Boot with no Media
+<img src="../images/os001_BIOS_002.jpg"/>
 
 ### Sabrent N533 External Floppy Disk Drive
 <img src="../images/os001_SabrentN533_001.jpg"/>
@@ -38,6 +38,7 @@ The program samples presented here were tested using the following physical comp
 <img src="../images/os001_WindowsExplorer_FloppyDiskProperties_001.PNG"/>
 
 ### HxD Hex Editor - About
+- Start the HxD Hex Editor program as Administrator.
 <img src="../images/os001_HxD_001_About.PNG"/>
 
 ### HxD Hex Editor - Open Device

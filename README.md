@@ -72,6 +72,10 @@ Click on the subproject name below for details.
 - Virtual machine installations may select this adapter type in the network configuration of the VM.
 - Configure this VM network adapter using bridged networking to access the host system's network.
 
+### Operation
+
+[Operating System Commands](docs/COMMANDS.md)
+
 ### Contributors
 
 <table>
