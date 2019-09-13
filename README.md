@@ -15,6 +15,8 @@ Click on the subproject name below for details.
 <tr><td><a href="docs/OS002.md">os.002</a></td><td>A boot sector that loads and runs a program that displays a message and waits for a key</td></tr>
 <tr><td><a href="docs/OS003.md">os.003</a></td><td>Create the osprep.com utility that writes the boot sector to a diskette</td></tr>
 <tr><td><a href="docs/OS004.md">os.004</a></td><td>Expand the loader to enter protected mode and start a task</td></tr>
+<tr><td><a href="docs/OS005.md">os.005</a></td><td>Add a panel definition to the console task main screen</td></tr>
+<!--
 <tr><td><a href="docs/OS005.md">os.005</a></td><td>Add a keyboard interrupt handler to display characters and shift-key status</td></tr>
 <tr><td><a href="docs/OS006.md">os.006</a></td><td>Add a message queue to route keyboard events to a task</td></tr>
 <tr><td><a href="docs/OS007.md">os.007</a></td><td>Interpret "exit", "quit" and "shutdown" as commands</td></tr>
@@ -31,6 +33,7 @@ Click on the subproject name below for details.
 <tr><td><a href="docs/OS018.md">os.018</a></td><td>Load and run a task (program) from disk</td></tr>
 <tr><td><a href="docs/OS019.md">os.019</a></td><td>Start, stop and list tasks</td></tr>
 <tr><td><a href="docs/OS020.md">os.020</a></td><td>Configure tasks to run at start-up</td></tr>
+-->
 </table>
 
 ### Assembly
