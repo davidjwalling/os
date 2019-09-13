@@ -2,10 +2,10 @@
 ;
 ;       File:           os.asm
 ;
-;       Project:        os.004
+;       Project:        os.005
 ;
-;       Description:    This sample program extends the loader to validate the CPU type and place the CPU into
-;                       protected mode.
+;       Description:    In this sample, the kernel is expanded to include a keyboard interupt handler. This handler
+;                       updates data visible on the console in an operator information area.
 ;
 ;       Revised:        2 September 2019
 ;
@@ -135,6 +135,7 @@
 ;
 ;       Hardware-Defined Values
 ;
+;       ECRT...         6845 Cathode Ray Tube (CRT) Controller values
 ;       EFDC...         NEC 765 Floppy Disk Controller (FDC) values
 ;       EKEYB...        8042 or "PS/2 Controller" (Keyboard Controller) values
 ;       EPIC...         8259 Programmable Interrupt Controller (PIC) values
@@ -152,7 +153,9 @@
 ;       Operating System Values
 ;
 ;       EBOOT...        Boot sector and loader values
+;       ECON...         Console values (dimensions and attributes)
 ;       EGDT...         Global Descriptor Table (GDT) selector values
+;       EKEYF...        Keyboard status flags
 ;       EKRN...         Kernel values (fixed locations and sizes)
 ;
 ;=======================================================================================================================
@@ -161,6 +164,18 @@
 ;       Hardware-Defined Values
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       6845 Cathode Ray Tube (CRT) Controller                                  ECRT...
+;
+;       The Motorola 6845 CRT Controller (CRTC) is a programmable controller
+;       for CGA, EGA, VGA and compatible video modes.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ECRTPORTHI              equ     003h                                            ;controller port hi
+ECRTPORTLO              equ     0D4h                                            ;controller port lo
+ECRTCURLOCHI            equ     00Eh                                            ;cursor loc reg hi
+ECRTCURLOCLO            equ     00Fh                                            ;cursor loc reg lo
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       NEC 765 Floppy Disk Controller (FDC)                                    EFDC...
@@ -181,8 +196,58 @@ EFDCMOTOROFF            equ     00Ch                                            
 ;       device. It also signals a hardware interrupt to the CPU when the low-order bit of I/O port 64h is set to zero.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+EKEYBPORTDATA           equ     060h                                            ;data port
 EKEYBPORTSTAT           equ     064h                                            ;status port
 EKEYBCMDRESET           equ     0FEh                                            ;reset bit 0 to restart system
+EKEYBBITOUT             equ     001h                                            ;output buffer status bit
+EKEYBBITIN              equ     002h                                            ;input buffer status bit
+EKEYBCMDLAMPS           equ     0EDh                                            ;set/reset lamps command
+EKEYBWAITLOOP           equ     010000h                                         ;wait loop
+                                                                                ;---------------------------------------
+                                                                                ;       Keyboard Scan Codes
+                                                                                ;---------------------------------------
+EKEYBBACKSPACE          equ     00Eh                                            ;backspace down
+EKEYBTABDOWN            equ     00Fh                                            ;tab down
+EKEYBENTERDOWN          equ     01Ch                                            ;enter down
+EKEYBCTRLLDOWN          equ     01Dh                                            ;control down
+EKEYBSHIFTLDOWN         equ     02Ah                                            ;left shift down
+EKEYBSHIFTRDOWN         equ     036h                                            ;right shift down
+EKEYBALTLDOWN           equ     038h                                            ;alt down
+EKEYBCAPSDOWN           equ     03Ah                                            ;caps-lock down
+EKEYBNUMDOWN            equ     045h                                            ;num-lock down
+EKEYBSCROLLDOWN         equ     046h                                            ;scroll-lock down
+EKEYBPAD7DOWN           equ     047h                                            ;keypad-7 down
+EKEYBPADINSERTDOWN      equ     052h                                            ;keypad-insert down
+EKEYBPADDELETEDOWN      equ     053h                                            ;keypad-delete down
+EKEYBWINLDOWN           equ     05Bh                                            ;left windows (R) down
+EKEYBWINRDOWN           equ     05Ch                                            ;right windows (R) down
+EKEYBCLICKRDOWN         equ     05Dh                                            ;right-click down
+EKEYBPAUSEBREAKDOWN     equ     065h                                            ;pause-break key down
+EKEYBUPARROWDOWN        equ     068h                                            ;up-arrow down (e0 48)
+EKEYBLEFTARROWDOWN      equ     06Bh                                            ;left-arrow down (e0 4b)
+EKEYBRIGHTARROWDOWN     equ     06Dh                                            ;right-arrow down (e0 4d)
+EKEYBDOWNARROWDOWN      equ     070h                                            ;down-arrow down (e0 50)
+EKEYBINSERTDOWN         equ     072h                                            ;insert down (e0 52)
+EKEYBDELETEDOWN         equ     073h                                            ;delete down (e0 53)
+EKEYBPADSLASHDOWN       equ     075h                                            ;keypad slash down
+EKEYBALTRDOWN           equ     078h                                            ;right-alt down
+EKEYBPADENTERDOWN       equ     07Ch                                            ;keypad-enter down
+EKEYBCTRLRDOWN          equ     07Dh                                            ;right-control key down
+EKEYBMAKECODEMASK       equ     07Fh                                            ;make code mask
+EKEYBUP                 equ     080h                                            ;up
+EKEYBCTRLLUP            equ     09Dh                                            ;control key up
+EKEYBSHIFTLUP           equ     0AAh                                            ;left shift key up
+EKEYBSHIFTRUP           equ     0B6h                                            ;right shift key up
+EKEYBPADASTERISKUP      equ     0B7h                                            ;keypad asterisk up
+EKEYBALTLUP             equ     0B8h                                            ;left alt key up
+EKEYBWINLUP             equ     0DBh                                            ;left windows (R) up
+EKEYBWINRUP             equ     0DCh                                            ;right windows (R) up
+EKEYBCLICKRUP           equ     0DDh                                            ;right-click up
+EKEYBCODEEXT0           equ     0E0h                                            ;extended scan code 0
+EKEYBCODEEXT1           equ     0E1h                                            ;extended scan code 1
+EKEYBALTRUP             equ     0F8h                                            ;right-alt up
+KEYBPADENTERUP          equ     0FCh                                            ;keypad-enter up
+EKEYBCTRLRUP            equ     0FDh                                            ;left-control up
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       8259 Peripheral Interrupt Controller                                    EPIC...
@@ -271,6 +336,19 @@ EBIOSFNKEYSTATUS        equ     001h                                            
 ;-----------------------------------------------------------------------------------------------------------------------
 EASCIIRETURN            equ     00Dh                                            ;carriage return
 EASCIIESCAPE            equ     01Bh                                            ;escape
+EASCIISPACE             equ     020h                                            ;space
+EASCIISLASH             equ     02Fh                                            ;slash
+EASCIIZERO              equ     030h                                            ;zero
+EASCIININE              equ     039h                                            ;nine
+EASCIIUPPERA            equ     041h                                            ;'A'
+EASCIIUPPERZ            equ     05Ah                                            ;'Z'
+EASCIICARET             equ     05Eh                                            ;'^'
+EASCIILOWERA            equ     061h                                            ;'a'
+EASCIILOWERZ            equ     07Ah                                            ;'z'
+EASCIITILDE             equ     07Eh                                            ;'~'
+EASCIIDELETE            equ     07Fh                                            ;del
+EASCIICASE              equ     00100000b                                       ;case bit
+EASCIICASEMASK          equ     11011111b                                       ;case mask
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Operating System Values
@@ -292,15 +370,44 @@ EBOOTDISKBYTES          equ     (EBOOTSECTORBYTES*EBOOTDISKSECTORS)             
 EBOOTFATBASE            equ     (EBOOTSTACKTOP+EBOOTSECTORBYTES)                ;offset of FAT I/O buffer rel to DS
 EBOOTMAXTRIES           equ     5                                               ;max read retries
 ;-----------------------------------------------------------------------------------------------------------------------
+;       Console Constants                                                       ECON...
+;-----------------------------------------------------------------------------------------------------------------------
+ECONCOLS                equ     80                                              ;columns per row
+ECONROWS                equ     24                                              ;console rows
+ECONOIAROW              equ     24                                              ;operator information area row
+ECONCOLBYTES            equ     2                                               ;bytes per column
+ECONROWBYTES            equ     (ECONCOLS*ECONCOLBYTES)                         ;bytes per row
+ECONROWDWORDS           equ     (ECONROWBYTES/4)                                ;double-words per row
+ECONCLEARDWORD          equ     007200720h                                      ;attribute and ASCII space
+ECONOIADWORD            equ     070207020h                                      ;attribute and ASCII space
+;-----------------------------------------------------------------------------------------------------------------------
 ;       Global Descriptor Table (GDT) Selectors                                 EGDT...
 ;-----------------------------------------------------------------------------------------------------------------------
 EGDTOSDATA              equ     018h                                            ;kernel data selector
+EGDTCGA                 equ     020h                                            ;cga video selector
 EGDTLOADERCODE          equ     030h                                            ;loader code selector
 EGDTOSCODE              equ     048h                                            ;os kernel code selector
 EGDTLOADERLDT           equ     050h                                            ;loader local descriptor table selector
 EGDTLOADERTSS           equ     058h                                            ;loader task state segment selector
 EGDTCONSOLELDT          equ     060h                                            ;console local descriptor table selector
 EGDTCONSOLETSS          equ     068h                                            ;console task state segment selector
+;-----------------------------------------------------------------------------------------------------------------------
+;       Keyboard Flags                                                          EKEYF...
+;-----------------------------------------------------------------------------------------------------------------------
+EKEYFCTRLLEFT           equ     00000001b                                       ;left control
+EKEYFSHIFTLEFT          equ     00000010b                                       ;left shift
+EKEYFALTLEFT            equ     00000100b                                       ;left alt
+EKEYFCTRLRIGHT          equ     00001000b                                       ;right control
+EKEYFSHIFTRIGHT         equ     00010000b                                       ;right shift
+EKEYFSHIFT              equ     00010010b                                       ;left or right shift
+EKEYFALTRIGHT           equ     00100000b                                       ;right alt
+EKEYFWINLEFT            equ     01000000b                                       ;left windows(R)
+EKEYFWINRIGHT           equ     10000000b                                       ;right windows (R)
+EKEYFLOCKSCROLL         equ     00000001b                                       ;scroll-lock flag
+EKEYFLOCKNUM            equ     00000010b                                       ;num-lock flag
+EKEYFLOCKCAPS           equ     00000100b                                       ;cap-lock flag
+EKEYFLOCKINSERT         equ     00001000b                                       ;insert-lock flag
+EKEYFTIMEOUT            equ     10000000b                                       ;controller timeout
 ;-----------------------------------------------------------------------------------------------------------------------
 ;       Kernel Constants                                                        EKRN...
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -313,6 +420,26 @@ EKRNCODESRCADR          equ     0500h                                           
 ;       Structures
 ;
 ;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       KEYBDATA
+;
+;       The KEYBDATA structure holds variables used to handle keyboard events.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+struc                   KEYBDATA
+.scan0                  resb    1                                               ;1st scan code
+.scan1                  resb    1                                               ;2nd scan code
+.scan2                  resb    1                                               ;3rd scan code
+.scan3                  resb    1                                               ;4th scan code
+.scan                   resb    1                                               ;active scan code
+.char                   resb    1                                               ;ASCII character
+.last                   resb    1                                               ;previous scan code
+.shift                  resb    1                                               ;shift flags (shift, ctrl, alt, win)
+.lock                   resb    1                                               ;lock flags (caps, num, scroll, insert)
+.status                 resb    1                                               ;status (timeout)
+EKEYBDATAL              equ     ($-.scan0)                                      ;structure length
+endstruc
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       OSDATA
@@ -423,6 +550,35 @@ wbClockDays             resb    1                                               
                         resb    4                                               ;530 MODE command
                         resb    460                                             ;534 unused
                         resb    256                                             ;700 i/o drivers from io.sys/ibmbio.com
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Kernel Variables                                                        @disk: N/A      @mem: 000800
+;
+;       Kernel variables may be accessed by interrupts or by the initial task (Console).
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ECONDATA                equ     ($)
+                                                                                ;---------------------------------------
+                                                                                ;  panel handling
+                                                                                ;---------------------------------------
+wdConsolePanel          resd    1                                               ;panel definition addr
+wdConsoleField          resd    1                                               ;active field definition addr
+wzConsoleInBuffer       resb    80                                              ;command input buffer
+                                                                                ;---------------------------------------
+                                                                                ;  cursor placement
+                                                                                ;---------------------------------------
+wbConsoleColumn         resb    1                                               ;console column
+wbConsoleRow            resb    1                                               ;console row
+                                                                                ;---------------------------------------
+                                                                                ;  set by keyboard interrupt
+                                                                                ;---------------------------------------
+wsKeybData              resb    EKEYBDATAL                                      ;keyboard data
+ECONDATALEN             equ     ($-ECONDATA)                                    ;size of console data area
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       End of OS Variables
+;
+;-----------------------------------------------------------------------------------------------------------------------
 endstruc
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -441,6 +597,10 @@ _%1                     equ     ($-$$) / EX86DESCLEN
 %endmacro
 %macro                  menter  1
 ?%1                     equ     ($-$$)
+%endmacro
+%macro                  tsvce   1
+e%1                     equ     ($-tsvc)/4
+                        dd      %1
 %endmacro
 %ifdef BUILDBOOT
 ;=======================================================================================================================
@@ -1425,6 +1585,7 @@ section                 idt                                                     
                         mint    coprocessor                                     ;2d IRQD coprocessor
                         mint    fixeddisk                                       ;2e IRQE fixed disk
                         mint    irq15                                           ;2f IRQF (reserved)
+                        mtrap   svc                                             ;30 OS services
                         times   2048-($-$$) db 0h                               ;zero fill to end of section
 ;=======================================================================================================================
 ;
@@ -1763,10 +1924,532 @@ irq0.20                 sti                                                     
 ;
 ;       IRQ1    Keyboard Interrupt
 ;
+;       This handler is called when an IRQ1 hardware interrupt occurs, caused by a keyboard event. The scan-code(s)
+;       corresponding to the keyboard event are read and message events are appended to the message queue. Since this
+;       code is called in response to a hardware interrupt, no task switch occurs. We need to preseve the state of
+;       ALL modified registers upon return.
+;
+;       Make/Break                      Base            Shift           Message
+;                                                                       KEYDOWN         KEYUP           CHAR
+;                                                                       Norm/Shift      Norm/Shift      Norm/Shift
+;                                                                       AX   AX         AX   AX         AX   AX
+;       01/81                           Escape                          011B/011B       811B/811B       011B/011B
+;       02/82                           1               !               0231/0221       8231/8221       0231/0221
+;       03/83                           2               @               0332/0340       8332/8340       0332/0340
+;       04/84                           3               #               0433/0423       8433/8423       0433/0423
+;       05/85                           4               $               0534/0524       8534/8524       0534/0524
+;       06/86                           5               %               0635/0625       8635/8625       0635/0625
+;       07/87                           6               ^               0736/075E       8736/875E       0736/075E
+;       08/88                           7               &               0837/0826       8837/8826       0837/0826
+;       09/89                           8               *               0938/092A       8938/892A       0938/092A
+;       0A/8A                           9               (               0A39/0A28       8A39/8A28       0A39/9A28
+;       0B/8B                           0               )               0B30/0B29       8B30/8B29       0B30/0B29
+;       0C/8C                           -               _               0C2D/0C5F       8C2D/8C5F       0C2D/0C5F
+;       0D/8D                           =               +               0D3D/0D2B       8D3D/8D2B       0D3D/0D2B
+;       0E/8E                           Backspace                       0E08/0E08       8E08/8E08       0E08/0E08
+;       0F/8F                           Tab                             0F09/0F09       8F09/8F09       0F09/0F09
+;       10/90                           q               Q               1071/1051       9071/9051       1071/1051
+;       11/91                           w               W               1177/1157       9177/9157       1177/1157
+;       12/92                           e               E               1265/1245       9265/9245       1265/1245
+;       13/93                           r               R               1372/1352       9372/9352       1371/1352
+;       14/94                           t               T               1474/1454       9474/9454       1474/1454
+;       15/95                           y               Y               1579/1559       9579/9559       1579/1559
+;       16/96                           u               U               1675/1655       9675/9655       1675/1655
+;       17/97                           i               I               1769/1749       9769/9749       1769/1749
+;       18/98                           o               O               186F/184F       986F/984F       186F/184F
+;       19/99                           p               P               1970/1950       9970/9950       1970/1950
+;       1A/9A                           [               {               1A5B/1A7B       9A5B/9A7B       1A58/1A7B
+;       1B/9B                           ]               }               1B5D/1B7D       9B5D/9B7D       1B5D/1B7D
+;       1C/9C                           Enter                           1C00/1C00       9C00/9C00
+;       1D/9D                           Left Ctrl                       1D00/1D00       9D00/9D00
+;       1E/9E                           a               A               1E61/1E41       9E61/9E41       1E61/1E41
+;       1F/9F                           s               S               1F73/1F53       9F73/9F53       1F73/1F53
+;       20/A0                           d               D               2064/2044       A064/A044       2064/2044
+;       21/A1                           f               F               2166/2146       A166/A146       2166/2146
+;       22/A2                           g               G               2267/2247       A267/A247       2267/2247
+;       23/A3                           h               H               2368/2348       A368/A348       2368/2348
+;       24/A4                           j               J               246A/244A       A46A/A44A       246A/244A
+;       25/A5                           k               K               256B/254B       A56B/A54B       256B/254B
+;       26/A6                           l               L               266C/264C       A66C/A64C       266C/264C
+;       27/A7                           ;               :               273B/273A       A73B/A73A       273B/273A
+;       28/A8                           '               "               2827/2822       A827/A822       2827/2822
+;       29/A9                           `               ~               2960/297E       A960/A97E       2960/297E
+;       2A/AA                           Left Shift                      2A00/2A00       AA00/AA00
+;       2B/AB                           \               |               2B5C/2B7C       AB5C/AB7C       2B5C/2B7C
+;       2C/AC                           z               Z               2C7A/2C5A       AC7A/AC5A       2C7A/2C5A
+;       2D/AD                           x               X               2D78/2D58       AD78/AD58       2D78/2D58
+;       2E/AE                           c               C               2E63/2E43       AE63/AE43       2E63/2E43
+;       2F/AF                           v               V               2F76/2F56       AF76/AF56       2F76/2F56
+;       30/B0                           b               B               3062/3042       B062/B042       3062/3042
+;       31/B1                           n               N               316E/314E       B16E/B14E       316E/314E
+;       32/B2                           m               M               326D/324D       B26D/B24D       326D/324D
+;       33/B3                           ,               <               332C/333C       B32C/B33C       332C/333C
+;       34/B4                           .               >               342E/343E       B42E/B43E       342E/343E
+;       35/B5                           /               ?               352F/353F       B52F/B53F       352F/353F
+;       36/B6                           Right Shift                     3600/3600       B600/B600
+;       37/B7                           Keypad *                        372A/372A       B72A/B72A       372A/372A
+;       38/B8                           Left Alt                        3800/3800       B800/B800
+;       39/B9                           Spacebar                        3920/3920       B920/B920       3920/3920
+;       3A/BA                           Caps Lock                       3A00/3A00       BA00/BA00
+;       3B/BB                           F1                              3B00/3B00       BB00/BB00
+;       3C/BC                           F2                              3C00/3C00       BC00/BC00
+;       3D/BD                           F3                              3D00/3D00       BD00/BD00
+;       3E/BE                           F4                              3E00/3E00       BE00/BE00
+;       3F/BF                           F5                              3F00/3F00       BF00/BF00
+;       40/C0                           F6                              4000/4000       C000/C000
+;       41/C1                           F7                              4100/4100       C100/C100
+;       42/C2                           F8                              4200/4200       C200/C200
+;       43/C3                           F9                              4300/4300       C300/C300
+;       44/C4                           F10                             4400/4400       C400/C400
+;       45/C5                           Num-Lock                        4500/4500       C500/C500
+;       46/C6                           Scroll-Lock                     4600/4600       C600/C600
+;       47/C7                           Keypad-7                        4700/4700       C700/C700
+;       47/C7                           Num-Lock Keypad-7               4737/4737       C737/C737       4737/4737
+;       48/C8                           Keypad-8                        4800/4800       C800/C800
+;       48/C8                           Num-Lock Keypad-8               4838/4838       C838/C838       4838/4838
+;       49/C9                           Keypad-9                        4900/4900       C900/C900
+;       49/C9                           Num-Lock Keypad-9               4939/4939       C939/C939       4939/4939
+;       4A/CA                           Keypad-Minus                    4A2D/4A2D       CA2D/CA2D       4A2D/4A2D
+;       4B/CB                           Keypad-4                        4B00/4B00       CB00/CB00
+;       4B/CB                           Num-Lock Keypad-4               4B34/4B34       CB34/CB34       4B34/4B34
+;       4C/CC                           Keypad-5                        4C00/4C00       CC00/CC00
+;       4C/CC                           Num-Lock Keypad-5               4C35/4C35       CC35/CC35       4C35/4C35
+;       4D/CD                           Keypad-6                        4D00/4D00       CD00/CD00
+;       4D/CD                           Num-Lock Keypad-6               4D36/4D36       CD36/CD36       4D36/4D36
+;       4E/CE                           Keypad-Plus                     4E2B/4E2B       CE2B/CE2B       4E2B/4E2B
+;       4F/CF                           Keypad-1                        4F00/4F00       CF00/CF00
+;       4F/CF                           Num-Lock Keypad-1               4F31/4F31       CF31/CF31       4F31/4F31
+;       50/D0                           Keypad-2                        5000/5000       D000/D000
+;       50/D0                           Num-Lock Keypad-2               5032/5032       D032/D032       5032/5032
+;       51/D1                           Keypad-3                        5100/5100       D100/D100
+;       51/D1                           Num-Lock Keypad-3               5133/5133       D133/D133       5133/5133
+;       52/D2                           Keypad-0                        5200/5200       D200/D200
+;       52/D2                           Num-Lock Keypad-0               5230/5230       D230/D230       5230/5230
+;       53/D3                           Keypad-Period                   537F/537F       D37F/D37F       537F/537F
+;       53/D3                           Num-Lock Keypad-Period          532E/532E       D32E/D32E       532E/532E
+;       54/D4                           Alt-PrntScrn                    5400/5400       D400/D400
+;       57/D7                           F11                             5700/5700       D700/D700
+;       58/D8                           F12                             5800/5800       D800/D800
+;
+;       E0 5B/E0 DB                     Left-Windows                    5B00/5B00       DB00/DB00
+;       E0 5C/E0 DC                     Right-Windows                   5C00/5C00       DC00/DC00
+;       E0 5D/E0 DD                     Right-Click                     5D00/5D00       DD00/DD00
+
+;       E1 1D 45/E1 9D C5               Pause-Break                    *6500/6500      *E500/E500
+;       E1 1D 45/E1 9D C5               Shift Pause-Break              *6500/6500      *E500/E500
+;       E1 1D 45/E1 9D C5               Alt Pause-Break                *6500/6500      *E500/E500
+;
+;       E0 46/E0 C6                     Ctrl Pause-Break               *6600/6600      *E600/E600
+;
+;       E0 47/E0 C7                     Home                           *6700/6700      *E700/E700
+;       E0 47/E0 AA                     Num-Lock Home                  *6700/6700      *E700/E700
+;       E0 47/E0 2A                     Left-Shift Home                *6700/6700      *E700/E700
+;       E0 47/E0 36                     Right-Shift Home               *6700/6700      *E700/E700
+;
+;       E0 48/E0 C8                     Up-Arrow                       *6800/6800      *E800/E800
+;       E0 48/E0 AA                     Num-Lock Up-Arrow              *6800/6800      *E800/E800
+;       E0 48/E0 2A                     Left-Shift Up-Arrow            *6800/6800      *E800/E800
+;       E0 48/E0 36                     Right-Shift Up-Arrow           *6800/6800      *E800/E800
+;
+;       E0 49/E0 C9                     Page-Up                        *6900/6900      *E900/E900
+;       E0 49/E0 AA                     Num-Lock Page-Up               *6900/6900      *E900/E900
+;       E0 49/E0 2A                     left-Shift Page-Up             *6900/6900      *E900/E900
+;       E0 49/E0 36                     Right-Shift Page-Up            *6900/6900      *E900/E900
+;
+;       E0 4B/E0 CB                     Left-Arrow                     *6B00/6B00      *EB00/EB00
+;       E0 4B/E0 AA                     Num-Lock Left-Arrow            *6B00/6B00      *EB00/EB00
+;       E0 4B/E0 2A                     Left-Shift Left-Arrow          *6B00/6B00      *EB00/EB00
+;       E0 4B/E0 36                     Right-Shift Left-Arrow         *6B00/6B00      *EB00/EB00
+;
+;       E0 4D/E0 CD                     Right-Arrow                    *6D00/6D00      *ED00/ED00
+;       E0 4D/E0 AA                     Num-Lock Right-Arrow           *6D00/6D00      *ED00/ED00
+;       E0 4D/E0 2A                     Left-Shift Right-Arrow         *6D00/6D00      *ED00/ED00
+;       E0 4D/E0 36                     Right-Shift Right-Arrow        *6D00/6D00      *ED00/ED00
+;
+;       E0 4F/E0 CF                     End                            *6F00/6F00      *EF00/EF00
+;       E0 4F/E0 AA                     Num-Lock End                   *6F00/6F00      *EF00/EF00
+;       E0 4F/E0 2A                     Left-Shift End                 *6F00/6F00      *EF00/EF00
+;       E0 4F/E0 36                     Right-Shift End                *6F00/6F00      *EF00/EF00
+;
+;       E0 50/E0 D0                     Down-Arrow                     *7000/7000      *F000/F000
+;       E0 50/E0 AA                     Num-Lock Down-Arrow            *7000/7000      *F000/F000
+;       E0 50/E0 2A                     Left-Shift Down-Arrow          *7000/7000      *F000/F000
+;       E0 50/E0 36                     Right-Shift Down-Arrow         *7000/7000      *F000/F000
+;
+;       E0 51/E0 D1                     Page-Down                      *7100/7100      *F100/F100
+;       E0 51/E0 AA                     Num-Lock Page-Down             *7100/7100      *F100/F100
+;       E0 51/E0 2A                     Left-Shift Page-Down           *7100/7100      *F100/F100
+;       E0 51/E0 36                     Right-Shift Page-Down          *7100/7100      *F100/F100
+;
+;       E0 52/E0 D2                     Insert                         *7200/7200      *F200/F200
+;       E0 52/E0 AA                     Num-Lock Insert                *7200/7200      *F200/F200
+;       E0 52/E0 2A                     Left-Shift Insert              *7200/7200      *F200/F200
+;       E0 52/E0 36                     Right-Shift Insert             *7200/7200      *F200/F200
+;
+;       E0 53/E0 D3                     Delete                         *737F/737F      *F37F/F37F      *737F/737F
+;       E0 53/E0 AA                     Num-Lock Delete                *737F/737F      *F37F/F37F      *737F/737F
+;       E0 53/E0 2A                     Left-Shift Delete              *737F/737F      *F37F/F37F      *737F/737F
+;       E0 53/E0 36                     Right-Shift Delete             *737F/737F      *F37F/F37F      *737F/737F
+;
+;       E0 35/E0 B5                     Keypad-Slash                   *752F/752F      *F52F/F52F      *752F/752F
+;       E0 35/E0 AA                     Num-Lock Keypad-Slash          *752F/752F      *F52F/F52F      *752F/752F
+;       E0 35/E0 2A                     Left-Shift Keypad-Slash        *752F/752F      *F52F/F52F      *752F/752F
+;       E0 35/E0 36                     Right-Shift Keypad-Slash       *752F/752F      *F52F/F52F      *752F/752F
+;
+;       E0 37/E0 B7 E0 AA               PrntScrn                       *7700/7700      *F700/F700
+;       E0 37/E0 B7 E0 B7               Shift/Ctrl PrntScrn            *7700/7700      *F700/F700
+;
+;       E0 38/E0 B8                     Right Alt                      *7800/7800      *F800/F800
+;       E0 1C/E0 9C                     Keypad Enter                   *7C00/7C00      *FC00/FC00
+;       E0 1D/E0 9D                     Right Ctrl                     *7D00/7D00      *FD00/FD00
+;
+;       *OS Custom Scan Code in Messages
+;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  keyboard                                        ;keyboard interrrupt
-                        push    eax                                             ;
-                        jmp     hwint                                           ;
+                        push    eax                                             ;save non-volatile regs
+                        push    ebx                                             ;
+                        push    ecx                                             ;
+                        push    edx                                             ;
+                        push    esi                                             ;
+                        push    ds                                              ;
+;
+;       End the interrupt.
+;
+                        call    PutPrimaryEndOfInt                              ;send EOI to primary PIC
+;
+;       Reset codes and flags.
+;
+                        push    EGDTOSDATA                                      ;load OS data selector ...
+                        pop     ds                                              ;... into data segment register
+                        mov     esi,wsKeybData                                  ;keyboard data addr
+                        mov     al,[esi+KEYBDATA.scan]                          ;load previous scan code
+                        mov     [esi+KEYBDATA.last],al                          ;... into previous scan code field
+                        xor     al,al                                           ;zero reg
+                        mov     [esi+KEYBDATA.char],al                          ;zero ASCII char code
+                        mov     [esi+KEYBDATA.scan],al                          ;zero ASCII scan code
+                        mov     [esi+KEYBDATA.scan0],al                         ;zero scan code buffer 0
+                        mov     [esi+KEYBDATA.scan1],al                         ;zero scan code buffer 1
+                        mov     [esi+KEYBDATA.scan2],al                         ;zero scan code buffer 2
+                        mov     [esi+KEYBDATA.scan3],al                         ;zero scan code buffer 3
+                        mov     al,EKEYFTIMEOUT                                 ;timeout indicator
+                        not     al                                              ;status flag mask
+                        and     byte [esi+KEYBDATA.status],al                   ;clear timeout indicator
+;
+;       Hold shift and lock settings. Get first scan code. Ignore ACK and NAK from the controller.
+;
+                        mov     bl,[esi+KEYBDATA.shift]                         ;shift flags
+                        mov     bh,[esi+KEYBDATA.lock]                          ;locl flags
+                        call    WaitForKeyOutBuffer                             ;controller timeout?
+                        jz      irq1.timeout                                    ;yes, skip ahead
+                        in      al,EKEYBPORTDATA                                ;read scan code
+                        cmp     al,0FAh                                         ;keyboard ACK?
+                        je      irq1.exit                                       ;yes, branch
+                        cmp     al,0FCh                                         ;keyboard NAK?
+                        je      irq1.exit                                       ;yes, branch
+                        mov     [esi+KEYBDATA.scan0],al                         ;save scan code 0
+;
+;       If the 1st scan code is e1, take the 2nd and 3rd scan code. Use the 3rd scan code.
+;
+                        cmp     al,EKEYBCODEEXT1                                ;extended scan code 1? (e1)
+                        jne     irq1.notext1                                    ;no, branch
+                        call    WaitForKeyOutBuffer                             ;controller timeout?
+                        jz      irq1.timeout                                    ;yes, skip ahead
+                        in      al,EKEYBPORTDATA                                ;read scan code
+                        mov     [esi+KEYBDATA.scan1],al                         ;save scan code 1 (1d)
+                        call    WaitForKeyOutBuffer                             ;controller timeout?
+                        jz      irq1.timeout                                    ;yes, skip ahead
+                        in      al,EKEYBPORTDATA                                ;read scan code
+                        mov     [esi+KEYBDATA.scan2],al                         ;save scan code 2 (45/c5)
+                        movzx   eax,al                                          ;expand scan code to index
+                        mov     al,[cs:tscan2ext+eax]                           ;translate scan code
+                        mov     [esi+KEYBDATA.scan],al                          ;save final scan code
+                        jmp     irq1.putoia                                     ;continue
+;
+;       Handle keyboard read timeout. This should not occur under normal circumstances. Its occurrence suggests an error
+;       in the keyboard scan code handling. An error indicator will be shown in the OIA.
+;
+irq1.timeout            mov     al,EKEYFTIMEOUT                                 ;keyboard controller timeout flag
+                        or      [esi+KEYBDATA.status],al                        ;set controller status
+                        jmp     irq1.putoia                                     ;continue
+;
+;       If the 1st scan code is e0, take the 2nd scan code. If the 2nd scan code is b7 get the 2nd pair.
+;
+irq1.notext1            cmp     al,EKEYBCODEEXT0                                ;extended scan code 0?
+                        jne     irq1.notext0                                    ;no, branch
+                        call    WaitForKeyOutBuffer                             ;controller timeout?
+                        jz      irq1.timeout                                    ;yes, skip ahead
+                        in      al,EKEYBPORTDATA                                ;read scan code
+                        mov     [esi+KEYBDATA.scan1],al                         ;save scan code 1
+                        cmp     al,EKEYBPADASTERISKUP                           ;print-screen (b7)?
+                        jne     irq1.notprntscrn                                ;no, branch.
+;
+;       Get the second pair of scan-codes. Only the Print Screen key should generate a second pair.
+;
+                        call    WaitForKeyOutBuffer                             ;controller timeout?
+                        jz      irq1.timeout                                    ;yes, skip ahead
+                        in      al,EKEYBPORTDATA                                ;read scan code 2
+                        mov     [esi+KEYBDATA.scan2],al                         ;save scan code 2
+                        call    WaitForKeyOutBuffer                             ;controller timeout?
+                        jz      irq1.timeout                                    ;yes, skip ahead
+                        in      al,EKEYBPORTDATA                                ;read scan code 3
+                        mov     [esi+KEYBDATA.scan3],al                         ;save scan code 3
+                        mov     al,0F7h                                         ;print-screen up
+                        mov     [esi+KEYBDATA.scan],al                          ;save final scan code
+                        jmp     irq1.putoia                                     ;continue
+;
+;       Where needed, use the last scan code and resume above.
+;
+irq1.uselastscan        mov     al,[esi+KEYBDATA.last]                          ;previous scan code
+                        or      al,EKEYBUP                                      ;set break bit
+                        mov     [esi+KEYBDATA.scan],al                          ;save as final scan code
+                        jmp     irq1.checkchar                                  ;continue
+;
+;       Some num-lock + extended key combinations return a shift or num-lock make code. Here we need to rely on the
+;       previous scan code to determine what key is in break mode.
+;
+irq1.notprntscrn        cmp     al,EKEYBSHIFTLDOWN                              ;left-shift down (2a)? left-shift
+                        je      irq1.uselastscan                                ;yes, use last scan
+                        cmp     al,EKEYBSHIFTLUP                                ;left-shift up (aa)? num-lock
+                        je      irq1.uselastscan                                ;yes, use last scan
+                        cmp     al,EKEYBSHIFTRDOWN                              ;right-shift down (36)? right-shift
+                        je      irq1.uselastscan
+;
+;       All remaining extended codes can be translated. Additionally, some extended scan codes set or reset shift flags
+;       or toggle locks.
+;
+                        movzx   eax,al                                          ;extend scan code to table index
+                        mov     al,[cs:tscan2ext+eax]                           ;translate to alternate scan code
+                        mov     [esi+KEYBDATA.scan],al                          ;save final scan code
+                        mov     ah,EKEYFCTRLRIGHT                               ;right control flag
+                        cmp     al,EKEYBCTRLRUP                                 ;right control up?
+                        je      irq1.shiftclear                                 ;yes, reset flag
+                        cmp     al,EKEYBCTRLRDOWN                               ;right control down?
+                        je      irq1.shiftset                                   ;yes, set flag
+                        mov     ah,EKEYFALTRIGHT                                ;right alt flag
+                        cmp     al,EKEYBALTRUP                                  ;alt key up code?
+                        je      irq1.shiftclear                                 ;yes, reset flag
+                        cmp     al,EKEYBALTRDOWN                                ;alt key down code?
+                        je      irq1.shiftset                                   ;yes, set flag
+                        mov     ah,EKEYFWINLEFT                                 ;left win flag
+                        cmp     al,EKEYBWINLUP                                  ;left win up?
+                        je      irq1.shiftclear                                 ;yes, reset flag
+                        cmp     al,EKEYBWINLDOWN                                ;left win down?
+                        je      irq1.shiftset                                   ;yes, set flag
+                        mov     ah,EKEYFWINRIGHT                                ;right win flag
+                        cmp     al,EKEYBWINRUP                                  ;right win up?
+                        je      irq1.shiftclear                                 ;yes, reset flag
+                        cmp     al,EKEYBWINRDOWN                                ;right win down?
+                        je      irq1.shiftset                                   ;yes, set flag
+                        mov     ah,EKEYFLOCKINSERT                              ;insert flag
+                        cmp     al,EKEYBINSERTDOWN                              ;translated insert scan code?
+                        je      irq1.locktoggle                                 ;yes, branch
+;
+;       Extended scan codes for Delete and num-pad slash generate ASCII character codes.
+;
+irq1.checkchar          and     al,EKEYBMAKECODEMASK                            ;mask out break bit
+                        mov     dl,EASCIIDELETE                                 ;ASCII delete
+                        cmp     al,EKEYBDELETEDOWN                              ;delete down?
+                        je      irq1.savechar                                   ;yes, branch
+                        mov     dl,EASCIISLASH                                  ;ASCII slash
+                        cmp     al,EKEYBPADSLASHDOWN                            ;keypad-slash down?
+                        jne     irq1.putoia                                     ;continue
+irq1.savechar           mov     [esi+KEYBDATA.char],dl                          ;store ASCII code
+                        jmp     irq1.putoia                                     ;continue
+;
+;       Flip lock toggles if a toggle key (caps-lock, num-lock, scroll-lock, insert)
+;
+irq1.locktoggle         xor     bh,ah                                           ;toggle lock flag
+                        mov     [esi+KEYBDATA.lock],bh                          ;save lock flags
+                        call    SetKeyboardLamps                                ;update keyboard lamps
+                        jmp     irq1.putoia                                     ;update OIA
+;
+;       Set/reset shift flags if a shift key (shift, alt, ctrl, windows)
+;
+irq1.shiftset           or      bl,ah                                           ;set shift flag
+                        jmp     short irq1.shift                                ;skip ahead
+irq1.shiftclear         not     ah                                              ;convert flag to mask
+                        and     bl,ah                                           ;reset shift flag
+irq1.shift              mov     [esi+KEYBDATA.shift],bl                         ;save shift flags
+                        jmp     irq1.putoia                                     ;update OIA
+;
+;       Check for shift and lock keys first. Note: When num-lock is set, holding shift while pressing a num-pad causes
+;       a shift break (aa/b6) to be sent ahead of the num-pad key make code.
+;
+irq1.notext0            mov     [esi+KEYBDATA.scan],al                          ;save final scan code
+                        mov     ah,EKEYFSHIFTLEFT                               ;left shift flag
+                        cmp     al,EKEYBSHIFTLUP                                ;left shift key up code?
+                        je      irq1.shiftclear                                 ;yes, reset flag
+                        cmp     al,EKEYBSHIFTLDOWN                              ;left shift key down code?
+                        je      irq1.shiftset                                   ;yes, set flag
+                        mov     ah,EKEYFSHIFTRIGHT                              ;right shift flag
+                        cmp     al,EKEYBSHIFTRUP                                ;right shift key up code?
+                        je      irq1.shiftclear                                 ;yes, reset flag
+                        cmp     al,EKEYBSHIFTRDOWN                              ;right shift key down code?
+                        je      irq1.shiftset                                   ;yes, set flag
+                        mov     ah,EKEYFCTRLLEFT                                ;left control flag
+                        cmp     al,EKEYBCTRLLUP                                 ;control key up code?
+                        je      irq1.shiftclear                                 ;yes, reset flag
+                        cmp     al,EKEYBCTRLLDOWN                               ;control key down code?
+                        je      irq1.shiftset                                   ;yes, set flag
+                        mov     ah,EKEYFALTLEFT                                 ;left alt flag
+                        cmp     al,EKEYBALTLUP                                  ;alt key up code?
+                        je      irq1.shiftclear                                 ;yes, reset flag
+                        cmp     al,EKEYBALTLDOWN                                ;alt key down code?
+                        je      irq1.shiftset                                   ;yes, set flag
+;
+;       Handle lock keys.
+;
+                        mov     ah,EKEYFLOCKCAPS                                ;caps-lock flag
+                        cmp     al,EKEYBCAPSDOWN                                ;caps-lock key down code?
+                        je      irq1.locktoggle                                 ;yes, toggle lamps and flags
+                        mov     ah,EKEYFLOCKNUM                                 ;num-lock flag
+                        cmp     al,EKEYBNUMDOWN                                 ;num-lock key down code?
+                        je      irq1.locktoggle                                 ;yes, toggle lamps and flags
+                        mov     ah,EKEYFLOCKSCROLL                              ;scroll-lock flag
+                        cmp     al,EKEYBSCROLLDOWN                              ;scroll-lock key down code?
+                        je      irq1.locktoggle                                 ;yes, toggle lamps and flags
+                        test    byte [esi+KEYBDATA.lock],EKEYFLOCKNUM           ;num-lock?
+                        jnz     irq1.translate                                  ;yes, branch
+                        mov     ah,EKEYFLOCKINSERT                              ;insert lock flag
+                        cmp     al,EKEYBPADINSERTDOWN                           ;keypad-insert down?
+                        je      irq1.locktoggle                                 ;yes, toggle lamps and flags
+;
+;       Get base or shifted ASCII char.
+;
+irq1.translate          and     al,EKEYBMAKECODEMASK                            ;make code
+                        movzx   eax,al                                          ;table index
+                        mov     edx,tscan2ascii                                 ;base table
+                        test    byte [esi+KEYBDATA.shift],EKEYFSHIFT            ;left or right shift?
+                        jz      irq1.getchar                                    ;no, branch
+                        mov     edx,tscan2shift                                 ;shift rable
+irq1.getchar            mov     al,[cs:edx+eax]                                 ;ASCII code
+;
+;       Check if caps-lock and alphabetic.
+;
+                        test    byte [esi+KEYBDATA.lock],EKEYFLOCKCAPS          ;caps-lock?
+                        jz      irq1.checknum                                   ;no, branch
+                        cmp     al,EASCIIUPPERA                                 ;caps range (low)
+                        jb      irq1.checknum                                   ;branch if non-alpha
+                        cmp     al,EASCIIUPPERZ                                 ;caps range (high)
+                        jbe     irq1.swapcase                                   ;branch if alpha
+                        cmp     al,EASCIILOWERA                                 ;base range (low)
+                        jb      irq1.checknum                                   ;branch if non-alpha
+                        cmp     al,EASCIILOWERZ                                 ;base range (high)
+                        ja      irq1.checknum                                   ;branch if alpha
+;
+;       If caps-lock is enabled and the ASCII char is alphabetic, swap the ASCII case bit.
+;
+irq1.swapcase           xor     al,020h                                         ;swap case bit
+                        mov     [esi+KEYBDATA.char],al                          ;save ASCII char code
+                        jmp     irq1.putoia                                     ;continue
+;
+;       Check if num-lock and keypad numeral.
+;
+irq1.checknum           test    byte [esi+KEYBDATA.lock],EKEYFLOCKNUM           ;num-lock?
+                        jz      irq1.notnum                                     ;no, branch
+                        mov     dl,[esi+KEYBDATA.scan]                          ;scan code
+                        and     dl,EKEYBMAKECODEMASK                            ;make code
+                        cmp     dl,EKEYBPAD7DOWN                                ;keypad numeral range (low)
+                        jb      irq1.notnum                                     ;branch if non-numeral
+                        cmp     dl,EKEYBPADDELETEDOWN                           ;keypad numeral range (high)
+                        ja      irq1.notnum                                     ;branch if non-numeral
+                        sub     dl,EKEYBPAD7DOWN                                ;lookup table index
+                        movzx   edx,dl                                          ;extend to register
+                        mov     al,[cs:tscankeypad+edx]                         ;translate to numeral equivalent
+irq1.notnum             mov     [esi+KEYBDATA.char],al                          ;save ASCII character code
+;
+;       Update operator information area. Enable maskable ints.
+;
+irq1.putoia             call    PutConsoleOIA                                   ;OIA shift indicators
+irq1.exit               sti                                                     ;enable maskable interrupts
+;
+;       Restore and return.
+;
+                        pop     ds                                              ;restore non-volatile regs
+                        pop     esi                                             ;
+                        pop     edx                                             ;
+                        pop     ecx                                             ;
+                        pop     ebx                                             ;
+                        pop     eax                                             ;
+                        iretd                                                   ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;       Scan-Code to ASCII Translation Tables
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Keypad directional to numeral
+;
+tscankeypad             db      037h,038h,039h,02Dh,034h,035h,036h,02Bh         ;47-4e  789-456+
+                        db      031h,032h,033h,030h,02Eh                        ;4f-53  1230.
+;
+;       Scan Code to Extended Scan Code
+;
+tscan2ext               db      000h,000h,000h,000h,000h,000h,000h,000h         ;00-07
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;08-0f
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;10-17
+                        db      000h,000h,000h,000h,07Ch,07Dh,000h,000h         ;18-1f  1c->7c,1d->7d
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;20-27
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;28-2f
+                        db      000h,000h,000h,000h,000h,075h,000h,077h         ;30-37  35->75,37->77
+                        db      078h,000h,000h,000h,000h,000h,000h,000h         ;38-3f  38->78
+                        db      000h,000h,000h,000h,000h,065h,066h,067h         ;40-47  45->65,46-66,47->67
+                        db      068h,069h,04Ah,06Bh,04Ch,06Dh,04Eh,06Fh         ;48-4f  48->68,49->69,4b->6b,4d->6d,4f->6f
+                        db      070h,071h,072h,073h,000h,000h,000h,000h         ;50-57  50->70,51->71,52->72,53->73
+                        db      000h,000h,000h,05Bh,05Ch,05Dh,000h,000h         ;58-5f  5b->5b,5c->5c,5d->5d
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;60-67
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;68-6f
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;70-77
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;78-7f
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;80-87
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;88-8f
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;90-97
+                        db      000h,000h,000h,000h,0FCh,0FDh,000h,000h         ;98-9f  9c->fc,9d->fd
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;a0-a7
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;a8-af
+                        db      000h,000h,000h,000h,000h,0F5h,000h,0F7h         ;b0-b7  b5->f5,b7->f7
+                        db      0F8h,000h,000h,000h,000h,000h,000h,000h         ;b8-bf  b8->f8
+                        db      000h,000h,000h,000h,000h,0E5h,0E6h,0E7h         ;c0-c7  c5->e5,c6->e6,c7->e7
+                        db      0E8h,0E9h,0CAh,0EBh,0CCh,0EDh,0CEh,0EFh         ;c8-cf  c8->e8,c9->e9,cb->eb,cd->ed,cf->ef
+                        db      0F0h,0F1h,0F2h,0F3h,000h,000h,000h,000h         ;d0-d7  d0->f0,d1->f1,d2->f2,d3->f3
+                        db      000h,000h,000h,0DBh,0DCh,0DDh,0DEh,000h         ;d8-df  db->db,dc->dc,de->de
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;e0-e7
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;e8-ef
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;f0-f7
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;f8-ff
+
+tscan2ascii             db      000h,01Bh,031h,032h,033h,034h,035h,036h         ;00-07
+                        db      037h,038h,039h,030h,02Dh,03Dh,008h,009h         ;08-0f
+                        db      071h,077h,065h,072h,074h,079h,075h,069h         ;10-17
+                        db      06Fh,070h,05Bh,05Dh,000h,000h,061h,073h         ;18-1f
+                        db      064h,066h,067h,068h,06Ah,06Bh,06Ch,03Bh         ;20-27
+                        db      027h,060h,000h,05Ch,07Ah,078h,063h,076h         ;28-2f
+                        db      062h,06Eh,06Dh,02Ch,02Eh,02Fh,000h,02Ah         ;30-37
+                        db      000h,020h,000h,000h,000h,000h,000h,000h         ;38-3f
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;40-47
+                        db      000h,000h,02Dh,000h,000h,000h,02Bh,000h         ;48-4f
+                        db      000h,000h,000h,07Fh,000h,000h,000h,000h         ;50-57
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;58-5f
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;60-67
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;68-6f
+                        db      000h,000h,000h,07Fh,000h,02Fh,000h,000h         ;70-77
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;78-7f
+
+tscan2shift             db      000h,01Bh,021h,040h,023h,024h,025h,05Eh         ;80-87
+                        db      026h,02Ah,028h,029h,05Fh,02Bh,008h,009h         ;88-8f
+                        db      051h,057h,045h,052h,054h,059h,055h,049h         ;90-97
+                        db      04Fh,050h,07Bh,07Dh,000h,000h,041h,053h         ;98-9f
+                        db      044h,046h,047h,048h,04Ah,04Bh,04Ch,03Ah         ;a0-a7
+                        db      022h,07Eh,000h,07Ch,05Ah,058h,043h,056h         ;a8-af
+                        db      042h,04Eh,04Dh,03Ch,03Eh,03Fh,000h,02Ah         ;b0-b7
+                        db      000h,020h,000h,000h,000h,000h,000h,000h         ;b8-bf
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;c0-c7
+                        db      000h,000h,02Dh,000h,000h,000h,02Bh,000h         ;c8-cf
+                        db      000h,000h,000h,07Fh,000h,000h,000h,000h         ;d0-d7
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;d8-df
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;e0-e7
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;e8-ef
+                        db      000h,000h,000h,07Fh,000h,02Fh,000h,000h         ;f0-f7
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;f8-ff
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       IRQ2    Secondary 8259A Cascade Hardware Interrupt
@@ -1900,6 +2583,59 @@ hwint                   call    PutPrimaryEndOfInt                              
 hwint90                 sti                                                     ;enable maskable interrupts
                         pop     eax                                             ;restore modified regs
                         iretd                                                   ;return from interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       INT 30h Operating System Software Service Interrupt
+;
+;       Interrupt 30h is used by our operating system as an entry point for many commonly-used subroutines reusable by
+;       any task. These routines include low-level i/o functions that shield applications from having to handle
+;       device-specific communications. On entry to this interrupt, AL contains a function number that is used to load
+;       the entry address of the specific function from a table.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+                        menter  svc
+                        cmp     al,maxtsvc                                      ;is our function out of range?
+                        jae     svc90                                           ;yes, skip ahead
+                        movzx   eax,al                                          ;function
+                        shl     eax,2                                           ;offset into table
+                        call    dword [cs:tsvc+eax]                             ;far call to indirect address
+svc90                   iretd                                                   ;return from interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Service Request Table
+;
+;
+;       These tsvce macros expand to define an address vector table for the service request interrupt (int 30h).
+;
+;-----------------------------------------------------------------------------------------------------------------------
+tsvc                    tsvce   PlaceCursor                                     ;place the cursor at the current loc
+                        tsvce   PutConsoleOIA                                   ;display the operator information area
+                        tsvce   SetKeyboardLamps                                ;turn keboard LEDs on or off
+                        tsvce   Yield                                           ;yield to system
+maxtsvc                 equ     ($-tsvc)/4                                      ;function out of range
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Service Request Macros
+;
+;       These macros provide positional parameterization of service request calls.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+%macro                  placeCursor 0
+                        mov     al,ePlaceCursor                                 ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putConsoleOIA 0
+                        mov     al,ePutConsoleOIA                               ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  setKeyboardLamps 0
+                        mov     al,eSetKeyboardLamps                            ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  yield 0
+                        mov     al,eYield                                       ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
 ;=======================================================================================================================
 ;
 ;       Kernel Function Library
@@ -1907,14 +2643,307 @@ hwint90                 sti                                                     
 ;=======================================================================================================================
 ;=======================================================================================================================
 ;
+;       Console Helper Routines
+;
+;       PutConsoleHexByte
+;       PutConsoleOIA
+;       Yield
+;
+;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutConsoleHexByte
+;
+;       Description:    This routine writes two ASCII characters to the console representing a byte value.
+;
+;       In:             AL      byte value
+;                       CL      column
+;                       CH      row
+;                       DS      OS data selector
+;                       ES      CGA selector
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutConsoleHexByte       push    eax                                             ;save non-volatile regs
+                        shr     al,4                                            ;hi-order nybble
+                        call    .10                                             ;make ASCII and store
+                        pop     eax                                             ;byte value
+                        and     al,0Fh                                          ;lo-order nybble
+.10                     or      al,EASCIIZERO                                   ;apply ASCII zone
+                        cmp     al,EASCIININE                                   ;numeric?
+                        jbe     .20                                             ;yes, skip ahead
+                        add     al,7                                            ;add ASCII offset for alpha
+.20                     call    SetConsoleChar                                  ;display ASCII character
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutConsoleOIA
+;
+;       Description:    This routine updates the Operator Information Area (OIA).
+;
+;       In:             DS      OS data selector
+;
+;       0         1         2         3         4         5         6         7
+;       01234567890123456789012345678901234567890123456789012345678901234567890123456789
+;       00112233  WSCA  XXAA                    C                         ASCW    ^CNS !
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutConsoleOIA           push    ebx                                             ;save non-volatile regs
+                        push    ecx                                             ;
+                        push    esi                                             ;
+                        push    es                                              ;
+;
+;       Address OS data and video memory
+;
+                        push    EGDTCGA                                         ;load CGA selector ...
+                        pop     es                                              ;... into extra segment register
+;
+;       Display up to six keyboard scan codes
+;
+                        mov     esi,wsKeybData                                  ;keyboard data addr
+                        lea     esi,[esi+KEYBDATA.scan0]                        ;scan code 0
+                        xor     ebx,ebx                                         ;zero register
+                        mov     bh,ECONOIAROW                                   ;OIA row
+                        xor     ecx,ecx                                         ;zero register
+                        mov     cl,4                                            ;maximum scan code count
+.10                     push    ecx                                             ;save remaining count
+                        mov     ecx,ebx                                         ;row, column
+                        lodsb                                                   ;read scan code
+                        test    al,al                                           ;scan code present?
+                        jz      .20                                             ;no, skip ahead
+                        call    PutConsoleHexByte                               ;display scan code
+                        jmp     .30                                             ;continue
+.20                     mov     al,' '                                          ;ASCII space
+                        call    SetConsoleChar                                  ;display space
+                        mov     al,' '                                          ;ASCII space
+                        call    SetConsoleChar                                  ;display space
+.30                     add     bl,2                                            ;next column (+2)
+                        pop     ecx                                             ;restore remaining
+                        loop    .10                                             ;next code
+;
+;       Display left shift, control, alt indicators
+;
+                        mov     esi,wsKeybData                                  ;keyboard data
+                        mov     ch,ECONOIAROW                                   ;OIA row
+                        mov     al,EASCIISPACE                                  ;ASCII space
+                        test    byte [esi+KEYBDATA.shift],EKEYFWINLEFT          ;left-windows?
+                        jz      .35                                             ;no, branch
+                        mov     al,'W'                                          ;yes, indicate with 'W'
+.35                     mov     cl,10                                           ;indicator column
+                        call    SetConsoleChar                                  ;display ASCII indicator
+                        mov     al,EASCIISPACE                                  ;space is default character
+                        test    byte [esi+KEYBDATA.shift],EKEYFSHIFTLEFT        ;left-shift?
+                        jz      .40                                             ;no, skip ahead
+                        mov     al,'S'                                          ;yes, indicate with 'S'
+.40                     mov     cl,11                                           ;indicator column
+                        call    SetConsoleChar                                  ;display ASCII character
+                        mov     al,EASCIISPACE                                  ;ASCII space
+                        test    byte [esi+KEYBDATA.shift],EKEYFCTRLLEFT         ;left-ctrl?
+                        jz      .50                                             ;no, skip ahead
+                        mov     al,'C'                                          ;yes, indicate with 'C'
+.50                     mov     cl,12                                           ;indicator column
+                        call    SetConsoleChar                                  ;display ASCII character
+                        mov     al,EASCIISPACE                                  ;ASCII space
+                        test    byte [esi+KEYBDATA.shift],EKEYFALTLEFT          ;left-alt?
+                        jz      .60                                             ;no, skip ahead
+                        mov     al,'A'                                          ;yes, indicate with 'A'
+.60                     mov     cl,13                                           ;indicator column
+                        call    SetConsoleChar                                  ;display ASCII character
+;
+;       We do not display left or right shift make or break codes even if they are stored as the final
+;       scan code because these are immediately sent after num-pad digits if both num-lock and scroll
+;       are enabled. We don not display the scan code and char code if the scan code is null.
+;
+                        mov     al,[esi+KEYBDATA.scan]                          ;final scan code
+                        test    al,al                                           ;null?
+                        jz      .65                                             ;yes, branch
+                        cmp     al,EKEYBSHIFTLDOWN                              ;left shift make?
+                        je      .65                                             ;yes, branch
+                        cmp     al,EKEYBSHIFTLUP                                ;left shift break?
+                        je      .65                                             ;yes, branch
+                        cmp     al,EKEYBSHIFTRDOWN                              ;right shift make?
+                        je      .65                                             ;yes, branch
+                        cmp     al,EKEYBSHIFTRUP                                ;right shift break?
+                        je      .65                                             ;yes, branch
+;
+;       Display scan code returned in messages.
+;
+                        mov     cl,16                                           ;column
+                        call    PutConsoleHexByte                               ;store hex byte
+                        mov     al,[esi+KEYBDATA.char]                          ;ASCII char
+                        mov     cl,18                                           ;column
+                        call    PutConsoleHexByte                               ;store hex byte
+;
+;       Display ASCII character.
+;
+.65                     mov     al,[esi+KEYBDATA.char]                          ;ASCII char
+                        cmp     al,EASCIISPACE                                  ;printable? (lower-bounds)
+                        jb      .70                                             ;no, skip ahead
+                        cmp     al,EASCIITILDE                                  ;printable? (upper-bounds)
+                        jbe     .80                                             ;yes, branch
+.70                     mov     al,EASCIISPACE                                  ;use space for non-printables
+.80                     mov     ch,bh                                           ;OIA row
+                        mov     cl,40                                           ;character display column
+                        call    SetConsoleChar                                  ;display ASCII character
+;
+;       Display right alt, control, shift indicators
+;
+                        mov     al,EASCIISPACE                                  ;ASCII space
+                        test    byte [esi+KEYBDATA.shift],EKEYFALTRIGHT         ;right-alt?
+                        jz      .90                                             ;no, skip ahead
+                        mov     al,'A'                                          ;yes, indicate with 'A'
+.90                     mov     cl,66                                           ;indicator column
+                        call    SetConsoleChar                                  ;display ASCII character
+                        mov     al,EASCIISPACE                                  ;ASCII space
+                        test    byte [esi+KEYBDATA.shift],EKEYFCTRLRIGHT        ;right-ctrl?
+                        jz      .100                                            ;no, skip ahead
+                        mov     al,'C'                                          ;yes, indicate with 'C'
+.100                    mov     cl,67                                           ;indicator column
+                        call    SetConsoleChar                                  ;display ASCII character
+                        mov     al,EASCIISPACE                                  ;ASCII space
+                        test    byte [esi+KEYBDATA.shift],EKEYFSHIFTRIGHT       ;right-shift
+                        jz      .110                                            ;no, skip ahead
+                        mov     al,'S'                                          ;yes, indicate with 'S'
+.110                    mov     cl,68                                           ;indicator column
+                        call    SetConsoleChar                                  ;display ASCII character
+                        mov     al,EASCIISPACE                                  ;ASCII space
+                        test    byte [esi+KEYBDATA.shift],EKEYFWINRIGHT         ;right-windows?
+                        jz      .115                                            ;no, branch
+                        mov     al,'W'                                          ;yes, indicate wiht 'W'
+.115                    mov     cl,69                                           ;indicator column
+                        call    SetConsoleChar                                  ;display ASCII character
+;
+;       Display Insert, Caps, Scroll and Num-Lock indicators.
+;
+                        mov     al,EASCIISPACE                                  ;ASCII space
+                        test    byte [esi+KEYBDATA.lock],EKEYFLOCKINSERT        ;insert mode?
+                        jz      .120                                            ;no, branch
+                        mov     al,EASCIICARET                                  ;indicate with a caret '^'
+.120                    mov     cl,74                                           ;indicoator column
+                        call    SetConsoleChar                                  ;display ASCII character
+                        mov     al,EASCIISPACE                                  ;ASCII space
+                        test    byte [esi+KEYBDATA.lock],EKEYFLOCKSCROLL        ;scroll-lock?
+                        jz      .130                                            ;no, skip ahead
+                        mov     al,'S'                                          ;yes, indicate with 'S'
+.130                    mov     cl,75                                           ;indicator column
+                        call    SetConsoleChar                                  ;display ASCII character
+                        mov     al,EASCIISPACE                                  ;ASCII space
+                        test    byte [esi+KEYBDATA.lock],EKEYFLOCKNUM           ;num-lock?
+                        jz      .140                                            ;no, skip ahead
+                        mov     al,'N'                                          ;yes, indicate with 'N'
+.140                    mov     cl,76                                           ;indicator column
+                        call    SetConsoleChar                                  ;display ASCII character
+                        mov     al,EASCIISPACE                                  ;ASCII space
+                        test    byte [esi+KEYBDATA.lock],EKEYFLOCKCAPS          ;caps-lock?
+                        jz      .150                                            ;no, skip ahead
+                        mov     al,'C'                                          ;yes, indicate with 'C'
+.150                    mov     cl,77                                           ;indicator column
+                        call    SetConsoleChar                                  ;display ASCII character
+;
+;       Display timeout flag.
+;
+                        mov     al,EASCIISPACE                                  ;ASCII space
+                        test    byte [esi+KEYBDATA.status],EKEYFTIMEOUT         ;keyboard timeout?
+                        jz      .155                                            ;no, branch
+                        mov     al,'!'                                          ;ASCII indicator
+.155                    mov     cl,79                                           ;indicator column
+                        call    SetConsoleChar                                  ;display ASCII character
+;
+;       Restore and return.
+;
+.160                    pop     es                                              ;restore non-volatile regs
+                        pop     esi                                             ;
+                        pop     ecx                                             ;
+                        pop     ebx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        Yield
+;
+;       Description:    This routine passes control to the next ready task or enter halt.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+Yield                   sti                                                     ;enable maskagle interrupts
+                        hlt                                                     ;halt until external interrupt
+                        ret                                                     ;return
+;=======================================================================================================================
+;
+;       Memory-Mapped Video Routines
+;
+;       These routines read and/or write directly to CGA video memory (B800:0)
+;
+;       SetConsoleChar
+;
+;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        SetConsoleChar
+;
+;       Description:    This routine outputs an ASCII character at the given row and column.
+;
+;       In:             AL      ASCII character
+;                       CL      column
+;                       CH      row
+;                       ES      CGA selector
+;
+;       Out:            EAX     last target address written (ES:)
+;                       CL      column + 1
+;
+;-----------------------------------------------------------------------------------------------------------------------
+SetConsoleChar          mov     dl,al                                           ;ASCII character
+                        movzx   eax,ch                                          ;row
+                        mov     ah,ECONCOLS                                     ;cols/row
+                        mul     ah                                              ;row * cols/row
+                        add     al,cl                                           ;add column
+                        adc     ah,0                                            ;handle carry
+                        shl     eax,1                                           ;screen offset
+                        mov     [es:eax],dl                                     ;store character
+                        inc     cl                                              ;next column
+                        ret                                                     ;return
+;=======================================================================================================================
+;
 ;       Input/Output Routines
 ;
 ;       These routines read and/or write directly to ports.
 ;
+;       PlaceCursor
 ;       PutPrimaryEndOfInt
 ;       PutSecondaryEndOfInt
+;       SetKeyboardLamps
+;       WaitForKeyInBuffer
+;       WaitForKeyOutBuffer
 ;
 ;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PlaceCursor
+;
+;       Description:    This routine positions the cursor on the console.
+;
+;       In:             DS      OS data selector
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PlaceCursor             push    ecx                                             ;save non-volatile regs
+                        mov     al,[wbConsoleRow]                               ;AL = row
+                        mov     ah,ECONCOLS                                     ;AH = cols/row
+                        mul     ah                                              ;row offset
+                        add     al,[wbConsoleColumn]                            ;add column
+                        adc     ah,0                                            ;add overflow
+                        mov     ecx,eax                                         ;screen offset
+                        mov     dl,ECRTPORTLO                                   ;crt controller port lo
+                        mov     dh,ECRTPORTHI                                   ;crt controller port hi
+                        mov     al,ECRTCURLOCHI                                 ;crt cursor loc reg hi
+                        out     dx,al                                           ;select register
+                        inc     edx                                             ;data port
+                        mov     al,ch                                           ;hi-order cursor loc
+                        out     dx,al                                           ;store hi-order loc
+                        dec     edx                                             ;register select port
+                        mov     al,ECRTCURLOCLO                                 ;crt cursor loc reg lo
+                        out     dx,al                                           ;select register
+                        inc     edx                                             ;data port
+                        mov     al,cl                                           ;lo-order cursor loc
+                        out     dx,al                                           ;store lo-order loc
+                        pop     ecx                                             ;restore non-volatile regs
+                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        PutPrimaryEndOfInt
@@ -1934,6 +2963,67 @@ PutPrimaryEndOfInt      mov     al,EPICEOI                                      
 ;-----------------------------------------------------------------------------------------------------------------------
 PutSecondaryEndOfInt    mov     al,EPICEOI                                      ;non-specific end-of-interrupt
                         out     EPICPORTSEC,al                                  ;send EOI to secondary PIC
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        SetKeyboardLamps
+;
+;       Description:    This routine sends the set/reset mode indicators command to the keyboard device.
+;
+;       In:             BH      00000CNS (C:Caps Lock,N:Num Lock,S:Scroll Lock)
+;
+;-----------------------------------------------------------------------------------------------------------------------
+SetKeyboardLamps        push    ebx                                             ;save non-volatile regs
+                        push    esi                                             ;
+                        mov     esi,wsKeybData                                  ;keyboard data addr
+                        mov     bh,[esi+KEYBDATA.lock]                          ;lock flags
+                        call    WaitForKeyInBuffer                              ;wait for input buffer ready
+                        mov     al,EKEYBCMDLAMPS                                ;set/reset lamps command
+                        out     EKEYBPORTDATA,al                                ;send command to 8042
+                        call    WaitForKeyOutBuffer                             ;wait for 8042 result
+                        in      al,EKEYBPORTDATA                                ;read 8042 'ACK' (0fah)
+                        call    WaitForKeyInBuffer                              ;wait for input buffer ready
+                        mov     al,bh                                           ;set/reset lamps value
+                        and     al,7                                            ;mask for lamp switches
+                        out     EKEYBPORTDATA,al                                ;send lamps value
+                        call    WaitForKeyOutBuffer                             ;wait for 8042 result
+                        in      al,EKEYBPORTDATA                                ;read 8042 'ACK' (0fah)
+                        pop     esi                                             ;restore non-volatile regs
+                        pop     ebx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        WaitForKeyInBuffer
+;
+;       Description:    This routine waits for keyboard input buffer to be ready for input.
+;
+;       Out:            ZF      1 = Input buffer ready
+;                               0 = Input buffer not ready after timeout
+;
+;-----------------------------------------------------------------------------------------------------------------------
+WaitForKeyInBuffer      push    ecx                                             ;save non-volatile regs
+                        mov     ecx,EKEYBWAITLOOP                               ;keyboard controller timeout
+.10                     in      al,EKEYBPORTSTAT                                ;keyboard status byte
+                        test    al,EKEYBBITIN                                   ;is input buffer still full?
+                        loopnz  .10                                             ;yes, repeat till timeout
+                        pop     ecx                                             ;restore non-volatile regs
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        WaitForKeyOutBuffer
+;
+;       Description:    This routine waits for keyboard output buffer to have data to read.
+;
+;       Out:            ZF      1 = Output buffer has data from controller
+;                               0 = Output buffer empty after timeout
+;
+;-----------------------------------------------------------------------------------------------------------------------
+WaitForKeyOutBuffer     push    ecx                                             ;save non-volatile regs
+                        mov     ecx,EKEYBWAITLOOP                               ;keyboard controller timeout
+.10                     in      al,EKEYBPORTSTAT                                ;keyboard status byte
+                        test    al,EKEYBBITOUT                                  ;output buffer status bit
+                        loopz   .10                                             ;loop until output buffer bit
+                        pop     ecx                                             ;restore non-volatile regs
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -2070,15 +3160,278 @@ section                 conmque                                                 
 ;       Console Task Routines
 ;
 ;       ConCode                 Console task entry point
+;       ConClearPanel           Clear the panel area of video memory to spaces
+;       ConDrawFields           Draw the panel fields to video memory
+;       ConDrawField            Draw a panel field to video memory
+;       ConPutCursor            Place the cursor at the current index into the current field
+;       ConMain                 Handle the main command
 ;
 ;=======================================================================================================================
 section                 concode vstart=05000h                                   ;labels relative to 5000h
 ;
-;       Enter halt loop.
+;       Initialize console work areas to low values.
 ;
-ConCode                 sti                                                     ;enable interrupts
+ConCode                 mov     edi,ECONDATA                                    ;OS console data address
+                        xor     al,al                                           ;initialization value
+                        mov     ecx,ECONDATALEN                                 ;size of OS console data
+                        cld                                                     ;forward strings
+                        rep     stosb                                           ;initialize data
+;
+;       Initialize the Operator Information Area (OIA).
+;
+                        push    es                                              ;save extra segment
+                        push    EGDTCGA                                         ;load CGA video selector...
+                        pop     es                                              ;...into extra segment reg
+                        mov     edi,ECONROWS*ECONROWBYTES                       ;target offset
+                        mov     eax,ECONOIADWORD                                ;OIA attribute and space
+                        mov     ecx,ECONROWDWORDS                               ;double-words per row
+                        rep     stosd                                           ;reset OIA
+                        pop     es                                              ;restore extra segment
+;
+;       Set num-lock and update lamps
+;       Display the initial OIA
+;
+                        or      byte [wsKeybData+KEYBDATA.lock],EKEYFLOCKNUM    ;BIOS boots with num-lock on
+                        setKeyboardLamps
+                        putConsoleOIA
+;
+;       Set the current panel to Main, clear and redraw all fields.
+;
+                        call    ConMain                                         ;initialize panel
+;
+;       Place the cursor at the current field index.
+;
+                        call    ConPutCursor                                    ;place the cursor
+;
+;       Enter halt loop
+;
+.10                     sti                                                     ;enable interrupts
                         hlt                                                     ;halt until interrupt
-                        jmp     ConCode                                         ;continue halt loop
+                        jmp     .10                                             ;continue halt loop
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConClearPanel
+;
+;       Description:    This routine clears the console panel video memory. The panel field buffer values
+;                       are not disturbed.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConClearPanel           push    ecx                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    es                                              ;
+;
+;       Clear panel rows.
+;
+                        push    EGDTCGA                                         ;load CGA video selector...
+                        pop     es                                              ;...into extra segment reg
+                        xor     edi,edi                                         ;target offset
+                        mov     eax,ECONCLEARDWORD                              ;initialization value
+                        mov     ecx,ECONROWS*ECONROWDWORDS                      ;double-words to clear
+                        cld                                                     ;forward strings
+                        rep     stosd                                           ;reset screen body
+;
+;       Restore and return.
+;
+                        pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConDrawFields
+;
+;       Description:    This routine draws the panel fields. If there is no active input field, the first input
+;                       field of the panel is set as the active field.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConDrawFields           push    ebx                                             ;save non-volatile regs
+;
+;       Exit if no panel
+;
+                        mov     ebx,[wdConsolePanel]                            ;panel definition addr
+                        test    ebx,ebx                                         ;have panel?
+                        jz      .30                                             ;no, branch
+;
+;       Loop until end of panel
+;
+.10                     cmp     dword [ebx],0                                   ;end of panel?
+                        je      .30                                             ;yes, branch
+;
+;       If input field and we have no active field, set as active field
+;
+                        test    byte [ebx+11],80h                               ;input field?
+                        jz      .20                                             ;no, branch
+                        cmp     dword [wdConsoleField],0                        ;have active field?
+                        jne     .20                                             ;yes, branch
+                        mov     [wdConsoleField],ebx                            ;set active field
+;
+;       Draw the field and loop to the next field.
+;
+.20                     call    ConDrawField                                    ;draw field
+                        lea     ebx,[ebx+12]                                    ;next field addr
+                        jmp     .10                                             ;next field
+;
+;       Restore and return.
+;
+.30                     pop     ebx                                             ;restore non-volatile regs
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConDrawField
+;
+;       Description:    This routine draws the contents of a panel field.
+;
+;       In:             DS:EBX  field definition address
+;                               [ebx+0]         field buffer address
+;                               [ebx+4]         row (0-23)
+;                               [ebx+5]         column (0,79)
+;                               [ebx+6]         size (0-255)
+;                               [ebx+7]         cursor index (0-255)
+;                               [ebx+8]         1st selected index (0-255)
+;                               [ebx+9]         last selected index (0-255)
+;                               [ebx+10]        attribute
+;                               [ebx+11]        flags
+;                                               80h = input field
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConDrawField            push    ecx                                             ;save non-volatile regs
+                        push    esi                                             ;
+                        push    edi                                             ;
+                        push    es                                              ;
+;
+;       Exit if no field or zero size.
+;
+                        test    ebx,ebx                                         ;have field?
+                        jz      .30                                             ;no, exit
+                        movzx   ecx,byte [ebx+6]                                ;have size?
+                        jecxz   .30                                             ;no, exit
+;
+;       Address video memory.
+;
+                        push    EGDTCGA                                         ;load CGA video selector...
+                        pop     es                                              ;...into extra segment reg
+;
+;       Compute the target offset.
+;
+                        movzx   eax,byte [ebx+4]                                ;row
+                        mov     ah,ECONCOLS                                     ;columns per row
+                        mul     ah                                              ;row offset
+                        add     al,byte [ebx+5]                                 ;add column
+                        adc     ah,0                                            ;handle overflow
+                        shl     eax,1                                           ;two-bytes per column
+                        mov     edi,eax                                         ;target offset
+;
+;       Display field characters.
+;
+                        mov     ah,[ebx+10]                                     ;attribute
+                        cld                                                     ;forward strings
+                        mov     esi,[ebx]                                       ;field buffer addr
+                        test    esi,esi                                         ;have field buffer?
+                        jz      .20                                             ;no, exit
+.10                     lodsb                                                   ;field character
+                        test    al,al                                           ;end of value?
+                        jz      .20                                             ;yes, branch
+                        stosw                                                   ;store character with attribute
+                        dec     ecx                                             ;decrement remaining size
+                        jecxz   .30                                             ;exit if field full
+                        jmp     .10                                             ;next character
+;
+;       Clear the remaining field.
+;
+.20                     mov     al,EASCIISPACE                                  ;ASCII space
+                        rep     stosw                                           ;store space with attribute
+;
+;       Restore and return.
+;
+.30                     pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     esi                                             ;
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConPutCursor
+;
+;       Description:    This routine places the cursor at the current index into the current field.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConPutCursor            push    ecx                                             ;save non-volatile regs
+                        mov     ecx,[wdConsoleField]                            ;current field?
+                        jecxz   .10                                             ;no, branch
+                        mov     al,[ecx+4]                                      ;field row
+                        mov     [wbConsoleRow],al                               ;set current row
+                        mov     al,[ecx+5]                                      ;field column
+                        add     al,[ecx+7]                                      ;field offset
+                        mov     [wbConsoleColumn],al                            ;set curren tcol
+                        placeCursor                                             ;place the cursor
+.10                     pop     ecx                                             ;restore non-volatile regs
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConMain
+;
+;       Description:    This routine sets the current panel to the main panel (CON001).
+;
+;       In:             ES:     OS data segment
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConMain                 push    ecx                                             ;save non-volatile regs
+                        push    edi                                             ;
+;
+;       Initialize current panel, field.
+;
+                        mov     eax,czPnlCon001                                 ;main panel addr
+                        mov     [wdConsolePanel],eax                            ;set panel addr
+                        mov     eax,czPnlConInp                                 ;main panel command field addr
+                        mov     [wdConsoleField],eax                            ;set active field
+;
+;       Clear panel video memory and draw fields
+;
+                        call    ConClearPanel                                   ;clear panel
+                        call    ConDrawFields                                   ;draw fields
+;
+;       Restore and return.
+;
+                        pop     edi                                             ;restore non-volatile regs
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Constants
+;
+;-----------------------------------------------------------------------------------------------------------------------
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Panels
+;
+;       Notes:          1.      Each field MUST have an address of a constant or an input field.
+;                       2.      The constant text or input field MUST be at least the length of the field.
+;                       3.      Field constant text or field values MUST be comprised of printable characters.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+                                                                                ;---------------------------------------
+                                                                                ;  Main Panel
+                                                                                ;---------------------------------------
+czPnlCon001             dd      czFldPnlIdCon001                                ;field text
+                        db      0,0,6,0,0,0,7,0                                 ;row col siz ndx 1st nth atr flg
+                        dd      czFldTitleCon001
+                        db      0,33,14,0,0,0,7,0
+                        dd      czFldDatTmCon001
+                        db      0,63,17,0,0,0,7,0
+                        dd      czFldPrmptCon001
+                        db      23,0,1,0,0,0,7,0
+czPnlConInp             dd      wzConsoleInBuffer
+                        db      23,1,79,0,0,0,7,80h
+                        dd      0                                               ;end of panel
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Strings
+;
+;-----------------------------------------------------------------------------------------------------------------------
+czFldPnlIdCon001        db      "CON001",0                                      ;main console panel id
+czFldTitleCon001        db      "OS Version 1.0",0                              ;main console panel title
+czFldDatTmCon001        db      "DD-MMM-YYYY HH:MM",0                           ;panel date and time template
+czFldPrmptCon001        db      ":",0                                           ;command prompt
                         times   4096-($-$$) db 0h                               ;zero fill to end of section
 %endif
 %ifdef BUILDDISK
