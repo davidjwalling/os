@@ -59,7 +59,7 @@ Click on the subproject name below for details.
 
 ### Installation
 
-<table cols=2>
+<table>
 <tr><td><a href="docs/VIRTUAL.md">Virtual</a></td><td>Configure a virtual machine instance to boot from a floppy drive disk image and select the os.dsk file as the disk image for Floppy Device 0. Select a base memory minimum setting of 4MB or higher.</td></tr>
 <tr><td><a href="docs/PHYSICAL.md">Physical</a></td><td>For projects os.001 and os.002, copy os.dat to the boot sector of a formatted floppy diskette. Here we use the HxD utility program to do this. In project os.003, we introduce a utility osprep.com to perform this. Starting with project os.002, copy the os loader program, os.com, to the diskette. Insert the diskette into the target physical system's diskette drive A:. Restart the target physical system.</td></tr>
 </table>

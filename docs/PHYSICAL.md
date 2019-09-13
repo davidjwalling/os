@@ -4,7 +4,7 @@ The program samples presented here were tested using the following physical comp
 - Intel:registered: Pentium:registered: MMX 233 MHz Processor Part# BP80503233 (SL293) 2.8V
 - Intel:registered: 555A Rev 3.2 Socket 7 Motherboard
 - 64MB EDO DRAM
-- Mitsumi D359M3 Internal 3.5" 1.44 MB Floppy Drive
+- 2 x Mitsumi D359M3 Internal 3.5" 1.44 MB Floppy Drive
 - Number Nine #9FX Motion 771 SVGA
 - Dell:registered: U2412M 24 inch LCD monitor
 - Dell:registered: RT7D20 104-Key Standard US Layout Windows Keyboard via PS/2 to 5-pin DIN adapter.
@@ -35,47 +35,84 @@ The program samples presented here were tested using the following physical comp
 <img src="../images/os001_SabrentN533_001.jpg"/>
 
 ### Windows Explorer Floppy Disk Properties
+- After connecting the external Floppy Disk Drive to the development system, right-click on Drive A: shown in Windows Explorer.
+- The Floppy Disk Properties windows opens to confirm normal operation.
+
 <img src="../images/os001_WindowsExplorer_FloppyDiskProperties_001.PNG"/>
 
 ### HxD Hex Editor - About
 - Start the HxD Hex Editor program as Administrator.
+
 <img src="../images/os001_HxD_001_About.PNG"/>
 
 ### HxD Hex Editor - Open Device
+- Use the Extras|Open Disk ... menu option to open the "open disk" dialog.
+
 <img src="../images/os001_HxD_002_OpenDevice.PNG"/>
 
 ### HxD Hex Editor - Select Device
+- In the "open disk" dialog, select floppy disk A:.
+- IMPORTANT: Uncheck the "open as read only" checkbox.
+
 <img src="../images/os001_HxD_003_SelectDevice.PNG"/>
 
 ### HxD Hex Editor - Read/Write Warning
+- When a disk is opened without read-only protection a warning is displayed.
+- Click "OK" to continue.
+
 <img src="../images/os001_HxD_004_ReadWriteWarning.PNG"/>
 
 ### HxD Hex Editor - MS-DOS Boot Sector
+- In this example, the diskette we have selected to update already as a DOS boot sector on it.
+- We will overwrite this boot sector with the os.dat boot sector image created in project os.001.
+
 <img src="../images/os001_HxD_005_MSDOSBootSector.PNG"/>
 
 ### HxD Hex Editor - File Open
+- Use the File|Open menu option to open the os001/os.dat file image.
+
 <img src="../images/os001_HxD_006_FileOpen.PNG"/>
 
 ### HxD Hex Editor - Select os.001/os.dat
+- Select the os.dat file in the os.001 folder.
+- Click "open" to open the os.dat file in a new tab.
+
 <img src="../images/os001_HxD_007_SelectOSDat.PNG"/>
 
 ### HxD Hex Editor - OS Boot Sector
+- In the newly opened tab, the os.dat boot sector created in project os.001 is shown.
+- Select the entire boot sector - the first 512 (or 200h) bytes.
+
 <img src="../images/os001_HxD_008_OSBootSector.PNG"/>
 
 ### HxD Hex Editor - Edit | Copy
+- Use the Edit|Copy menu option to copy the selected os.dat boot sector.
+
 <img src="../images/os001_HxD_009_EditCopy.PNG"/>
 
 ### HxD Hex Editor - Edit | Paste Write
+- Use the Edit|Paste Write open to paste the copied os.dat sector into the floppy disk A: tab.
+
 <img src="../images/os001_HxD_010_EditPasteWrite.PNG"/>
 
-### HxD Hex Editor - Overwrite Warning
-<img src="../images/os001_HxD_011_WarningOverwrite.PNG"/>
-
 ### HxD Hex Editor - OS Boot Sector Pasted
+- The pasted boot sector appears in red where byte values have changed.
+- Use the File|Save menu to save changes to the floppy disk.
+
 <img src="../images/os001_HxD_012_EditPaste.PNG"/>
 
-### HxD Hex Editor - Diskette Changes Saves
+### HxD Hex Editor - Overwrite Warning
+- HxD displays a warning dialog box before writing changes.
+- Click "Yes" to confirm and save changes.
+
+<img src="../images/os001_HxD_011_WarningOverwrite.PNG"/>
+
+### HxD Hex Editor - Diskette Changes Saved
 <img src="../images/os001_HxD_013_BootSectorUpdated.PNG"/>
 
 ### Insert Diskette in Target Platform Floppy Disk Drive and Reboot
+- Remove the floppy diskette from the external floppy drive.
+- Insert floppy diskette into Drive A: on the target physical system.
+- Start the target physical system.
+
 <img src="../images/os001_Boot_001.jpg"/>
