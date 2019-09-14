@@ -2,10 +2,10 @@
 ;
 ;       File:           os.asm
 ;
-;       Project:        os.004
+;       Project:        os.005
 ;
-;       Description:    This sample program extends the loader to validate the CPU type and place the CPU into
-;                       protected mode.
+;       Description:    This sample program extends the console task to add support for panels, groups of fields
+;                       displayed together on the screen. A main panel is defined for the console task.
 ;
 ;       Revised:        2 September 2019
 ;
@@ -2215,22 +2215,22 @@ ConCode                 mov     edi,ECONDATA                                    
 ;
 ;       Initialize the Operator Information Area (OIA).
 ;
-;                        push    es                                              ;save extra segment
-;                        push    EGDTCGA                                         ;load CGA video selector...
-;                        pop     es                                              ;...into extra segment reg
-;                        mov     edi,ECONROWS*ECONROWBYTES                       ;target offset
-;                        mov     eax,ECONOIADWORD                                ;OIA attribute and space
-;                        mov     ecx,ECONROWDWORDS                               ;double-words per row
-;                        rep     stosd                                           ;reset OIA
-;                        pop     es                                              ;restore extra segment
+                        push    es                                              ;save extra segment
+                        push    EGDTCGA                                         ;load CGA video selector...
+                        pop     es                                              ;...into extra segment reg
+                        mov     edi,ECONROWS*ECONROWBYTES                       ;target offset
+                        mov     eax,ECONOIADWORD                                ;OIA attribute and space
+                        mov     ecx,ECONROWDWORDS                               ;double-words per row
+                        rep     stosd                                           ;reset OIA
+                        pop     es                                              ;restore extra segment
 ;
 ;       Set the current panel to Main, clear and redraw all fields.
 ;
-;                        call    ConMain                                         ;initialize panel
+                        call    ConMain                                         ;initialize panel
 ;
 ;       Place the cursor at the current field index.
 ;
-;                        call    ConPutCursor                                    ;place the cursor
+                        call    ConPutCursor                                    ;place the cursor
 ;
 ;       Enter halt loop
 ;
