@@ -2,10 +2,11 @@
 ;
 ;       File:           os.asm
 ;
-;       Project:        os.007
+;       Project:        os.006
 ;
-;       Description:    In this sample, the console task is expanded to support the handling of a few simple commands,
-;                       exit, quit, and shutdown.
+;       Description:    In this sample, the kernel is expanded to support a simple message queue. Keyboard events
+;                       are added to the queue by the keyboard interrupt handler and are read and processed by the
+;                       console task.
 ;
 ;       Revised:        2 September 2019
 ;
@@ -591,7 +592,6 @@ wdConsoleHandler        resd    1                                               
 wdConsolePanel          resd    1                                               ;panel definition addr
 wdConsoleField          resd    1                                               ;active field definition addr
 wzConsoleInBuffer       resb    80                                              ;command input buffer
-wzConsoleToken          resb    80                                              ;token buffer
                                                                                 ;---------------------------------------
                                                                                 ;  cursor placement
                                                                                 ;---------------------------------------
@@ -2658,13 +2658,10 @@ svc90                   iretd                                                   
 ;       These tsvce macros expand to define an address vector table for the service request interrupt (int 30h).
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-tsvc                    tsvce   CompareMemory                                   ;compare memory
-                        tsvce   GetConsoleMessage                               ;get message
+tsvc                    tsvce   GetConsoleMessage                               ;get message
                         tsvce   PlaceCursor                                     ;place the cursor at the current loc
                         tsvce   PutConsoleOIA                                   ;display the operator information area
-                        tsvce   ResetSystem                                     ;reset system using 8042 chip
                         tsvce   SetKeyboardLamps                                ;turn keboard LEDs on or off
-                        tsvce   UpperCaseString                                 ;upper-case string
                         tsvce   Yield                                           ;yield to system
 maxtsvc                 equ     ($-tsvc)/4                                      ;function out of range
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -2674,10 +2671,6 @@ maxtsvc                 equ     ($-tsvc)/4                                      
 ;       These macros provide positional parameterization of service request calls.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-%macro                  compareMemory 0
-                        mov     al,eCompareMemory                               ;function code
-                        int     _svc                                            ;invoke OS service
-%endmacro
 %macro                  getConsoleMessage 0
                         mov     al,eGetConsoleMessage                           ;function code
                         int     _svc                                            ;invoke OS service
@@ -2690,16 +2683,8 @@ maxtsvc                 equ     ($-tsvc)/4                                      
                         mov     al,ePutConsoleOIA                               ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
-%macro                  resetSystem 0
-                        mov     al,eResetSystem                                 ;function code
-                        int     _svc                                            ;invoke OS service
-%endmacro
 %macro                  setKeyboardLamps 0
                         mov     al,eSetKeyboardLamps                            ;function code
-                        int     _svc                                            ;invoke OS service
-%endmacro
-%macro                  upperCaseString 0
-                        mov     al,eUpperCaseString                             ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
 %macro                  yield 0
@@ -2711,76 +2696,6 @@ maxtsvc                 equ     ($-tsvc)/4                                      
 ;       Kernel Function Library
 ;
 ;=======================================================================================================================
-;=======================================================================================================================
-;
-;       String Helper Routines
-;
-;       CompareMemory
-;       UpperCaseString
-;
-;=======================================================================================================================
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        CompareMemory
-;
-;       Description:    This routine compares two byte arrays.
-;
-;       In:             DS:EDX  first source address
-;                       DS:EBX  second source address
-;                       ECX     comparison length
-;
-;       Out:            EDX     first source address
-;                       EBX     second source address
-;                       ECX     0       array 1 = array 2
-;                               <0      array 1 < array 2
-;                               >0      array 1 > array 2
-;
-;-----------------------------------------------------------------------------------------------------------------------
-CompareMemory           push    esi                                             ;save non-volatile regs
-                        push    edi                                             ;
-                        push    es                                              ;
-                        push    ds                                              ;copy DS
-                        pop     es                                              ;... to ES
-                        mov     esi,edx                                         ;first source address
-                        mov     edi,ebx                                         ;second source address
-                        cld                                                     ;forward strings
-                        rep     cmpsb                                           ;compare bytes
-                        mov     al,0                                            ;default result
-                        jz      .10                                             ;branch if arrays equal
-                        mov     al,1                                            ;positive result
-                        jnc     .10                                             ;branch if target > source
-                        mov     al,-1                                           ;negative result
-.10                     movsx   ecx,al                                          ;extend sign
-                        pop     es                                              ;restore non-volatile regs
-                        pop     edi                                             ;
-                        pop     esi                                             ;
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        UpperCaseString
-;
-;       Description:    This routine places all characters in the given string to upper case.
-;
-;       In:             DS:EDX  string address
-;
-;       Out:            EDX     string address
-;
-;-----------------------------------------------------------------------------------------------------------------------
-UpperCaseString         push    esi                                             ;save non-volatile regs
-                        mov     esi,edx                                         ;string address
-                        cld                                                     ;forward strings
-.10                     lodsb                                                   ;string character
-                        test    al,al                                           ;null?
-                        jz      .20                                             ;yes, skip ahead
-                        cmp     al,EASCIILOWERA                                 ;lower-case? (lower bounds)
-                        jb      .10                                             ;no, continue
-                        cmp     al,EASCIILOWERZ                                 ;lower-case? (upper bounds)
-                        ja      .10                                             ;no, continue
-                        and     al,EASCIICASEMASK                               ;mask for upper case
-                        mov     [esi-1],al                                      ;upper character
-                        jmp     .10                                             ;continue
-.20                     pop     esi                                             ;restore non-volatile regs
-                        ret                                                     ;return
 ;=======================================================================================================================
 ;
 ;       Console Helper Routines
@@ -3138,7 +3053,6 @@ SetConsoleChar          mov     dl,al                                           
 ;       PlaceCursor
 ;       PutPrimaryEndOfInt
 ;       PutSecondaryEndOfInt
-;       ResetSystem
 ;       SetKeyboardLamps
 ;       WaitForKeyInBuffer
 ;       WaitForKeyOutBuffer
@@ -3195,22 +3109,6 @@ PutPrimaryEndOfInt      mov     al,EPICEOI                                      
 PutSecondaryEndOfInt    mov     al,EPICEOI                                      ;non-specific end-of-interrupt
                         out     EPICPORTSEC,al                                  ;send EOI to secondary PIC
                         ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ResetSystem
-;
-;       Description:    This routine restarts the system using the 8042 controller.
-;
-;       Out:            N/A     This routine does not return.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ResetSystem             mov     ecx,001fffffh                                   ;delay to clear ints
-                        loop    $                                               ;clear interrupts
-                        mov     al,EKEYBCMDRESET                                ;mask out bit zero
-                        out     EKEYBPORTSTAT,al                                ;drive bit zero low
-.10                     sti                                                     ;enable maskable interrupts
-                        hlt                                                     ;halt until interrupt
-                        jmp     .10                                             ;repeat until reset kicks in
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        SetKeyboardLamps
@@ -3412,10 +3310,7 @@ section                 conmque                                                 
 ;       ConDrawField            Draw a panel field to video memory
 ;       ConPutCursor            Place the cursor at the current index into the current field
 ;       ConHandlerMain          Handle attention keys on the main panel
-;       ConTakeToken            Extract the next token from a buffer
-;       ConDetermineCommand     Determine if a buffer value is a command
 ;       ConClearField           Clear a panel field to nulls
-;       ConExit                 Handle the exit command
 ;       ConMain                 Handle the main command
 ;
 ;=======================================================================================================================
@@ -3720,26 +3615,9 @@ ConHandlerMain          push    ebx                                             
                         clc                                                     ;event not handled
                         jmp     .90                                             ;branch
 ;
-;       Take the first token entered.
-;
-.10                     mov     edx,wzConsoleInBuffer                           ;console input buffer addr
-                        mov     ebx,wzConsoleToken                              ;token buffer
-                        call    ConTakeToken                                    ;take first command token
-;
-;       Evaluate token.
-;
-                        mov     edx,wzConsoleToken                              ;token buffer
-                        call    ConDetermineCommand                             ;determine if this is a command
-                        cmp     eax,ECONJMPTBLCNT                               ;command number in range?
-                        jnb     .20                                             ;no, branch
-                        shl     eax,2                                           ;convert number to array offset
-                        mov     edx,tConJmpTbl                                  ;command handler address table base
-                        mov     eax,[edx+eax]                                   ;command handler address
-                        call    eax                                             ;handler command
-;
 ;       Clear field.
 ;
-.20                     mov     ebx,czPnlConInp                                 ;main panel input field
+.10                     mov     ebx,czPnlConInp                                 ;main panel input field
                         call    ConClearField                                   ;clear the field contents
                         call    ConDrawField                                    ;draw the field
                         call    ConPutCursor                                    ;place the cursor
@@ -3748,126 +3626,6 @@ ConHandlerMain          push    ebx                                             
 ;       Restore and return.
 ;
 .90                     pop     ebx                                             ;restore non-volatile regs
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConTakeToken
-;
-;       Description:    This routine extracts the next token from the given source buffer.
-;
-;       In:             DS:EDX  source buffer address
-;                       DS:EBX  target buffer address
-;
-;       Out:            DS:EDX  source buffer address
-;                       DS:EBX  target buffer address
-;
-;       Command Form:   Line    = *3( *SP 1*ALNUM )
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConTakeToken            push    esi                                             ;save non-volatile regs
-                        push    edi                                             ;
-                        push    es                                              ;
-;
-;       Address source and target; null-terminate target buffer.
-;
-                        push    ds                                              ;load data segment selector ...
-                        pop     es                                              ;... into extra segment reg
-                        mov     esi,edx                                         ;source buffer address
-                        mov     edi,ebx                                         ;target buffer address
-                        mov     byte [edi],0                                    ;null-terminate target buffer
-;
-;       Trim leading space; exit if no token.
-;
-                        cld                                                     ;forward strings
-.10                     lodsb                                                   ;load byte
-                        cmp     al,EASCIISPACE                                  ;space?
-                        je      .10                                             ;yes, continue
-                        test    al,al                                           ;end of line?
-                        jz      .40                                             ;yes, branch
-;
-;       Store non-spaces into target buffer.
-;
-.20                     stosb                                                   ;store byte
-                        lodsb                                                   ;load byte
-                        test    al,al                                           ;end of line?
-                        jz      .40                                             ;no, continue
-                        cmp     al,EASCIISPACE                                  ;space?
-                        jne     .20                                             ;no, continue
-;
-;       Walk over spaces trailing the stored token; point to final space.
-;
-.30                     lodsb                                                   ;load byte
-                        cmp     al,EASCIISPACE                                  ;space?
-                        je      .30                                             ;yes, continue
-                        dec     esi                                             ;pre-position
-;
-;       Null-terminate target buffer; advance remaining source bytes.
-;
-.40                     mov     byte [edi],0                                    ;terminate buffer
-                        mov     edi,edx                                         ;source buffer address
-.50                     lodsb                                                   ;remaining byte
-                        stosb                                                   ;move to front of buffer
-                        test    al,al                                           ;end of line?
-                        jnz     .50                                             ;no, continue
-;
-;       Restore and return.
-;
-                        pop     es                                              ;restore non-volatile regs
-                        pop     edi                                             ;
-                        pop     esi                                             ;
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConDetermineCommand
-;
-;       Description:    This routine determines the command number for the command at DS:EDX.
-;
-;       input:          DS:EDX  command address
-;
-;       output:         EAX     !ECONJMPTBLCNT = command nbr
-;                               ECONJMPTBLCNT = no match fond
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConDetermineCommand     push    ebx                                             ;save non-volatile regs
-                        push    ecx                                             ;
-                        push    esi                                             ;
-                        push    edi                                             ;
-;
-;       Upper-case the command; prepare to search command table.
-;
-                        upperCaseString                                         ;upper-case string at EDX
-                        mov     esi,tConCmdTbl                                  ;commands table
-                        xor     edi,edi                                         ;intialize command number
-                        cld                                                     ;forward strings
-;
-;       Exit if end of table.
-;
-.10                     lodsb                                                   ;command length
-                        movzx   ecx,al                                          ;command length
-                        jecxz   .20                                             ;branch if end of table
-;
-;       Compare command to table entry; exit if match.
-;
-                        mov     ebx,esi                                         ;table entry address
-                        add     esi,ecx                                         ;next table entry address
-                        compareMemory                                           ;compare byte arrays at EDX, EBX
-                        jecxz   .20                                             ;branch if equal
-;
-;       Next table element.
-;
-                        inc     edi                                             ;increment command nbr
-                        jmp     .10                                             ;repeat
-;
-;       Return command number or ECONJMPTBLCNT.
-;
-.20                     mov     eax,edi                                         ;command number
-;
-;       Restore and return.
-;
-                        pop     edi                                             ;restore non-volatile regs
-                        pop     esi                                             ;
-                        pop     ecx                                             ;
-                        pop     ebx                                             ;
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -3906,15 +3664,6 @@ ConClearField           push    ebx                                             
 ;
 .10                     pop     edi                                             ;restore non-volatile regs
                         pop     ebx                                             ;
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConExit
-;
-;       Description:    This routine handles the EXIT command and its SHUTDOWN and QUIT aliases.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConExit                 resetSystem                                             ;issue system reset
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -3976,28 +3725,6 @@ czPnlCon001             dd      czFldPnlIdCon001                                
 czPnlConInp             dd      wzConsoleInBuffer
                         db      23,1,79,0,0,0,7,80h
                         dd      0                                               ;end of panel
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Tables
-;
-;-----------------------------------------------------------------------------------------------------------------------
-                                                                                ;---------------------------------------
-                                                                                ;  Command Jump Table
-                                                                                ;---------------------------------------
-tConJmpTbl              equ     $                                               ;command jump table
-                        dd      ConExit         - ConCode                       ;shutdown command routine offset
-                        dd      ConExit         - ConCode                       ;exit command routine offset
-                        dd      ConExit         - ConCode                       ;quit command routine offset
-ECONJMPTBLL             equ     ($-tConJmpTbl)                                  ;table length
-ECONJMPTBLCNT           equ     ECONJMPTBLL/4                                   ;table entries
-                                                                                ;---------------------------------------
-                                                                                ;  Command Name Table
-                                                                                ;---------------------------------------
-tConCmdTbl              equ     $                                               ;command name table
-                        db      9,"SHUTDOWN",0                                  ;shutdown command
-                        db      5,"EXIT",0                                      ;exit command
-                        db      5,"QUIT",0                                      ;quit command
-                        db      0                                               ;end of table
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Strings

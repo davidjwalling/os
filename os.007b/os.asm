@@ -2,10 +2,10 @@
 ;
 ;       File:           os.asm
 ;
-;       Project:        os.005
+;       Project:        os.007
 ;
-;       Description:    In this sample, the kernel is expanded to include a keyboard interupt handler. This handler
-;                       updates data visible on the console in an operator information area.
+;       Description:    In this sample, the console task is expanded to support the handling of a few simple commands,
+;                       exit, quit, and shutdown.
 ;
 ;       Revised:        2 September 2019
 ;
@@ -157,6 +157,8 @@
 ;       EGDT...         Global Descriptor Table (GDT) selector values
 ;       EKEYF...        Keyboard status flags
 ;       EKRN...         Kernel values (fixed locations and sizes)
+;       ELDT...         Local Descriptor Table (LDT) selector values
+;       EMSG...         Message identifiers
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -334,6 +336,8 @@ EBIOSFNKEYSTATUS        equ     001h                                            
 ;       ASCII                                                                   EASCII...
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+EASCIIBACKSPACE         equ     008h                                            ;backspace
+EASCIILINEFEED          equ     00Ah                                            ;line feed
 EASCIIRETURN            equ     00Dh                                            ;carriage return
 EASCIIESCAPE            equ     01Bh                                            ;escape
 EASCIISPACE             equ     020h                                            ;space
@@ -415,6 +419,16 @@ EKRNCODEBASE            equ     01000h                                          
 EKRNCODESEG             equ     (EKRNCODEBASE >> 4)                             ;kernel code segment (0100:0000)
 EKRNCODELEN             equ     05000h                                          ;kernel code size (1000h to 6000h)
 EKRNCODESRCADR          equ     0500h                                           ;kernel code offset to loader DS:
+;-----------------------------------------------------------------------------------------------------------------------
+;       Local Descriptor Table (LDT) Selectors                                  ELDT...
+;-----------------------------------------------------------------------------------------------------------------------
+ELDTMQ                  equ     02Ch                                            ;console task message queue
+;-----------------------------------------------------------------------------------------------------------------------
+;       Message Identifiers                                                     EMSG...
+;-----------------------------------------------------------------------------------------------------------------------
+EMSGKEYDOWN             equ     041000000h                                      ;key-down
+EMSGKEYUP               equ     041010000h                                      ;key-up
+EMSGKEYCHAR             equ     041020000h                                      ;character
 ;=======================================================================================================================
 ;
 ;       Structures
@@ -439,6 +453,18 @@ struc                   KEYBDATA
 .lock                   resb    1                                               ;lock flags (caps, num, scroll, insert)
 .status                 resb    1                                               ;status (timeout)
 EKEYBDATAL              equ     ($-.scan0)                                      ;structure length
+endstruc
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       MQUEUE
+;
+;       The MQUEUE structure maps memory used for a message queue.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+struc                   MQUEUE
+MQHead                  resd    1                                               ;000 head ptr
+MQTail                  resd    1                                               ;004 tail ptr
+MQData                  resd    254                                             ;message queue
 endstruc
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -561,9 +587,11 @@ ECONDATA                equ     ($)
                                                                                 ;---------------------------------------
                                                                                 ;  panel handling
                                                                                 ;---------------------------------------
+wdConsoleHandler        resd    1                                               ;handler function
 wdConsolePanel          resd    1                                               ;panel definition addr
 wdConsoleField          resd    1                                               ;active field definition addr
 wzConsoleInBuffer       resb    80                                              ;command input buffer
+wzConsoleToken          resb    80                                              ;token buffer
                                                                                 ;---------------------------------------
                                                                                 ;  cursor placement
                                                                                 ;---------------------------------------
@@ -2164,7 +2192,7 @@ irq0.20                 sti                                                     
                         movzx   eax,al                                          ;expand scan code to index
                         mov     al,[cs:tscan2ext+eax]                           ;translate scan code
                         mov     [esi+KEYBDATA.scan],al                          ;save final scan code
-                        jmp     irq1.putoia                                     ;continue
+                        jmp     irq1.putkeydown                                 ;put key-down message
 ;
 ;       Handle keyboard read timeout. This should not occur under normal circumstances. Its occurrence suggests an error
 ;       in the keyboard scan code handling. An error indicator will be shown in the OIA.
@@ -2196,7 +2224,7 @@ irq1.notext1            cmp     al,EKEYBCODEEXT0                                
                         mov     [esi+KEYBDATA.scan3],al                         ;save scan code 3
                         mov     al,0F7h                                         ;print-screen up
                         mov     [esi+KEYBDATA.scan],al                          ;save final scan code
-                        jmp     irq1.putoia                                     ;continue
+                        jmp     irq1.putkeydown                                 ;put key-down message and update OIA
 ;
 ;       Where needed, use the last scan code and resume above.
 ;
@@ -2253,9 +2281,9 @@ irq1.checkchar          and     al,EKEYBMAKECODEMASK                            
                         je      irq1.savechar                                   ;yes, branch
                         mov     dl,EASCIISLASH                                  ;ASCII slash
                         cmp     al,EKEYBPADSLASHDOWN                            ;keypad-slash down?
-                        jne     irq1.putoia                                     ;continue
+                        jne     irq1.putkeydown                                 ;no, put key-down msg and update OIA
 irq1.savechar           mov     [esi+KEYBDATA.char],dl                          ;store ASCII code
-                        jmp     irq1.putoia                                     ;continue
+                        jmp     irq1.putmessage                                 ;put char, key-down msg and upate OIA
 ;
 ;       Flip lock toggles if a toggle key (caps-lock, num-lock, scroll-lock, insert)
 ;
@@ -2342,7 +2370,7 @@ irq1.getchar            mov     al,[cs:edx+eax]                                 
 ;
 irq1.swapcase           xor     al,020h                                         ;swap case bit
                         mov     [esi+KEYBDATA.char],al                          ;save ASCII char code
-                        jmp     irq1.putoia                                     ;continue
+                        jmp     irq1.putmessage                                 ;put char, key-down msgs; update OIA
 ;
 ;       Check if num-lock and keypad numeral.
 ;
@@ -2358,6 +2386,28 @@ irq1.checknum           test    byte [esi+KEYBDATA.lock],EKEYFLOCKNUM           
                         movzx   edx,dl                                          ;extend to register
                         mov     al,[cs:tscankeypad+edx]                         ;translate to numeral equivalent
 irq1.notnum             mov     [esi+KEYBDATA.char],al                          ;save ASCII character code
+;
+;       Put messages into the message queue.
+;
+irq1.putmessage         mov     al,[esi+KEYBDATA.char]                          ;ASCII code
+                        mov     ah,[esi+KEYBDATA.scan]                          ;final scan code
+                        test    al,al                                           ;printable char?
+                        jz      irq1.putkeydown                                 ;no, skip ahead
+                        mov     edx,EMSGKEYCHAR                                 ;key-character event
+                        and     eax,0FFFFh                                      ;clear high-order word
+                        or      edx,eax                                         ;msg id and codes
+                        xor     ecx,ecx                                         ;null param
+                        call    PutMessage                                      ;put message to console
+irq1.putkeydown         mov     al,[esi+KEYBDATA.char]                          ;ASCII char
+                        mov     ah,[esi+KEYBDATA.scan]                          ;final scan code
+                        mov     edx,EMSGKEYDOWN                                 ;assume key-down event
+                        test    ah,EKEYBUP                                      ;release scan-code?
+                        jz      irq1.makecode                                   ;no, skip ahead
+                        mov     edx,EMSGKEYUP                                   ;key-up event
+irq1.makecode           and     eax,0FFFFh                                      ;clear high-order word
+                        or      edx,eax                                         ;msg id and codes
+                        xor     ecx,ecx                                         ;null param
+                        call    PutMessage                                      ;put message to console
 ;
 ;       Update operator information area. Enable maskable ints.
 ;
@@ -2608,9 +2658,13 @@ svc90                   iretd                                                   
 ;       These tsvce macros expand to define an address vector table for the service request interrupt (int 30h).
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-tsvc                    tsvce   PlaceCursor                                     ;place the cursor at the current loc
+tsvc                    tsvce   CompareMemory                                   ;compare memory
+                        tsvce   GetConsoleMessage                               ;get message
+                        tsvce   PlaceCursor                                     ;place the cursor at the current loc
                         tsvce   PutConsoleOIA                                   ;display the operator information area
+                        tsvce   ResetSystem                                     ;reset system using 8042 chip
                         tsvce   SetKeyboardLamps                                ;turn keboard LEDs on or off
+                        tsvce   UpperCaseString                                 ;upper-case string
                         tsvce   Yield                                           ;yield to system
 maxtsvc                 equ     ($-tsvc)/4                                      ;function out of range
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -2620,6 +2674,14 @@ maxtsvc                 equ     ($-tsvc)/4                                      
 ;       These macros provide positional parameterization of service request calls.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+%macro                  compareMemory 0
+                        mov     al,eCompareMemory                               ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  getConsoleMessage 0
+                        mov     al,eGetConsoleMessage                           ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
 %macro                  placeCursor 0
                         mov     al,ePlaceCursor                                 ;function code
                         int     _svc                                            ;invoke OS service
@@ -2628,8 +2690,16 @@ maxtsvc                 equ     ($-tsvc)/4                                      
                         mov     al,ePutConsoleOIA                               ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
+%macro                  resetSystem 0
+                        mov     al,eResetSystem                                 ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
 %macro                  setKeyboardLamps 0
                         mov     al,eSetKeyboardLamps                            ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  upperCaseString 0
+                        mov     al,eUpperCaseString                             ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
 %macro                  yield 0
@@ -2643,13 +2713,98 @@ maxtsvc                 equ     ($-tsvc)/4                                      
 ;=======================================================================================================================
 ;=======================================================================================================================
 ;
+;       String Helper Routines
+;
+;       CompareMemory
+;       UpperCaseString
+;
+;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        CompareMemory
+;
+;       Description:    This routine compares two byte arrays.
+;
+;       In:             DS:EDX  first source address
+;                       DS:EBX  second source address
+;                       ECX     comparison length
+;
+;       Out:            EDX     first source address
+;                       EBX     second source address
+;                       ECX     0       array 1 = array 2
+;                               <0      array 1 < array 2
+;                               >0      array 1 > array 2
+;
+;-----------------------------------------------------------------------------------------------------------------------
+CompareMemory           push    esi                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    es                                              ;
+                        push    ds                                              ;copy DS
+                        pop     es                                              ;... to ES
+                        mov     esi,edx                                         ;first source address
+                        mov     edi,ebx                                         ;second source address
+                        cld                                                     ;forward strings
+                        rep     cmpsb                                           ;compare bytes
+                        mov     al,0                                            ;default result
+                        jz      .10                                             ;branch if arrays equal
+                        mov     al,1                                            ;positive result
+                        jnc     .10                                             ;branch if target > source
+                        mov     al,-1                                           ;negative result
+.10                     movsx   ecx,al                                          ;extend sign
+                        pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     esi                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        UpperCaseString
+;
+;       Description:    This routine places all characters in the given string to upper case.
+;
+;       In:             DS:EDX  string address
+;
+;       Out:            EDX     string address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+UpperCaseString         push    esi                                             ;save non-volatile regs
+                        mov     esi,edx                                         ;string address
+                        cld                                                     ;forward strings
+.10                     lodsb                                                   ;string character
+                        test    al,al                                           ;null?
+                        jz      .20                                             ;yes, skip ahead
+                        cmp     al,EASCIILOWERA                                 ;lower-case? (lower bounds)
+                        jb      .10                                             ;no, continue
+                        cmp     al,EASCIILOWERZ                                 ;lower-case? (upper bounds)
+                        ja      .10                                             ;no, continue
+                        and     al,EASCIICASEMASK                               ;mask for upper case
+                        mov     [esi-1],al                                      ;upper character
+                        jmp     .10                                             ;continue
+.20                     pop     esi                                             ;restore non-volatile regs
+                        ret                                                     ;return
+;=======================================================================================================================
+;
 ;       Console Helper Routines
 ;
+;       GetConsoleMessage
 ;       PutConsoleHexByte
 ;       PutConsoleOIA
 ;       Yield
 ;
 ;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        GetConsoleMessage
+;
+;       Description:    This routine waits for the next message to be queued.
+;
+;       Out:            EAX     message params
+;
+;-----------------------------------------------------------------------------------------------------------------------
+GetConsoleMessage.10    call    Yield                                           ;pass control or halt
+GetConsoleMessage       call    GetMessage                                      ;get the next message
+                        test    eax,eax                                         ;do we have a message?
+                        jz      GetConsoleMessage.10                            ;no, continue
+                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        PutConsoleHexByte
@@ -2867,6 +3022,81 @@ Yield                   sti                                                     
                         ret                                                     ;return
 ;=======================================================================================================================
 ;
+;       Message Queue Helper Routines
+;
+;       GetMessage
+;       PutMessage
+;
+;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        GetMessage
+;
+;       Description:    This routine reads and removes a message from the message queue.
+;
+;       Out:            EAX     lo-order message data
+;                       EDX     hi-order message data
+;
+;                       CY      0 = message read
+;                               1 = no message to read
+;
+;-----------------------------------------------------------------------------------------------------------------------
+GetMessage              push    ebx                                             ;save non-volatile regs
+                        push    ecx                                             ;
+                        push    ds                                              ;
+                        push    ELDTMQ                                          ;load message queue selector ...
+                        pop     ds                                              ;... into data segment register
+                        mov     ebx,[MQHead]                                    ;head ptr
+                        mov     eax,[ebx]                                       ;lo-order 32 bits
+                        mov     edx,[ebx+4]                                     ;hi-order 32 bits
+                        or      eax,edx                                         ;is queue empty?
+                        stc                                                     ;assume queue is emtpy
+                        jz      .20                                             ;yes, skip ahead
+                        xor     ecx,ecx                                         ;store zero
+                        mov     [ebx],ecx                                       ;... in lo-order dword
+                        mov     [ebx+4],ecx                                     ;... in hi-order dword
+                        add     ebx,8                                           ;next queue element
+                        and     ebx,03FCh                                       ;at end of queue?
+                        jnz     .10                                             ;no, skip ahead
+                        mov     bl,8                                            ;reset to 1st entry
+.10                     mov     [MQHead],ebx                                    ;save new head ptr
+                        clc                                                     ;indicate message read
+.20                     pop     ds                                              ;restore non-volatile regs
+                        pop     ecx                                             ;
+                        pop     ebx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutMessage
+;
+;       Description:    This routine adda a message to the message queue.
+;
+;       In:             ECX     hi-order data word
+;                       EDX     lo-order data word
+;
+;       Out:            CY      0 = success
+;                               1 = fail: queue is full
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutMessage              push    ds                                              ;save non-volatile regs
+                        push    ELDTMQ                                          ;load task message queue selector ...
+                        pop     ds                                              ;... into data segment register
+                        mov     eax,[MQTail]                                    ;tail ptr
+                        cmp     dword [eax],0                                   ;is queue full?
+                        stc                                                     ;assume failure
+                        jne     .20                                             ;yes, cannot store
+                        mov     [eax],edx                                       ;store lo-order data
+                        mov     [eax+4],ecx                                     ;store hi-order data
+                        add     eax,8                                           ;next queue element adr
+                        and     eax,03FCh                                       ;at end of queue?
+                        jnz     .10                                             ;no, skip ahead
+                        mov     al,8                                            ;reset to top of queue
+.10                     mov     [MQTail],eax                                    ;save new tail ptr
+                        clc                                                     ;indicate success
+.20                     pop     ds                                              ;restore non-volatile regs
+                        ret                                                     ;return
+;=======================================================================================================================
+;
 ;       Memory-Mapped Video Routines
 ;
 ;       These routines read and/or write directly to CGA video memory (B800:0)
@@ -2908,6 +3138,7 @@ SetConsoleChar          mov     dl,al                                           
 ;       PlaceCursor
 ;       PutPrimaryEndOfInt
 ;       PutSecondaryEndOfInt
+;       ResetSystem
 ;       SetKeyboardLamps
 ;       WaitForKeyInBuffer
 ;       WaitForKeyOutBuffer
@@ -2964,6 +3195,22 @@ PutPrimaryEndOfInt      mov     al,EPICEOI                                      
 PutSecondaryEndOfInt    mov     al,EPICEOI                                      ;non-specific end-of-interrupt
                         out     EPICPORTSEC,al                                  ;send EOI to secondary PIC
                         ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ResetSystem
+;
+;       Description:    This routine restarts the system using the 8042 controller.
+;
+;       Out:            N/A     This routine does not return.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ResetSystem             mov     ecx,001fffffh                                   ;delay to clear ints
+                        loop    $                                               ;clear interrupts
+                        mov     al,EKEYBCMDRESET                                ;mask out bit zero
+                        out     EKEYBPORTSTAT,al                                ;drive bit zero low
+.10                     sti                                                     ;enable maskable interrupts
+                        hlt                                                     ;halt until interrupt
+                        jmp     .10                                             ;repeat until reset kicks in
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        SetKeyboardLamps
@@ -3164,6 +3411,11 @@ section                 conmque                                                 
 ;       ConDrawFields           Draw the panel fields to video memory
 ;       ConDrawField            Draw a panel field to video memory
 ;       ConPutCursor            Place the cursor at the current index into the current field
+;       ConHandlerMain          Handle attention keys on the main panel
+;       ConTakeToken            Extract the next token from a buffer
+;       ConDetermineCommand     Determine if a buffer value is a command
+;       ConClearField           Clear a panel field to nulls
+;       ConExit                 Handle the exit command
 ;       ConMain                 Handle the main command
 ;
 ;=======================================================================================================================
@@ -3201,13 +3453,89 @@ ConCode                 mov     edi,ECONDATA                                    
 ;
 ;       Place the cursor at the current field index.
 ;
-                        call    ConPutCursor                                    ;place the cursor
+.10                     call    ConPutCursor                                    ;place the cursor
 ;
-;       Enter halt loop
+;       Get the next key-down message.
 ;
-.10                     sti                                                     ;enable interrupts
-                        hlt                                                     ;halt until interrupt
-                        jmp     .10                                             ;continue halt loop
+.20                     getConsoleMessage                                       ;get a console message
+
+                        mov     edx,eax                                         ;message and params
+                        and     edx,0FFFF0000h                                  ;mask for message
+                        cmp     edx,EMSGKEYDOWN                                 ;keydown message?
+                        jne     .20                                             ;no, next message
+;
+;       Give the message to the panel event-handler first.
+;
+                        mov     ecx,[wdConsoleHandler]                          ;handler addr?
+                        jecxz   .30                                             ;no, branch
+                        call    ecx                                             ;event handled?
+                        jc     .20                                              ;yes, next message
+;
+;       To handle the event here, we need a current field that has a buffer.
+;
+.30                     mov     ebx,[wdConsoleField]                            ;field addr
+                        test    ebx,ebx                                         ;field addr?
+                        jz      .20                                             ;no, next message
+                        mov     ecx,[ebx]                                       ;buffer addr?
+                        jecxz   .20                                             ;no, next message
+                        movzx   edx,byte [ebx+7]                                ;field index
+;
+;       Handle left or up arrow.
+;
+.100                    cmp     ah,EKEYBLEFTARROWDOWN                           ;left-arrow down?
+                        je      .110                                            ;yes, branch
+                        cmp     ah,EKEYBUPARROWDOWN                             ;up-arrow down?
+                        jne     .120                                            ;no, branch
+.110                    test    dl,dl                                           ;index is zero?
+                        jz      .20                                             ;yes, next message
+                        dec     byte [ebx+7]                                    ;decrement index
+                        jmp     .10                                             ;put cursor and next message
+;
+;       Handle right or down arrow.
+;
+.120                    cmp     ah,EKEYBRIGHTARROWDOWN                          ;right-arrow down?
+                        je      .130                                            ;yes, branch
+                        cmp     ah,EKEYBDOWNARROWDOWN                           ;down-arrow down?
+                        jne     .140                                            ;no, branch
+.130                    cmp     byte [ecx+edx],0                                ;end of input?
+                        je      .20                                             ;yes, next message
+                        inc     dl                                              ;increment index
+                        cmp     dl,byte [ebx+6]                                 ;end of field?
+                        jnb     .20                                             ;yes, next message
+                        mov     [ebx+7],dl                                      ;save new index
+                        jmp     .10                                             ;put cursor and next message
+;
+;       Handle backspace
+;
+.140                    cmp     ah,EKEYBBACKSPACE                               ;backspace?
+                        jne     .160                                            ;no, branch
+                        test    dl,dl                                           ;index is zero?
+                        jz      .20                                             ;yes, next message
+                        dec     byte [ebx+7]                                    ;decrement index
+                        mov     edi,ecx                                         ;buffer addr
+                        lea     edi,[edi+edx-1]                                 ;end of buffer
+                        mov     esi,edi                                         ;end of buffer
+                        inc     esi                                             ;source address
+                        cld                                                     ;forward strings
+.150                    lodsb                                                   ;character
+                        stosb                                                   ;save over previous
+                        test    al,al                                           ;end of input?
+                        jnz     .150                                            ;no, continue
+                        jmp     .170                                            ;draw field, put cursor, next message
+;
+;       Handle printables
+;
+.160                    cmp     al,EASCIISPACE                                  ;printable range? (low)
+                        jb      .20                                             ;no, next message
+                        cmp     al,EASCIITILDE                                  ;printable range? (high)
+                        ja      .20                                             ;no, next message
+                        mov     [ecx+edx],al                                    ;store char in buffer
+                        inc     dl                                              ;advance index
+                        cmp     dl,[ebx+6]                                      ;end of field?
+                        jnb     .170                                            ;yes, branch
+                        mov     [ebx+7],dl                                      ;save new index
+.170                    call    ConDrawField                                    ;redraw field
+                        jmp     .10                                             ;put cursor and get message
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        ConClearPanel
@@ -3368,6 +3696,228 @@ ConPutCursor            push    ecx                                             
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;       Routine:        ConHandlerMain
+;
+;       Description:    This routine is called to handle user input in the main console panel when a field is exited.
+;                       The event handler must set the carry flag if the event is not completely handled. In this case
+;                       the event will be forwarded to the current field.
+;
+;       In:             EAX     Message params
+;                       EDX     Message class
+;
+;       Out:            CY      1: Event handling complete
+;                               0: Event handling not complete
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConHandlerMain          push    ebx                                             ;save non-volatile regs
+;
+;       Handle enter and keypad-enter.
+;
+                        cmp     ah,EKEYBENTERDOWN                               ;enter down?
+                        je      .10                                             ;yes, branch
+                        cmp     ah,EKEYBPADENTERDOWN                            ;keypad-enter down?
+                        je      .10                                             ;yes, branch
+                        clc                                                     ;event not handled
+                        jmp     .90                                             ;branch
+;
+;       Take the first token entered.
+;
+.10                     mov     edx,wzConsoleInBuffer                           ;console input buffer addr
+                        mov     ebx,wzConsoleToken                              ;token buffer
+                        call    ConTakeToken                                    ;take first command token
+;
+;       Evaluate token.
+;
+                        mov     edx,wzConsoleToken                              ;token buffer
+                        call    ConDetermineCommand                             ;determine if this is a command
+                        cmp     eax,ECONJMPTBLCNT                               ;command number in range?
+                        jnb     .20                                             ;no, branch
+                        shl     eax,2                                           ;convert number to array offset
+                        mov     edx,tConJmpTbl                                  ;command handler address table base
+                        mov     eax,[edx+eax]                                   ;command handler address
+                        call    eax                                             ;handler command
+;
+;       Clear field.
+;
+.20                     mov     ebx,czPnlConInp                                 ;main panel input field
+                        call    ConClearField                                   ;clear the field contents
+                        call    ConDrawField                                    ;draw the field
+                        call    ConPutCursor                                    ;place the cursor
+                        stc                                                     ;event is handled
+;
+;       Restore and return.
+;
+.90                     pop     ebx                                             ;restore non-volatile regs
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConTakeToken
+;
+;       Description:    This routine extracts the next token from the given source buffer.
+;
+;       In:             DS:EDX  source buffer address
+;                       DS:EBX  target buffer address
+;
+;       Out:            DS:EDX  source buffer address
+;                       DS:EBX  target buffer address
+;
+;       Command Form:   Line    = *3( *SP 1*ALNUM )
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConTakeToken            push    esi                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    es                                              ;
+;
+;       Address source and target; null-terminate target buffer.
+;
+                        push    ds                                              ;load data segment selector ...
+                        pop     es                                              ;... into extra segment reg
+                        mov     esi,edx                                         ;source buffer address
+                        mov     edi,ebx                                         ;target buffer address
+                        mov     byte [edi],0                                    ;null-terminate target buffer
+;
+;       Trim leading space; exit if no token.
+;
+                        cld                                                     ;forward strings
+.10                     lodsb                                                   ;load byte
+                        cmp     al,EASCIISPACE                                  ;space?
+                        je      .10                                             ;yes, continue
+                        test    al,al                                           ;end of line?
+                        jz      .40                                             ;yes, branch
+;
+;       Store non-spaces into target buffer.
+;
+.20                     stosb                                                   ;store byte
+                        lodsb                                                   ;load byte
+                        test    al,al                                           ;end of line?
+                        jz      .40                                             ;no, continue
+                        cmp     al,EASCIISPACE                                  ;space?
+                        jne     .20                                             ;no, continue
+;
+;       Walk over spaces trailing the stored token; point to final space.
+;
+.30                     lodsb                                                   ;load byte
+                        cmp     al,EASCIISPACE                                  ;space?
+                        je      .30                                             ;yes, continue
+                        dec     esi                                             ;pre-position
+;
+;       Null-terminate target buffer; advance remaining source bytes.
+;
+.40                     mov     byte [edi],0                                    ;terminate buffer
+                        mov     edi,edx                                         ;source buffer address
+.50                     lodsb                                                   ;remaining byte
+                        stosb                                                   ;move to front of buffer
+                        test    al,al                                           ;end of line?
+                        jnz     .50                                             ;no, continue
+;
+;       Restore and return.
+;
+                        pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     esi                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConDetermineCommand
+;
+;       Description:    This routine determines the command number for the command at DS:EDX.
+;
+;       input:          DS:EDX  command address
+;
+;       output:         EAX     !ECONJMPTBLCNT = command nbr
+;                               ECONJMPTBLCNT = no match fond
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConDetermineCommand     push    ebx                                             ;save non-volatile regs
+                        push    ecx                                             ;
+                        push    esi                                             ;
+                        push    edi                                             ;
+;
+;       Upper-case the command; prepare to search command table.
+;
+                        upperCaseString                                         ;upper-case string at EDX
+                        mov     esi,tConCmdTbl                                  ;commands table
+                        xor     edi,edi                                         ;intialize command number
+                        cld                                                     ;forward strings
+;
+;       Exit if end of table.
+;
+.10                     lodsb                                                   ;command length
+                        movzx   ecx,al                                          ;command length
+                        jecxz   .20                                             ;branch if end of table
+;
+;       Compare command to table entry; exit if match.
+;
+                        mov     ebx,esi                                         ;table entry address
+                        add     esi,ecx                                         ;next table entry address
+                        compareMemory                                           ;compare byte arrays at EDX, EBX
+                        jecxz   .20                                             ;branch if equal
+;
+;       Next table element.
+;
+                        inc     edi                                             ;increment command nbr
+                        jmp     .10                                             ;repeat
+;
+;       Return command number or ECONJMPTBLCNT.
+;
+.20                     mov     eax,edi                                         ;command number
+;
+;       Restore and return.
+;
+                        pop     edi                                             ;restore non-volatile regs
+                        pop     esi                                             ;
+                        pop     ecx                                             ;
+                        pop     ebx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConClearField
+;
+;       Description:    This routine clears a panel field to nulls.
+;
+;       In:             DS:EBX  panel field address
+;                       ES:     OS data segment
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConClearField           push    ebx                                             ;save non-volatile regs
+                        push    edi                                             ;
+;
+;       Exit if no field.
+;
+                        test    ebx,ebx                                         ;have field?
+                        jz      .10                                             ;no, exit
+;
+;       Reset cursor index to zero; exit if no size or no buffer.
+;
+                        xor     al,al                                           ;zero register
+                        mov     byte [ebx+7],al                                 ;zero cursor index
+                        movzx   ecx,byte [ebx+6]                                ;field size?
+                        jecxz   .10                                             ;no, exit
+                        mov     edi,[ebx]                                       ;field bufer
+                        test    edi,edi                                         ;field buffer?
+                        jz      .10                                             ;no, exit
+;
+;       Reset field to nulls.
+;
+                        cld                                                     ;forward strings
+                        rep     stosb                                           ;clear buffer
+;
+;       Restore and return.
+;
+.10                     pop     edi                                             ;restore non-volatile regs
+                        pop     ebx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConExit
+;
+;       Description:    This routine handles the EXIT command and its SHUTDOWN and QUIT aliases.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConExit                 resetSystem                                             ;issue system reset
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;       Routine:        ConMain
 ;
 ;       Description:    This routine sets the current panel to the main panel (CON001).
@@ -3378,8 +3928,10 @@ ConPutCursor            push    ecx                                             
 ConMain                 push    ecx                                             ;save non-volatile regs
                         push    edi                                             ;
 ;
-;       Initialize current panel, field.
+;       Initialize current handler, panel, field.
 ;
+                        mov     eax,[cdHandlerMain]                             ;main panel handler CS-relative addr
+                        mov     [wdConsoleHandler],eax                          ;set panel handler addr
                         mov     eax,czPnlCon001                                 ;main panel addr
                         mov     [wdConsolePanel],eax                            ;set panel addr
                         mov     eax,czPnlConInp                                 ;main panel command field addr
@@ -3400,6 +3952,7 @@ ConMain                 push    ecx                                             
 ;       Constants
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+cdHandlerMain           dd      ConHandlerMain - ConCode                        ;main panel code segment offset
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Panels
@@ -3423,6 +3976,28 @@ czPnlCon001             dd      czFldPnlIdCon001                                
 czPnlConInp             dd      wzConsoleInBuffer
                         db      23,1,79,0,0,0,7,80h
                         dd      0                                               ;end of panel
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Tables
+;
+;-----------------------------------------------------------------------------------------------------------------------
+                                                                                ;---------------------------------------
+                                                                                ;  Command Jump Table
+                                                                                ;---------------------------------------
+tConJmpTbl              equ     $                                               ;command jump table
+                        dd      ConExit         - ConCode                       ;shutdown command routine offset
+                        dd      ConExit         - ConCode                       ;exit command routine offset
+                        dd      ConExit         - ConCode                       ;quit command routine offset
+ECONJMPTBLL             equ     ($-tConJmpTbl)                                  ;table length
+ECONJMPTBLCNT           equ     ECONJMPTBLL/4                                   ;table entries
+                                                                                ;---------------------------------------
+                                                                                ;  Command Name Table
+                                                                                ;---------------------------------------
+tConCmdTbl              equ     $                                               ;command name table
+                        db      9,"SHUTDOWN",0                                  ;shutdown command
+                        db      5,"EXIT",0                                      ;exit command
+                        db      5,"QUIT",0                                      ;quit command
+                        db      0                                               ;end of table
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Strings

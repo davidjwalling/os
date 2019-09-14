@@ -4,9 +4,8 @@
 ;
 ;       Project:        os.006
 ;
-;       Description:    In this sample, the kernel is expanded to support a simple message queue. Keyboard events
-;                       are added to the queue by the keyboard interrupt handler and are read and processed by the
-;                       console task.
+;       Description:    In this sample, the kernel is expanded to include a keyboard interupt handler. This handler
+;                       updates data visible on the console in an operator information area.
 ;
 ;       Revised:        2 September 2019
 ;
@@ -158,8 +157,6 @@
 ;       EGDT...         Global Descriptor Table (GDT) selector values
 ;       EKEYF...        Keyboard status flags
 ;       EKRN...         Kernel values (fixed locations and sizes)
-;       ELDT...         Local Descriptor Table (LDT) selector values
-;       EMSG...         Message identifiers
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -337,8 +334,6 @@ EBIOSFNKEYSTATUS        equ     001h                                            
 ;       ASCII                                                                   EASCII...
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-EASCIIBACKSPACE         equ     008h                                            ;backspace
-EASCIILINEFEED          equ     00Ah                                            ;line feed
 EASCIIRETURN            equ     00Dh                                            ;carriage return
 EASCIIESCAPE            equ     01Bh                                            ;escape
 EASCIISPACE             equ     020h                                            ;space
@@ -420,16 +415,6 @@ EKRNCODEBASE            equ     01000h                                          
 EKRNCODESEG             equ     (EKRNCODEBASE >> 4)                             ;kernel code segment (0100:0000)
 EKRNCODELEN             equ     05000h                                          ;kernel code size (1000h to 6000h)
 EKRNCODESRCADR          equ     0500h                                           ;kernel code offset to loader DS:
-;-----------------------------------------------------------------------------------------------------------------------
-;       Local Descriptor Table (LDT) Selectors                                  ELDT...
-;-----------------------------------------------------------------------------------------------------------------------
-ELDTMQ                  equ     02Ch                                            ;console task message queue
-;-----------------------------------------------------------------------------------------------------------------------
-;       Message Identifiers                                                     EMSG...
-;-----------------------------------------------------------------------------------------------------------------------
-EMSGKEYDOWN             equ     041000000h                                      ;key-down
-EMSGKEYUP               equ     041010000h                                      ;key-up
-EMSGKEYCHAR             equ     041020000h                                      ;character
 ;=======================================================================================================================
 ;
 ;       Structures
@@ -454,18 +439,6 @@ struc                   KEYBDATA
 .lock                   resb    1                                               ;lock flags (caps, num, scroll, insert)
 .status                 resb    1                                               ;status (timeout)
 EKEYBDATAL              equ     ($-.scan0)                                      ;structure length
-endstruc
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       MQUEUE
-;
-;       The MQUEUE structure maps memory used for a message queue.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-struc                   MQUEUE
-MQHead                  resd    1                                               ;000 head ptr
-MQTail                  resd    1                                               ;004 tail ptr
-MQData                  resd    254                                             ;message queue
 endstruc
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -588,7 +561,6 @@ ECONDATA                equ     ($)
                                                                                 ;---------------------------------------
                                                                                 ;  panel handling
                                                                                 ;---------------------------------------
-wdConsoleHandler        resd    1                                               ;handler function
 wdConsolePanel          resd    1                                               ;panel definition addr
 wdConsoleField          resd    1                                               ;active field definition addr
 wzConsoleInBuffer       resb    80                                              ;command input buffer
@@ -2062,7 +2034,7 @@ irq0.20                 sti                                                     
 ;       E0 5B/E0 DB                     Left-Windows                    5B00/5B00       DB00/DB00
 ;       E0 5C/E0 DC                     Right-Windows                   5C00/5C00       DC00/DC00
 ;       E0 5D/E0 DD                     Right-Click                     5D00/5D00       DD00/DD00
-
+;
 ;       E1 1D 45/E1 9D C5               Pause-Break                    *6500/6500      *E500/E500
 ;       E1 1D 45/E1 9D C5               Shift Pause-Break              *6500/6500      *E500/E500
 ;       E1 1D 45/E1 9D C5               Alt Pause-Break                *6500/6500      *E500/E500
@@ -2192,7 +2164,7 @@ irq0.20                 sti                                                     
                         movzx   eax,al                                          ;expand scan code to index
                         mov     al,[cs:tscan2ext+eax]                           ;translate scan code
                         mov     [esi+KEYBDATA.scan],al                          ;save final scan code
-                        jmp     irq1.putkeydown                                 ;put key-down message
+                        jmp     irq1.putoia                                     ;continue
 ;
 ;       Handle keyboard read timeout. This should not occur under normal circumstances. Its occurrence suggests an error
 ;       in the keyboard scan code handling. An error indicator will be shown in the OIA.
@@ -2224,7 +2196,7 @@ irq1.notext1            cmp     al,EKEYBCODEEXT0                                
                         mov     [esi+KEYBDATA.scan3],al                         ;save scan code 3
                         mov     al,0F7h                                         ;print-screen up
                         mov     [esi+KEYBDATA.scan],al                          ;save final scan code
-                        jmp     irq1.putkeydown                                 ;put key-down message and update OIA
+                        jmp     irq1.putoia                                     ;continue
 ;
 ;       Where needed, use the last scan code and resume above.
 ;
@@ -2281,9 +2253,9 @@ irq1.checkchar          and     al,EKEYBMAKECODEMASK                            
                         je      irq1.savechar                                   ;yes, branch
                         mov     dl,EASCIISLASH                                  ;ASCII slash
                         cmp     al,EKEYBPADSLASHDOWN                            ;keypad-slash down?
-                        jne     irq1.putkeydown                                 ;no, put key-down msg and update OIA
+                        jne     irq1.putoia                                     ;continue
 irq1.savechar           mov     [esi+KEYBDATA.char],dl                          ;store ASCII code
-                        jmp     irq1.putmessage                                 ;put char, key-down msg and upate OIA
+                        jmp     irq1.putoia                                     ;continue
 ;
 ;       Flip lock toggles if a toggle key (caps-lock, num-lock, scroll-lock, insert)
 ;
@@ -2370,7 +2342,7 @@ irq1.getchar            mov     al,[cs:edx+eax]                                 
 ;
 irq1.swapcase           xor     al,020h                                         ;swap case bit
                         mov     [esi+KEYBDATA.char],al                          ;save ASCII char code
-                        jmp     irq1.putmessage                                 ;put char, key-down msgs; update OIA
+                        jmp     irq1.putoia                                     ;continue
 ;
 ;       Check if num-lock and keypad numeral.
 ;
@@ -2386,28 +2358,6 @@ irq1.checknum           test    byte [esi+KEYBDATA.lock],EKEYFLOCKNUM           
                         movzx   edx,dl                                          ;extend to register
                         mov     al,[cs:tscankeypad+edx]                         ;translate to numeral equivalent
 irq1.notnum             mov     [esi+KEYBDATA.char],al                          ;save ASCII character code
-;
-;       Put messages into the message queue.
-;
-irq1.putmessage         mov     al,[esi+KEYBDATA.char]                          ;ASCII code
-                        mov     ah,[esi+KEYBDATA.scan]                          ;final scan code
-                        test    al,al                                           ;printable char?
-                        jz      irq1.putkeydown                                 ;no, skip ahead
-                        mov     edx,EMSGKEYCHAR                                 ;key-character event
-                        and     eax,0FFFFh                                      ;clear high-order word
-                        or      edx,eax                                         ;msg id and codes
-                        xor     ecx,ecx                                         ;null param
-                        call    PutMessage                                      ;put message to console
-irq1.putkeydown         mov     al,[esi+KEYBDATA.char]                          ;ASCII char
-                        mov     ah,[esi+KEYBDATA.scan]                          ;final scan code
-                        mov     edx,EMSGKEYDOWN                                 ;assume key-down event
-                        test    ah,EKEYBUP                                      ;release scan-code?
-                        jz      irq1.makecode                                   ;no, skip ahead
-                        mov     edx,EMSGKEYUP                                   ;key-up event
-irq1.makecode           and     eax,0FFFFh                                      ;clear high-order word
-                        or      edx,eax                                         ;msg id and codes
-                        xor     ecx,ecx                                         ;null param
-                        call    PutMessage                                      ;put message to console
 ;
 ;       Update operator information area. Enable maskable ints.
 ;
@@ -2466,7 +2416,9 @@ tscan2ext               db      000h,000h,000h,000h,000h,000h,000h,000h         
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;e8-ef
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;f0-f7
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;f8-ff
-
+;
+;       Scan Code to Base ASCII
+;
 tscan2ascii             db      000h,01Bh,031h,032h,033h,034h,035h,036h         ;00-07
                         db      037h,038h,039h,030h,02Dh,03Dh,008h,009h         ;08-0f
                         db      071h,077h,065h,072h,074h,079h,075h,069h         ;10-17
@@ -2483,7 +2435,9 @@ tscan2ascii             db      000h,01Bh,031h,032h,033h,034h,035h,036h         
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;68-6f
                         db      000h,000h,000h,07Fh,000h,02Fh,000h,000h         ;70-77
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;78-7f
-
+;
+;       Scan Code to Shifted ASCII
+;
 tscan2shift             db      000h,01Bh,021h,040h,023h,024h,025h,05Eh         ;80-87
                         db      026h,02Ah,028h,029h,05Fh,02Bh,008h,009h         ;88-8f
                         db      051h,057h,045h,052h,054h,059h,055h,049h         ;90-97
@@ -2658,8 +2612,7 @@ svc90                   iretd                                                   
 ;       These tsvce macros expand to define an address vector table for the service request interrupt (int 30h).
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-tsvc                    tsvce   GetConsoleMessage                               ;get message
-                        tsvce   PlaceCursor                                     ;place the cursor at the current loc
+tsvc                    tsvce   PlaceCursor                                     ;place the cursor at the current loc
                         tsvce   PutConsoleOIA                                   ;display the operator information area
                         tsvce   SetKeyboardLamps                                ;turn keboard LEDs on or off
                         tsvce   Yield                                           ;yield to system
@@ -2671,10 +2624,6 @@ maxtsvc                 equ     ($-tsvc)/4                                      
 ;       These macros provide positional parameterization of service request calls.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-%macro                  getConsoleMessage 0
-                        mov     al,eGetConsoleMessage                           ;function code
-                        int     _svc                                            ;invoke OS service
-%endmacro
 %macro                  placeCursor 0
                         mov     al,ePlaceCursor                                 ;function code
                         int     _svc                                            ;invoke OS service
@@ -2700,26 +2649,11 @@ maxtsvc                 equ     ($-tsvc)/4                                      
 ;
 ;       Console Helper Routines
 ;
-;       GetConsoleMessage
 ;       PutConsoleHexByte
 ;       PutConsoleOIA
 ;       Yield
 ;
 ;=======================================================================================================================
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        GetConsoleMessage
-;
-;       Description:    This routine waits for the next message to be queued.
-;
-;       Out:            EAX     message params
-;
-;-----------------------------------------------------------------------------------------------------------------------
-GetConsoleMessage.10    call    Yield                                           ;pass control or halt
-GetConsoleMessage       call    GetMessage                                      ;get the next message
-                        test    eax,eax                                         ;do we have a message?
-                        jz      GetConsoleMessage.10                            ;no, continue
-                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        PutConsoleHexByte
@@ -2934,81 +2868,6 @@ PutConsoleOIA           push    ebx                                             
 ;-----------------------------------------------------------------------------------------------------------------------
 Yield                   sti                                                     ;enable maskagle interrupts
                         hlt                                                     ;halt until external interrupt
-                        ret                                                     ;return
-;=======================================================================================================================
-;
-;       Message Queue Helper Routines
-;
-;       GetMessage
-;       PutMessage
-;
-;=======================================================================================================================
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        GetMessage
-;
-;       Description:    This routine reads and removes a message from the message queue.
-;
-;       Out:            EAX     lo-order message data
-;                       EDX     hi-order message data
-;
-;                       CY      0 = message read
-;                               1 = no message to read
-;
-;-----------------------------------------------------------------------------------------------------------------------
-GetMessage              push    ebx                                             ;save non-volatile regs
-                        push    ecx                                             ;
-                        push    ds                                              ;
-                        push    ELDTMQ                                          ;load message queue selector ...
-                        pop     ds                                              ;... into data segment register
-                        mov     ebx,[MQHead]                                    ;head ptr
-                        mov     eax,[ebx]                                       ;lo-order 32 bits
-                        mov     edx,[ebx+4]                                     ;hi-order 32 bits
-                        or      eax,edx                                         ;is queue empty?
-                        stc                                                     ;assume queue is emtpy
-                        jz      .20                                             ;yes, skip ahead
-                        xor     ecx,ecx                                         ;store zero
-                        mov     [ebx],ecx                                       ;... in lo-order dword
-                        mov     [ebx+4],ecx                                     ;... in hi-order dword
-                        add     ebx,8                                           ;next queue element
-                        and     ebx,03FCh                                       ;at end of queue?
-                        jnz     .10                                             ;no, skip ahead
-                        mov     bl,8                                            ;reset to 1st entry
-.10                     mov     [MQHead],ebx                                    ;save new head ptr
-                        clc                                                     ;indicate message read
-.20                     pop     ds                                              ;restore non-volatile regs
-                        pop     ecx                                             ;
-                        pop     ebx                                             ;
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        PutMessage
-;
-;       Description:    This routine adda a message to the message queue.
-;
-;       In:             ECX     hi-order data word
-;                       EDX     lo-order data word
-;
-;       Out:            CY      0 = success
-;                               1 = fail: queue is full
-;
-;-----------------------------------------------------------------------------------------------------------------------
-PutMessage              push    ds                                              ;save non-volatile regs
-                        push    ELDTMQ                                          ;load task message queue selector ...
-                        pop     ds                                              ;... into data segment register
-                        mov     eax,[MQTail]                                    ;tail ptr
-                        cmp     dword [eax],0                                   ;is queue full?
-                        stc                                                     ;assume failure
-                        jne     .20                                             ;yes, cannot store
-                        mov     [eax],edx                                       ;store lo-order data
-                        mov     [eax+4],ecx                                     ;store hi-order data
-                        add     eax,8                                           ;next queue element adr
-                        and     eax,03FCh                                       ;at end of queue?
-                        jnz     .10                                             ;no, skip ahead
-                        mov     al,8                                            ;reset to top of queue
-.10                     mov     [MQTail],eax                                    ;save new tail ptr
-                        clc                                                     ;indicate success
-.20                     pop     ds                                              ;restore non-volatile regs
                         ret                                                     ;return
 ;=======================================================================================================================
 ;
@@ -3309,8 +3168,6 @@ section                 conmque                                                 
 ;       ConDrawFields           Draw the panel fields to video memory
 ;       ConDrawField            Draw a panel field to video memory
 ;       ConPutCursor            Place the cursor at the current index into the current field
-;       ConHandlerMain          Handle attention keys on the main panel
-;       ConClearField           Clear a panel field to nulls
 ;       ConMain                 Handle the main command
 ;
 ;=======================================================================================================================
@@ -3348,89 +3205,13 @@ ConCode                 mov     edi,ECONDATA                                    
 ;
 ;       Place the cursor at the current field index.
 ;
-.10                     call    ConPutCursor                                    ;place the cursor
+                        call    ConPutCursor                                    ;place the cursor
 ;
-;       Get the next key-down message.
+;       Enter halt loop
 ;
-.20                     getConsoleMessage                                       ;get a console message
-
-                        mov     edx,eax                                         ;message and params
-                        and     edx,0FFFF0000h                                  ;mask for message
-                        cmp     edx,EMSGKEYDOWN                                 ;keydown message?
-                        jne     .20                                             ;no, next message
-;
-;       Give the message to the panel event-handler first.
-;
-                        mov     ecx,[wdConsoleHandler]                          ;handler addr?
-                        jecxz   .30                                             ;no, branch
-                        call    ecx                                             ;event handled?
-                        jc     .20                                              ;yes, next message
-;
-;       To handle the event here, we need a current field that has a buffer.
-;
-.30                     mov     ebx,[wdConsoleField]                            ;field addr
-                        test    ebx,ebx                                         ;field addr?
-                        jz      .20                                             ;no, next message
-                        mov     ecx,[ebx]                                       ;buffer addr?
-                        jecxz   .20                                             ;no, next message
-                        movzx   edx,byte [ebx+7]                                ;field index
-;
-;       Handle left or up arrow.
-;
-.100                    cmp     ah,EKEYBLEFTARROWDOWN                           ;left-arrow down?
-                        je      .110                                            ;yes, branch
-                        cmp     ah,EKEYBUPARROWDOWN                             ;up-arrow down?
-                        jne     .120                                            ;no, branch
-.110                    test    dl,dl                                           ;index is zero?
-                        jz      .20                                             ;yes, next message
-                        dec     byte [ebx+7]                                    ;decrement index
-                        jmp     .10                                             ;put cursor and next message
-;
-;       Handle right or down arrow.
-;
-.120                    cmp     ah,EKEYBRIGHTARROWDOWN                          ;right-arrow down?
-                        je      .130                                            ;yes, branch
-                        cmp     ah,EKEYBDOWNARROWDOWN                           ;down-arrow down?
-                        jne     .140                                            ;no, branch
-.130                    cmp     byte [ecx+edx],0                                ;end of input?
-                        je      .20                                             ;yes, next message
-                        inc     dl                                              ;increment index
-                        cmp     dl,byte [ebx+6]                                 ;end of field?
-                        jnb     .20                                             ;yes, next message
-                        mov     [ebx+7],dl                                      ;save new index
-                        jmp     .10                                             ;put cursor and next message
-;
-;       Handle backspace
-;
-.140                    cmp     ah,EKEYBBACKSPACE                               ;backspace?
-                        jne     .160                                            ;no, branch
-                        test    dl,dl                                           ;index is zero?
-                        jz      .20                                             ;yes, next message
-                        dec     byte [ebx+7]                                    ;decrement index
-                        mov     edi,ecx                                         ;buffer addr
-                        lea     edi,[edi+edx-1]                                 ;end of buffer
-                        mov     esi,edi                                         ;end of buffer
-                        inc     esi                                             ;source address
-                        cld                                                     ;forward strings
-.150                    lodsb                                                   ;character
-                        stosb                                                   ;save over previous
-                        test    al,al                                           ;end of input?
-                        jnz     .150                                            ;no, continue
-                        jmp     .170                                            ;draw field, put cursor, next message
-;
-;       Handle printables
-;
-.160                    cmp     al,EASCIISPACE                                  ;printable range? (low)
-                        jb      .20                                             ;no, next message
-                        cmp     al,EASCIITILDE                                  ;printable range? (high)
-                        ja      .20                                             ;no, next message
-                        mov     [ecx+edx],al                                    ;store char in buffer
-                        inc     dl                                              ;advance index
-                        cmp     dl,[ebx+6]                                      ;end of field?
-                        jnb     .170                                            ;yes, branch
-                        mov     [ebx+7],dl                                      ;save new index
-.170                    call    ConDrawField                                    ;redraw field
-                        jmp     .10                                             ;put cursor and get message
+.10                     sti                                                     ;enable interrupts
+                        hlt                                                     ;halt until interrupt
+                        jmp     .10                                             ;continue halt loop
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        ConClearPanel
@@ -3591,82 +3372,6 @@ ConPutCursor            push    ecx                                             
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Routine:        ConHandlerMain
-;
-;       Description:    This routine is called to handle user input in the main console panel when a field is exited.
-;                       The event handler must set the carry flag if the event is not completely handled. In this case
-;                       the event will be forwarded to the current field.
-;
-;       In:             EAX     Message params
-;                       EDX     Message class
-;
-;       Out:            CY      1: Event handling complete
-;                               0: Event handling not complete
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConHandlerMain          push    ebx                                             ;save non-volatile regs
-;
-;       Handle enter and keypad-enter.
-;
-                        cmp     ah,EKEYBENTERDOWN                               ;enter down?
-                        je      .10                                             ;yes, branch
-                        cmp     ah,EKEYBPADENTERDOWN                            ;keypad-enter down?
-                        je      .10                                             ;yes, branch
-                        clc                                                     ;event not handled
-                        jmp     .90                                             ;branch
-;
-;       Clear field.
-;
-.10                     mov     ebx,czPnlConInp                                 ;main panel input field
-                        call    ConClearField                                   ;clear the field contents
-                        call    ConDrawField                                    ;draw the field
-                        call    ConPutCursor                                    ;place the cursor
-                        stc                                                     ;event is handled
-;
-;       Restore and return.
-;
-.90                     pop     ebx                                             ;restore non-volatile regs
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConClearField
-;
-;       Description:    This routine clears a panel field to nulls.
-;
-;       In:             DS:EBX  panel field address
-;                       ES:     OS data segment
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConClearField           push    ebx                                             ;save non-volatile regs
-                        push    edi                                             ;
-;
-;       Exit if no field.
-;
-                        test    ebx,ebx                                         ;have field?
-                        jz      .10                                             ;no, exit
-;
-;       Reset cursor index to zero; exit if no size or no buffer.
-;
-                        xor     al,al                                           ;zero register
-                        mov     byte [ebx+7],al                                 ;zero cursor index
-                        movzx   ecx,byte [ebx+6]                                ;field size?
-                        jecxz   .10                                             ;no, exit
-                        mov     edi,[ebx]                                       ;field bufer
-                        test    edi,edi                                         ;field buffer?
-                        jz      .10                                             ;no, exit
-;
-;       Reset field to nulls.
-;
-                        cld                                                     ;forward strings
-                        rep     stosb                                           ;clear buffer
-;
-;       Restore and return.
-;
-.10                     pop     edi                                             ;restore non-volatile regs
-                        pop     ebx                                             ;
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
 ;       Routine:        ConMain
 ;
 ;       Description:    This routine sets the current panel to the main panel (CON001).
@@ -3677,10 +3382,8 @@ ConClearField           push    ebx                                             
 ConMain                 push    ecx                                             ;save non-volatile regs
                         push    edi                                             ;
 ;
-;       Initialize current handler, panel, field.
+;       Initialize current panel, field.
 ;
-                        mov     eax,[cdHandlerMain]                             ;main panel handler CS-relative addr
-                        mov     [wdConsoleHandler],eax                          ;set panel handler addr
                         mov     eax,czPnlCon001                                 ;main panel addr
                         mov     [wdConsolePanel],eax                            ;set panel addr
                         mov     eax,czPnlConInp                                 ;main panel command field addr
@@ -3701,7 +3404,6 @@ ConMain                 push    ecx                                             
 ;       Constants
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-cdHandlerMain           dd      ConHandlerMain - ConCode                        ;main panel code segment offset
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Panels
