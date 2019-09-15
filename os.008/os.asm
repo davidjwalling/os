@@ -4,8 +4,7 @@
 ;
 ;       Project:        os.008
 ;
-;       Description:    In this sample, the console task is expanded to support the handling of a few simple commands,
-;                       exit, quit, and shutdown.
+;       Description:    In this sample, the console task is expanded to support the reboot/restart command.
 ;
 ;       Revised:        2 September 2019
 ;
@@ -3867,6 +3866,15 @@ ConDetermineCommand     push    ebx                                             
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;       Routine:        ConReset
+;
+;       Description:    This routine handles the reset command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConReset                resetSystem                                             ;issue system reset
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;       Routine:        ConClearField
 ;
 ;       Description:    This routine clears a panel field to nulls.
@@ -3902,15 +3910,6 @@ ConClearField           push    ebx                                             
 ;
 .10                     pop     edi                                             ;restore non-volatile regs
                         pop     ebx                                             ;
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConExit
-;
-;       Description:    This routine handles the EXIT command and its SHUTDOWN and QUIT aliases.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConExit                 resetSystem                                             ;issue system reset
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -3981,18 +3980,14 @@ czPnlConInp             dd      wzConsoleInBuffer
                                                                                 ;  Command Jump Table
                                                                                 ;---------------------------------------
 tConJmpTbl              equ     $                                               ;command jump table
-                        dd      ConExit         - ConCode                       ;shutdown command routine offset
-                        dd      ConExit         - ConCode                       ;exit command routine offset
-                        dd      ConExit         - ConCode                       ;quit command routine offset
+                        dd      ConReset        - ConCode                       ;reset command
 ECONJMPTBLL             equ     ($-tConJmpTbl)                                  ;table length
 ECONJMPTBLCNT           equ     ECONJMPTBLL/4                                   ;table entries
                                                                                 ;---------------------------------------
                                                                                 ;  Command Name Table
                                                                                 ;---------------------------------------
 tConCmdTbl              equ     $                                               ;command name table
-                        db      9,"SHUTDOWN",0                                  ;shutdown command
-                        db      5,"EXIT",0                                      ;exit command
-                        db      5,"QUIT",0                                      ;quit command
+                        db      2,"R",0                                         ;reboot/restart command
                         db      0                                               ;end of table
 ;-----------------------------------------------------------------------------------------------------------------------
 ;

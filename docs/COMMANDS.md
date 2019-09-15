@@ -13,7 +13,7 @@ a o,/home             Add the folder "/home" to the file system root node
 a /home/taxes/        Add the folder "/home/taxes" to the file system root node (implicit type)
 ```
 - Memory allocations complete and display the memory allocations (l m) panel.
-- File and folder allocations complete and display the file and folder list (l) panel. 
+- File and folder allocations complete and display the file and folder list (l) panel.
 ### Copy
 ```
 c readme.md,copy.md   Copy the file "readme.md" to "copy.md"
@@ -80,7 +80,7 @@ LST001                       Memory Allocation List             DD-MM-YYYY HH:MM
     At       Until      Size   Task
  _  99999999-99999999  ZZZZU   TTTT
  _  00010000-00013FFF    16K~  0014
- 
+
 :____________________________________________________
 ```
 ### Move/Rename with Replace
@@ -94,6 +94,10 @@ m taxes/,newname      Non-destructive rename folder "taxes" to "newname"
 m taxes/,newname,r    Destructive rename folder "taxes" to "newname"
 m taxes/,backup/      Non-destructive move folder "taxes" into folder "backup"
 m taxes/,backup/,r    Desctructive move folder "taxes" into folder "backup"
+```
+### Reset
+```
+r                     Reset the system
 ```
 ### Start
 ```
