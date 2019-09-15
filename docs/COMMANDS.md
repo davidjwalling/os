@@ -44,6 +44,12 @@ e taxes/              Edit the folder "taxes" (implicit type)
 e o,taxes             Edit the folder "taxes" (explicit type)
 e o,taxes/            Edit the folder "taxes" (explicit type)
 ```
+### Go to Panel
+```
+g                     Go to the home panel
+g pci                 Go to the home PCI panel
+g pci001              Go to the panel named "pci001"
+```
 ### Inquire/Info
 ```
 i                     Inquire summary system information
@@ -95,7 +101,7 @@ m taxes/,newname,r    Destructive rename folder "taxes" to "newname"
 m taxes/,backup/      Non-destructive move folder "taxes" into folder "backup"
 m taxes/,backup/,r    Desctructive move folder "taxes" into folder "backup"
 ```
-### Reset
+### Reset/Reboot/Restart
 ```
 r                     Reset the system
 ```
@@ -104,16 +110,17 @@ r                     Reset the system
 s myprogram           Start a task on the executable file "myprogram"
 myprogram             Start a task on the executable file "myprogram" (implicit command)
 ```
-### Stop
-```
-p myprogram           Stop the task named "myprogram"
-```
 ### View
 ```
 v readme.md           View the file "readme.md" (implicit type specifier)
 v i,readme.md         View the file "readme.md"
+v                     View memory contents at last viewed address or zero
 v m                   View memory contents at last viewed address or zero
 v m,5000              view memory contents at address 5000
+```
+### Stop
+```
+x myprogram           Stop the task named "myprogram"
 ```
 ### Sample Command Resolution
 ```

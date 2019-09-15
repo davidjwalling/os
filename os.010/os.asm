@@ -4,7 +4,7 @@
 ;
 ;       Project:        os.010
 ;
-;       Description:    In this sample program, logic is added to allocate and free memory blocks at the kernel level.
+;       Description:    In this sample, the console task is expanded to support a command to view a memory panel.
 ;
 ;       Revised:        2 September 2019
 ;
@@ -157,7 +157,6 @@
 ;       EKEYF...        Keyboard status flags
 ;       EKRN...         Kernel values (fixed locations and sizes)
 ;       ELDT...         Local Descriptor Table (LDT) selector values
-;       EMEM...         Memory Management values
 ;       EMSG...         Message identifiers
 ;
 ;=======================================================================================================================
@@ -223,8 +222,6 @@ EKEYBPADINSERTDOWN      equ     052h                                            
 EKEYBPADDELETEDOWN      equ     053h                                            ;keypad-delete down
 EKEYBWINLDOWN           equ     05Bh                                            ;left windows (R) down
 EKEYBWINRDOWN           equ     05Ch                                            ;right windows (R) down
-EKEYBCLICKRDOWN         equ     05Dh                                            ;right-click down
-EKEYBPAUSEBREAKDOWN     equ     065h                                            ;pause-break key down
 EKEYBUPARROWDOWN        equ     068h                                            ;up-arrow down (e0 48)
 EKEYBLEFTARROWDOWN      equ     06Bh                                            ;left-arrow down (e0 4b)
 EKEYBRIGHTARROWDOWN     equ     06Dh                                            ;right-arrow down (e0 4d)
@@ -244,11 +241,9 @@ EKEYBPADASTERISKUP      equ     0B7h                                            
 EKEYBALTLUP             equ     0B8h                                            ;left alt key up
 EKEYBWINLUP             equ     0DBh                                            ;left windows (R) up
 EKEYBWINRUP             equ     0DCh                                            ;right windows (R) up
-EKEYBCLICKRUP           equ     0DDh                                            ;right-click up
 EKEYBCODEEXT0           equ     0E0h                                            ;extended scan code 0
 EKEYBCODEEXT1           equ     0E1h                                            ;extended scan code 1
 EKEYBALTRUP             equ     0F8h                                            ;right-alt up
-KEYBPADENTERUP          equ     0FCh                                            ;keypad-enter up
 EKEYBCTRLRUP            equ     0FDh                                            ;left-control up
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -336,8 +331,6 @@ EBIOSFNKEYSTATUS        equ     001h                                            
 ;       ASCII                                                                   EASCII...
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-EASCIIBACKSPACE         equ     008h                                            ;backspace
-EASCIILINEFEED          equ     00Ah                                            ;line feed
 EASCIIRETURN            equ     00Dh                                            ;carriage return
 EASCIIESCAPE            equ     01Bh                                            ;escape
 EASCIISPACE             equ     020h                                            ;space
@@ -358,7 +351,6 @@ EASCIIBORDSGLLWRLFT     equ     0C0h                                            
 EASCIIBORDSGLHORZ       equ     0C4h                                            ;horizontal single border
 EASCIIBORDSGLLWRRGT     equ     0D9h                                            ;lower-right single border
 EASCIIBORDSGLUPRLFT     equ     0DAh                                            ;upper-left single border
-EASCIICASE              equ     00100000b                                       ;case bit
 EASCIICASEMASK          equ     11011111b                                       ;case mask
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -426,19 +418,10 @@ EKRNCODEBASE            equ     01000h                                          
 EKRNCODESEG             equ     (EKRNCODEBASE >> 4)                             ;kernel code segment (0100:0000)
 EKRNCODELEN             equ     05000h                                          ;kernel code size (1000h to 6000h)
 EKRNCODESRCADR          equ     0500h                                           ;kernel code offset to loader DS:
-EKRNHEAPSIZE            equ     080000000h                                      ;kernel heap size
-EKRNHEAPBASE            equ     010000h                                         ;kernel heap base
 ;-----------------------------------------------------------------------------------------------------------------------
 ;       Local Descriptor Table (LDT) Selectors                                  ELDT...
 ;-----------------------------------------------------------------------------------------------------------------------
 ELDTMQ                  equ     02Ch                                            ;console task message queue
-;-----------------------------------------------------------------------------------------------------------------------
-;       Memory Management Constants                                             EMEM...
-;-----------------------------------------------------------------------------------------------------------------------
-EMEMMINSIZE             equ     256                                             ;minimum heap block size (incl. hdr)
-EMEMFREECODE            equ     "FREE"                                          ;free memory signature
-EMEMUSERCODE            equ     "USER"                                          ;user memory signature
-EMEMWIPEBYTE            equ     000h                                            ;byte value to wipe storage
 ;-----------------------------------------------------------------------------------------------------------------------
 ;       Message Identifiers                                                     EMSG...
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -469,40 +452,6 @@ struc                   KEYBDATA
 .lock                   resb    1                                               ;lock flags (caps, num, scroll, insert)
 .status                 resb    1                                               ;status (timeout)
 EKEYBDATAL              equ     ($-.scan0)                                      ;structure length
-endstruc
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       MEMBLOCK
-;
-;       The MEMBLOCK structure defines a memory block.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-struc                   MEMBLOCK
-.signature              resd    1                                               ;starting signature
-.bytes                  resd    1                                               ;block size in bytes
-.owner                  resd    1                                               ;owning task
-.reserved               resd    1                                               ;reserved
-.nextcontig             resd    1                                               ;next contiguous block
-.previouscontig         resd    1                                               ;previous contiguous block
-.nextblock              resd    1                                               ;next free/task block
-.previousblock          resd    1                                               ;previous free/task block
-EMEMBLOCKLEN            equ     ($-.signature)
-endstruc
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       MEMROOT
-;
-;       The MEMROOT structure defines starting and ending addresses of memory block chains.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-struc                   MEMROOT
-.firstcontig            resd    1                                               ;first contiguous block
-.lastcontig             resd    1                                               ;last contiguous block
-.firstfree              resd    1                                               ;first free block
-.lastfree               resd    1                                               ;last free block
-.firsttask              resd    1                                               ;first task block
-.lasttask               resd    1                                               ;last task block
-EMEMROOTLEN             equ     ($-.firstcontig)
 endstruc
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -641,33 +590,32 @@ wdConsoleHandler        resd    1                                               
 wdConsolePanel          resd    1                                               ;panel definition addr
 wdConsoleField          resd    1                                               ;active field definition addr
 wdConsoleMemBase        resd    1                                               ;console memory address
-wdConsoleHeapSize       resd    1                                               ;kernel heap size
 wzConsoleInBuffer       resb    80                                              ;command input buffer
 wzConsoleToken          resb    80                                              ;token buffer
-wzConsoleOutBuffer      resb    80                                              ;output buffer
                                                                                 ;---------------------------------------
                                                                                 ;  memory panel fields
                                                                                 ;---------------------------------------
-wzConsoleMemBuf0        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf1        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf2        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf3        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf4        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf5        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf6        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf7        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf8        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf9        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBufA        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBufB        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBufC        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBufD        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBufE        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBufF        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf10       resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf11       resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf12       resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf13       resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
+                                                                                ;0123456789012345678901234567890123456789012345678901234567890123456789012345
+wzConsoleMemBuf0        resb    76                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ................\0
+wzConsoleMemBuf1        resb    76                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ................\0
+wzConsoleMemBuf2        resb    76                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ................\0
+wzConsoleMemBuf3        resb    76                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ................\0
+wzConsoleMemBuf4        resb    76                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ................\0
+wzConsoleMemBuf5        resb    76                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ................\0
+wzConsoleMemBuf6        resb    76                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ................\0
+wzConsoleMemBuf7        resb    76                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ................\0
+wzConsoleMemBuf8        resb    76                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ................\0
+wzConsoleMemBuf9        resb    76                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ................\0
+wzConsoleMemBufA        resb    76                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ................\0
+wzConsoleMemBufB        resb    76                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ................\0
+wzConsoleMemBufC        resb    76                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ................\0
+wzConsoleMemBufD        resb    76                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ................\0
+wzConsoleMemBufE        resb    76                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ................\0
+wzConsoleMemBufF        resb    76                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ................\0
+wzConsoleMemBuf10       resb    76                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ................\0
+wzConsoleMemBuf11       resb    76                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ................\0
+wzConsoleMemBuf12       resb    76                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ................\0
+wzConsoleMemBuf13       resb    76                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ................\0
                                                                                 ;---------------------------------------
                                                                                 ;  reusable menu option input
                                                                                 ;---------------------------------------
@@ -700,10 +648,6 @@ wbConsoleRow            resb    1                                               
                                                                                 ;  set by keyboard interrupt
                                                                                 ;---------------------------------------
 wsKeybData              resb    EKEYBDATAL                                      ;keyboard data
-                                                                                ;---------------------------------------
-                                                                                ;  memory management
-                                                                                ;---------------------------------------
-wsConsoleMemRoot        resb    EMEMROOTLEN                                     ;memory root structure
 ECONDATALEN             equ     ($-ECONDATA)                                    ;size of console data area
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -2603,7 +2547,7 @@ irq0.20                 sti                                                     
 ;       E0 5B/E0 DB                     Left-Windows                    5B00/5B00       DB00/DB00
 ;       E0 5C/E0 DC                     Right-Windows                   5C00/5C00       DC00/DC00
 ;       E0 5D/E0 DD                     Right-Click                     5D00/5D00       DD00/DD00
-
+;
 ;       E1 1D 45/E1 9D C5               Pause-Break                    *6500/6500      *E500/E500
 ;       E1 1D 45/E1 9D C5               Shift Pause-Break              *6500/6500      *E500/E500
 ;       E1 1D 45/E1 9D C5               Alt Pause-Break                *6500/6500      *E500/E500
@@ -3007,7 +2951,9 @@ tscan2ext               db      000h,000h,000h,000h,000h,000h,000h,000h         
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;e8-ef
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;f0-f7
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;f8-ff
-
+;
+;       Scan Code to Base ASCII
+;
 tscan2ascii             db      000h,01Bh,031h,032h,033h,034h,035h,036h         ;00-07
                         db      037h,038h,039h,030h,02Dh,03Dh,008h,009h         ;08-0f
                         db      071h,077h,065h,072h,074h,079h,075h,069h         ;10-17
@@ -3024,7 +2970,9 @@ tscan2ascii             db      000h,01Bh,031h,032h,033h,034h,035h,036h         
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;68-6f
                         db      000h,000h,000h,07Fh,000h,02Fh,000h,000h         ;70-77
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;78-7f
-
+;
+;       Scan Code to Shifted ASCII
+;
 tscan2shift             db      000h,01Bh,021h,040h,023h,024h,025h,05Eh         ;80-87
                         db      026h,02Ah,028h,029h,05Fh,02Bh,008h,009h         ;88-8f
                         db      051h,057h,045h,052h,054h,059h,055h,049h         ;90-97
@@ -3199,10 +3147,7 @@ svc90                   iretd                                                   
 ;       These tsvce macros expand to define an address vector table for the service request interrupt (int 30h).
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-tsvc                    tsvce   AllocateMemory                                  ;allocate memory block
-                        tsvce   CompareMemory                                   ;compare memory
-                        tsvce   DecimalToUnsigned                               ;convert decimal string to unsigned integer
-                        tsvce   FreeMemory                                      ;free memory block
+tsvc                    tsvce   CompareMemory                                   ;compare memory
                         tsvce   GetConsoleMessage                               ;get message
                         tsvce   HexadecimalToUnsigned                           ;convert hexadecimal string to unsigned integer
                         tsvce   PlaceCursor                                     ;place the cursor at the current loc
@@ -3220,22 +3165,8 @@ maxtsvc                 equ     ($-tsvc)/4                                      
 ;       These macros provide positional parameterization of service request calls.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-%macro                  allocateMemory 1
-                        mov     ecx,%1                                          ;bytes to allocate
-                        mov     al,eAllocateMemory                              ;allocate memory fn.
-                        int     _svc                                            ;invoke OS service
-%endmacro
 %macro                  compareMemory 0
                         mov     al,eCompareMemory                               ;function code
-                        int     _svc                                            ;invoke OS service
-%endmacro
-%macro                  decimalToUnsigned 0
-                        mov     al,eDecimalToUnsigned                           ;function code
-                        int     _svc                                            ;invoke OS servie
-%endmacro
-%macro                  freeMemory 1
-                        mov     edx,%1                                          ;address of memory block
-                        mov     al,eFreeMemory                                  ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
 %macro                  getConsoleMessage 0
@@ -3279,479 +3210,6 @@ maxtsvc                 equ     ($-tsvc)/4                                      
 ;       Kernel Function Library
 ;
 ;=======================================================================================================================
-;=======================================================================================================================
-;
-;       Memory Helper Routines
-;
-;       AllocateMemory
-;       FreeMemory
-;
-;=======================================================================================================================
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        AllocateMemory
-;
-;       Description:    This routine allocates a memory block for the given task.
-;
-;       In:             ECX     bytes of memory to allocate
-;
-;       Out:            EAX     !0      address of user portion of newly allocated memory block
-;                               0       unable to allocate memory
-;
-;-----------------------------------------------------------------------------------------------------------------------
-AllocateMemory          push    ebx                                             ;save non-volatile regs
-                        push    ecx                                             ;
-                        push    esi                                             ;
-                        push    ds                                              ;
-;
-;       Address kernel memory structures
-;
-                        push    EGDTOSDATA                                      ;load OS data GDT selector ...
-                        pop     ds                                              ;... into data segment reg
-                        mov     esi,wsConsoleMemRoot                            ;memory root structure address
-;
-;       Set requested size to minimum block size if requested size is too small.
-;
-                        cmp     ecx,EMEMMINSIZE                                 ;is requested size too small?
-                        jae     .10                                             ;no, branch
-                        mov     ecx,EMEMMINSIZE                                 ;set requested size to minimum
-.10                     add     ecx,EMEMBLOCKLEN                                ;add header block length
-;
-;       Find the first free memory block large enough to satisfy the request.
-;
-                        mov     eax,[esi+MEMROOT.firstfree]                     ;first free block ptr
-.20                     test    eax,eax                                         ;end of free block chain?
-                        jz      .220                                            ;yes, branch
-                        cmp     ecx,[eax+MEMBLOCK.bytes]                        ;free block big enough?
-                        jbe     .30                                             ;yes, branch
-                        mov     eax,[eax+MEMBLOCK.nextblock]                    ;next free block addr
-                        jmp     .20                                             ;continue
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Address the previous and next free memory blocks.
-;
-.30                     mov     ebx,[eax+MEMBLOCK.previousblock]                ;previous free block addr
-                        mov     edx,[eax+MEMBLOCK.nextblock]                    ;next free block addr
-;
-;       Remove the free memory block from the forward free memory block chain.
-;
-                        test    ebx,ebx                                         ;any previous free memory block?
-                        jz      .40                                             ;no, branch
-                        mov     [ebx+MEMBLOCK.nextblock],edx                    ;remove free block from forwrad chain
-                        jmp     .50                                             ;continue
-.40                     mov     [esi+MEMROOT.firstfree],edx                     ;next free is now also the first free
-;
-;       Remove the free memory block from the reverse free memory block chain.
-;
-.50                     test    edx,edx                                         ;any next free memory block?
-                        jz      .60                                             ;no, branch
-                        mov     [edx+MEMBLOCK.previousblock],ebx                ;remove free block from reverse chain
-                        jmp     .70                                             ;continue
-.60                     mov     [esi+MEMROOT.lastfree],ebx                      ;previous free is now also the last free
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Determine if the free memory block can be split.
-;
-.70                     mov     ebx,[eax+MEMBLOCK.bytes]                        ;size of free memory block
-                        sub     ebx,ecx                                         ;subtract requested memory size
-                        cmp     ebx,EMEMMINSIZE                                 ;remaining block can stand alone?
-                        jb      .150                                            ;no, branch
-;
-;       We know that our block can be split to create a new free memory block. We update the size of our free memory
-;       block to the requested memory size. We update the next contiguous block pointer to point just past the end
-;       of the requested memory size.
-;
-                        mov     [eax+MEMBLOCK.bytes],ecx                        ;shorten memory block size
-                        mov     edx,eax                                         ;memory block address
-                        add     edx,ecx                                         ;address new new next contig block
-                        mov     ecx,[eax+MEMBLOCK.nextcontig]                   ;next contig block address
-                        mov     [eax+MEMBLOCK.nextcontig],edx                   ;update next contig block address
-;
-;       If there is a next contiguous block, we update that memory block's previous contig pointer to point to the new
-;       free block we are splitting off. If there is no next contiguous block, we update the last contig block pointer.
-;
-                        jecxz   .80                                             ;no next contig, branch
-                        mov     [ecx+MEMBLOCK.previouscontig],edx               ;update previous contig pointer
-                        jmp     .90                                             ;continue
-.80                     mov     [esi+MEMROOT.lastcontig],edx                    ;update last contig pointer
-;
-;       Now that the contig block pointers have been updated, we initialize the new free block members.
-;
-.90                     mov     [edx+MEMBLOCK.bytes],ebx                        ;set the block size
-                        mov     [edx+MEMBLOCK.nextcontig],ecx                   ;set the next contig block addr
-                        mov     [edx+MEMBLOCK.previouscontig],eax               ;set the previous contig block addr
-                        mov     ebx,EMEMFREECODE                                ;free memory signature
-                        mov     [edx+MEMBLOCK.signature],ebx                    ;set the block signature
-                        xor     ebx,ebx                                         ;zero register
-                        mov     [edx+MEMBLOCK.reserved],ebx                     ;set reserved
-                        mov     [edx+MEMBLOCK.owner],ebx                        ;set the owner
-;
-;       Find the proper location in the free block chain for the new free block
-;
-                        mov     ebx,[edx+MEMBLOCK.bytes]                        ;free block size
-                        mov     ecx,[esi+MEMROOT.firstfree]                     ;first free block addr
-.100                    jecxz   .110                                            ;branch if at end of chain
-                        cmp     ebx,[ecx+MEMBLOCK.bytes]                        ;new block smaller or equal?
-                        jbe     .110                                            ;yes, branch
-                        mov     ecx,[ecx+MEMBLOCK.nextblock]                    ;next free block addr
-                        jmp     .100                                            ;continue
-;
-;       Having found the proper location for our new free block, we store the address of the following free block, or
-;       zero if our new free block is larger than any other, as our next free block. Then, we take the address of our
-;       next block's previous block or the global last-free block as our new previous block and update the previous
-;       block of hte next block, if there is one.
-;
-.110                    mov     [edx+MEMBLOCK.nextblock],ecx                    ;set the new free block's next ptr
-                        mov     ebx,[esi+MEMROOT.lastfree]                      ;last free block addr
-                        jecxz   .120                                            ;branch if no next block
-                        mov     ebx,[ecx+MEMBLOCK.previousblock]                ;next block's previous block
-                        mov     [ecx+MEMBLOCK.previousblock],edx                ;set the next block's previous block
-                        jmp     .130                                            ;continue
-.120                    mov     [esi+MEMROOT.lastfree],edx                      ;set the new last free block
-;
-;       Store our previous block pointer. If we have a previous free block, update that block's next block pointer to
-;       point to the new block. Since the new block may now be the first or last user block, we update the first and/or
-;       last user block pointers if necessary.
-;
-.130                    mov     [edx+MEMBLOCK.previousblock],ebx                ;set the previous block pointer
-                        test    ebx,ebx                                         ;is there a previous block?
-                        jz      .140                                            ;no, branch
-                        mov     [ebx+MEMBLOCK.nextblock],edx                    ;set the previous block's next ptr
-                        jmp     .150                                            ;continue
-.140                    mov     [esi+MEMROOT.firstfree],edx                     ;set the new first free ptr
-;
-;       Update the newly allocated block's owner and signature.
-;
-.150                    mov     edx,EMEMUSERCODE                                ;user memory signature
-                        mov     [eax+MEMBLOCK.signature],edx                    ;set the block signature
-                        xor     edx,edx                                         ;zero register
-                        str     dx                                              ;load the task state register
-                        mov     [eax+MEMBLOCK.owner],edx                        ;set the block owner
-;
-;       Remove the allocated block from the free block chain and insert it into the user block chain.
-;
-                        mov     ecx,[esi+MEMROOT.firsttask]                     ;first task block
-.160                    jecxz   .180                                            ;branch if at end of chain
-                        cmp     edx,[ecx+MEMBLOCK.owner]                        ;does this block belong to the task?
-                        jb      .180                                            ;branch if block belongs to next task
-                        je      .170                                            ;branch if block belongs to this task
-                        mov     ecx,[ecx+MEMBLOCK.nextblock]                    ;next task block
-                        jmp     .160                                            ;continue
-;
-;       We have found the start of our task's user block chain or the start of the next task's user block chain. If we
-;       have found the next task's chain, then we have no other user memory for this task and we can simply add the
-;       block here. If we are at the start of our task's user block chain, then we need to further seek for the proper
-;       place to insert the block.
-;
-.170                    mov     edx,[eax+MEMBLOCK.bytes]                        ;size of block in bytes
-                        cmp     edx,[ecx+MEMBLOCK.bytes]                        ;less or equal to chain block?
-                        jbe     .180                                            ;yes, branch
-                        mov     ecx,[ecx+MEMBLOCK.nextblock]                    ;next chain block address
-                        test    ecx,ecx                                         ;end of chain?
-                        jz      .180                                            ;yes, branch
-                        mov     edx,[eax+MEMBLOCK.owner]                        ;owning task
-                        cmp     edx,[ecx+MEMBLOCK.owner]                        ;same task?
-                        je      .170                                            ;yes, continue search
-;
-;       We have found the proper place in our task's user-block chain to insert our new user block. It may also be the
-;       end of the user-block chain. To insert our new user block, first we update the next-block pointer. Then, we load
-;       the next-block's previous-block pointer or the global last-user block pointer if we have no next-block. If we
-;       do have a previous-block, we update that block's next-block pointer.
-;
-.180                    mov     [eax+MEMBLOCK.nextblock],ecx                    ;set the next task block
-                        mov     ebx,[esi+MEMROOT.lasttask]                      ;last task block
-                        jecxz   .190                                            ;branch if no next-task block
-                        mov     ebx,[ecx+MEMBLOCK.previousblock]                ;next-task's previous-task block
-                        mov     [ecx+MEMBLOCK.previousblock],eax                ;update next-task block's previous-task
-                        jmp     .200                                            ;continue
-.190                    mov     [esi+MEMROOT.lasttask],eax                      ;new block is the last user-block
-;
-;       Now wes tore our previous-block pointer and, if we have a previous-free block, we update that block's next-
-;       block pointer to point to our block. Since our block may now be the first or last user-block, we update the
-;       global first and/or last user-block pointers if necessary.
-;
-.200                    mov     [eax+MEMBLOCK.previousblock],ebx                ;set the previous task block
-                        test    ebx,ebx                                         ;do we have a previous task block?
-                        jz      .210                                            ;no, branch
-                        mov     [ebx+MEMBLOCK.nextblock],eax                    ;set previous-block's next-task block
-                        jmp     .220                                            ;continue
-.210                    mov     [esi+MEMROOT.firsttask],eax                     ;new block is the first user-block
-;
-;       Restore registers and return to caller.
-;
-.220                    pop     ds                                              ;restore non-volatie regs
-                        pop     esi                                             ;
-                        pop     ecx                                             ;
-                        pop     ebx                                             ;
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        FreeMemory
-;
-;       Description:    This routine frees a memory block for the given task. The address provided in EDX points to the
-;                       memory block header. The memory block must be USER memory, not a FREE memory block. If the block
-;                       is adjacent to a contiguous FREE memory block, then the blocks are merged. The residual FREE
-;                       memory is repositioned in the FREE memory block chain according to size. The user portion of the
-;                       block, following the block header, is reset (wiped) with the memory wipe value.
-;
-;       In:             EDX     memory block to free, relative to EGDTOSDATA
-;
-;       Out:            EAX     -1      invalid memory block
-;                               0       memory block freed
-;
-;-----------------------------------------------------------------------------------------------------------------------
-FreeMemory              push    ebx                                             ;save non-volatile regs
-                        push    ecx                                             ;
-                        push    esi                                             ;
-                        push    edi                                             ;
-                        push    ds                                              ;
-                        push    es                                              ;
-;
-;       Address the root memory structure
-;
-                        push    EGDTOSDATA                                      ;load OS data selector ...
-                        pop     es                                              ;... into extra segment reg
-                        push    EGDTOSDATA                                      ;load OS data selector ...
-                        pop     ds                                              ;... into data segment reg
-                        mov     esi,wsConsoleMemRoot                            ;memory root structure
-                        mov     edi,edx                                         ;memory block address
-;
-;       If the block is FREE, return success. Otherwise, if it is not USER, return with error.
-;
-                        xor     eax,eax                                         ;indicate success
-                        cmp     dword [edi+MEMBLOCK.signature],EMEMFREECODE     ;is the block FREE?
-                        je      .240                                            ;yes, branch
-                        dec     eax                                             ;indicate failure
-                        cmp     dword [edi+MEMBLOCK.signature],EMEMUSERCODE     ;is the block USER?
-                        jne     .240                                            ;no, branch
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Unlink the USER memory block.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Set the block signature. Reset owner.
-;
-                        mov     dword [edi+MEMBLOCK.signature],EMEMFREECODE     ;set FREE block signature
-                        xor     eax,eax                                         ;zero register
-                        mov     [edi+MEMBLOCK.owner],eax                        ;zero block owner
-;
-;       Wipe user area.
-;
-                        push    edi                                             ;save block address
-                        mov     ecx,[edi+MEMBLOCK.bytes]                        ;block size
-                        sub     ecx,EMEMBLOCKLEN                                ;subtract header size
-                        add     edi,EMEMBLOCKLEN                                ;point to user area
-                        mov     al,EMEMWIPEBYTE                                 ;memory wipe byte
-                        rep     stosb                                           ;clear memory
-                        pop     edi                                             ;restore block address
-;
-;       Address the preceding and following USER memory blocks
-;
-                        mov     ebx,[edi+MEMBLOCK.previousblock]                ;previous block pointer
-                        mov     ecx,[edi+MEMBLOCK.nextblock]                    ;next block pointer
-;
-;       If a USER block precedes this block, update that block's next pointer. Otherwise, update the first task
-;       pointer to point to the USER block following this block.
-;
-                        test    ebx,ebx                                         ;is there a previous block?
-                        jz      .10                                             ;no, branch
-                        mov     [ebx+MEMBLOCK.nextblock],ecx                    ;update previous block's next pointer
-                        jmp     .20                                             ;continue
-.10                     mov     [esi+MEMROOT.firsttask],ecx                     ;update first USER pointer
-;
-;       If a USER block follows this block, update that block's previous pointer. Otherwise, update the last task
-;       pointer to point to the USER block preceding this block.
-;
-.20                     jecxz   .30                                             ;branch if no next block
-                        mov     [ecx+MEMBLOCK.previousblock],ebx                ;update next block's previous pointer
-                        jmp     .40                                             ;continue
-.30                     mov     [esi+MEMROOT.lasttask],ebx                      ;update last USER pointer
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Merge with a previous contiguous FREE memory block.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Address the preceding and following contiguous memory blocks.
-;
-.40                     mov     ebx,[edi+MEMBLOCK.previouscontig]               ;previous contiguous block ptr
-                        mov     ecx,[edi+MEMBLOCK.nextcontig]                   ;next contiguous block ptr
-;
-;       Verify we have a previous contiguous FREE block.
-;
-                        test    ebx,ebx                                         ;is there a previous block?
-                        jz      .100                                            ;no, branch
-                        cmp     dword [ebx+MEMBLOCK.signature],EMEMFREECODE     ;is the previous block FREE?
-                        jne     .100                                            ;no, branch
-;
-;       Update adjacent block's contiguous pointers.
-;
-                        mov     [ebx+MEMBLOCK.nextcontig],ecx                   ;update previous contig's next contig
-                        jecxz   .50                                             ;branch if no next contiguous block
-                        mov     [ecx+MEMBLOCK.previouscontig],ebx               ;update next congit's previous contig
-                        jmp     .60                                             ;continue
-.50                     mov     [esi+MEMROOT.lastcontig],ebx                    ;update last contig pointer
-;
-;       Update the size of the merged FREE block.
-;
-.60                     mov     eax,[edi+MEMBLOCK.bytes]                        ;current block size
-                        add     [ebx+MEMBLOCK.bytes],eax                        ;update previous block's size
-;
-;       Having merged our new free block into the previous free block, make the previous free block the current block
-;
-                        mov     ecx,EMEMBLOCKLEN                                ;block header length
-                        mov     al,EMEMWIPEBYTE                                 ;memory wipe byte
-                        rep     stosb                                           ;clear memory header
-                        mov     edi,ebx                                         ;current block is now previous block
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Unlink the previous contiguous FREE memory block
-;
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Address the preceding and following USER memory blocks
-;
-                        mov     ebx,[edi+MEMBLOCK.previousblock]                ;previous block pointer
-                        mov     ecx,[edi+MEMBLOCK.nextblock]                    ;next block pointer
-;
-;       Update the previous block's next-block pointer if there is a previous block. Otherwise, update the first free
-;       block pointer.
-;
-                        test    ebx,ebx                                         ;is there a previous block?
-                        jz      .70                                             ;no, branch
-                        mov     [ebx+MEMBLOCK.nextblock],ecx                    ;update previous block's next pointer
-                        jmp     .80                                             ;branch
-.70                     mov     [esi+MEMROOT.firstfree],ecx                     ;update first FREE block pointer
-;
-;       Update the next block's previous-block pointer if there is a next block. Otherwise, update the last free block
-;       pointer.
-;
-.80                     jecxz   .90                                             ;branch if no next block
-                        mov     [ecx+MEMBLOCK.previousblock],ebx                ;update next block's previous pointer
-                        jmp     .100                                            ;continue
-.90                     mov     [esi+MEMROOT.lastfree],ebx                      ;update last FREE block pointer
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Merge with a following contiguous FREE memory block.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Verify we have a following contiguous FREE block.
-;
-.100                    mov     ecx,[edi+MEMBLOCK.nextcontig]                   ;next contiguous block ptr
-                        jecxz   .170                                            ;branch if no next contiguous block
-                        cmp     dword [ecx+MEMBLOCK.signature],EMEMFREECODE     ;is the next-contiguous block free?
-                        jne     .170                                            ;no, branch
-;
-;       Add the size of the following adjacent FREE block to this block's size.
-;
-                        mov     eax,[ecx+MEMBLOCK.bytes]                        ;next contiguous (free) block size
-                        add     [edi+MEMBLOCK.bytes],eax                        ;add size to this block's size
-;
-;       Unlink the following contiguous FREE block from the contiguous block chain.
-;
-                        mov     eax,[ecx+MEMBLOCK.nextcontig]                   ;following block's next-contig ptr
-                        mov     [edi+MEMBLOCK.nextcontig],eax                   ;update this block's next-contig ptr
-                        test    eax,eax                                         ;does a block follow the next contig blk
-                        jz      .110                                            ;no, branch
-                        mov     [eax+MEMBLOCK.previouscontig],edi               ;update following block's prev contig
-                        jmp     .120                                            ;continue
-.110                    mov     [esi+MEMROOT.lastcontig],edi                    ;update last contig block ptr
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Unlink the following contiguous FREE memory block
-;
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Unlink the following adjacent FREE block from the FREE block chain.
-;
-.120                    push    edi                                             ;save this block
-                        mov     edi,ecx                                         ;next contiguous block
-                        push    ecx                                             ;save next contiguous block
-;
-;       Address the preceding and following USER memory blocks
-;
-                        mov     ebx,[edi+MEMBLOCK.previousblock]                ;next contig's previous block pointer
-                        mov     ecx,[edi+MEMBLOCK.nextblock]                    ;next contig's next block pointer
-;
-;       Update the previous block's next-block pointer if there is a previous block. Otherwise, update the first free
-;       block pointer.
-;
-                        test    ebx,ebx                                         ;is there a previous block?
-                        jz      .130                                            ;no, branch
-                        mov     [ebx+MEMBLOCK.nextblock],ecx                    ;update next contig's prev blk next-ptr
-                        jmp     .140                                            ;branch
-.130                    mov     [esi+MEMROOT.firstfree],ecx                     ;update first FREE block pointer
-;
-;       Update the next block's previous-block pointer if there is a next block. Otherwise, update the last free block
-;       pointer.
-;
-.140                    jecxz   .150                                            ;branch if no next block
-                        mov     [ecx+MEMBLOCK.previousblock],ebx                ;update next contig's next blk prev-ptr
-                        jmp     .160                                            ;continue
-.150                    mov     [esi+MEMROOT.lastfree],ebx                      ;update last FREE block pointer
-;
-;       Clear next contiguous block's header
-;
-.160                    pop     edi                                             ;next congiguous block pointer
-                        mov     ecx,EMEMBLOCKLEN                                ;memory block header length
-                        mov     al,EMEMWIPEBYTE                                 ;memory wipe byte
-                        rep     stosb                                           ;clear memory header
-                        pop     edi                                             ;this block's pointer
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Insert the final FREE block back into the block chain.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Walk the FREE memory chain until a block is found that is larger than or equal in size to the block being
-;       inserted. The block being inserted will be inserted before that block or after the last block found if none
-;       all are smaller in size.
-;
-.170                    mov     ebx,[edi+MEMBLOCK.bytes]                        ;size of block
-                        mov     ecx,[esi+MEMROOT.firstfree]                     ;first free block ptr
-.180                    jecxz   .190                                            ;exit if no ptr
-                        cmp     ebx,[ecx+MEMBLOCK.bytes]                        ;next block bigger?
-                        jb      .190                                            ;yes, branch
-                        mov     ecx,[ecx+MEMBLOCK.nextblock]                    ;next free memory block
-                        jmp     .180                                            ;continue
-;
-;       Set the next-block pointer. Determine the previous-block, which may be the last FREE block if we found no
-;       larger free block. Update the next block's previous block pointer.
-;
-.190                    mov     [edi+MEMBLOCK.nextblock],ecx                    ;set the next block ptr
-                        mov     ebx,[esi+MEMROOT.lastfree]                      ;assume all blocks smaller
-                        jecxz   .200                                            ;branch if no block found
-                        mov     ebx,[ecx+MEMBLOCK.previousblock]                ;next block's previous block ptr
-                        mov     [ecx+MEMBLOCK.previousblock],edi                ;update next block's previous ptr
-                        jmp     .210                                            ;continue
-.200                    mov     [esi+MEMROOT.lastfree],edi                      ;this block is now the last free
-;
-;       Set our previous block pointer to either the previous pointer of the found block or the last free block.
-;       If there is no previous block pointer, then this block now the first FREE block. Otherwise update that block's
-;       next pointer.
-;
-.210                    mov     [edi+MEMBLOCK.previousblock],ebx                ;set the previous block ptr
-                        test    ebx,ebx                                         ;do we have a previous block?
-                        jz      .220                                            ;no, branch
-                        mov     [ebx+MEMBLOCK.nextblock],edi                    ;update previous block's next block ptr
-                        jmp     .230                                            ;continue
-.220                    mov     [esi+MEMROOT.firstfree],edi                     ;update first free ptr
-;
-;       The memory free has completed.
-;
-.230                    xor     eax,eax                                         ;indicate success
-;
-;       Restore and return.
-;
-.240                    pop     es                                              ;restore non-volatile regs
-                        pop     ds                                              ;
-                        pop     edi                                             ;
-                        pop     esi                                             ;
-                        pop     ecx                                             ;
-                        pop     ebx                                             ;
-                        ret                                                     ;return
 ;=======================================================================================================================
 ;
 ;       String Helper Routines
@@ -4105,50 +3563,10 @@ Yield                   sti                                                     
 ;
 ;       Data-Type Conversion Helper Routines
 ;
-;       DecimalToUnsigned
 ;       HexadecimalToUnsigned
 ;       UnsignedToHexadecimal
 ;
 ;=======================================================================================================================
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        DecimalToUnsigned
-;
-;       Description:    This routine returns an unsigned integer of the value of the input ASCIIZ decimal string.
-;
-;       Input:          DS:EDX  null-terminated decimal string address
-;
-;       Output:         EAX     unsigned integer value
-;
-;-----------------------------------------------------------------------------------------------------------------------
-DecimalToUnsigned       push    esi                                             ;save non-volatile regs
-                        mov     esi,edx                                         ;source address
-                        xor     edx,edx                                         ;zero total
-.10                     lodsb                                                   ;source byte
-                        cmp     al,','                                          ;comma?
-                        je      .10                                             ;yes, ignore
-                        test    al,al                                           ;end of string?
-                        jz      .30                                             ;yes, done
-                        cmp     al,'.'                                          ;decimal point?
-                        je      .30                                             ;yes, done
-                        cmp     al,'0'                                          ;numeral?
-                        jb      .20                                             ;no, invalid string
-                        cmp     al,'9'                                          ;numeral?
-                        ja      .20                                             ;no, invalid string
-                        and     al,00Fh                                         ;mask ASCII zone
-                        push    eax                                             ;save numeral
-                        shl     edx,1                                           ;total * 2
-                        mov     eax,edx                                         ;total * 2
-                        shl     edx,2                                           ;total * 8
-                        add     edx,eax                                         ;total * 10
-                        pop     eax                                             ;restore numeral
-                        add     edx,eax                                         ;accumulate decimal digit
-                        xor     eax,eax                                         ;zero register
-                        jmp     .10                                             ;next
-.20                     xor     edx,edx                                         ;zero result on error
-.30                     mov     eax,edx                                         ;result
-                        pop     esi                                             ;restore non-volatile regs
-                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        HexadecimalToUnsigned
@@ -4253,7 +3671,7 @@ GetMessage              push    ebx                                             
 ;
 ;       Routine:        PutMessage
 ;
-;       Description:    This routine adda a message to the message queue.
+;       Description:    This routine adds a message to the message queue.
 ;
 ;       In:             ECX     hi-order data word
 ;                       EDX     lo-order data word
@@ -4602,7 +4020,7 @@ section                 conmque                                                 
 ;                               |  Console Task Task State Segment (TSS)        |
 ;                       004800  +-----------------------------------------------+
 ;                               |  Console Task Message Queue                   |
-;       CS,CS:IP -----> 005000  +-----------------------------------------------+ CS:0000
+;       CS:IP --------> 005000  +-----------------------------------------------+ CS:0000
 ;                               |  Console Task Code                            |
 ;                               |  Console Task Constants                       |
 ;                       006000  +===============================================+
@@ -4618,16 +4036,15 @@ section                 conmque                                                 
 ;       ConDrawField            Draw a panel field to video memory
 ;       ConPutCursor            Place the cursor at the current index into the current field
 ;       ConHandlerMain          Handle attention keys on the main panel
-;       ConHandlerMem           Handle attention keys on the memory panel
+;       ConHandlerView          Handle attention keys on the memory panel
 ;       ConTakeToken            Extract the next token from a buffer
 ;       ConDetermineCommand     Determine if a buffer value is a command
-;       ConClearField           Clear a panel field to nulls
-;       ConExit                 Handle the exit command
-;       ConFree
+;       ConGo                   Handle the go command
 ;       ConInt6                 Handle the Int6 command
+;       ConReset                Handle the reset command
+;       ConView                 Handle the view command
+;       ConClearField           Clear a panel field to nulls
 ;       ConMain                 Handle the main command
-;       ConMalloc
-;       ConMem                  Handle the mem command
 ;
 ;=======================================================================================================================
 section                 concode vstart=05000h                                   ;labels relative to 5000h
@@ -4669,7 +4086,7 @@ ConCode                 mov     edi,ECONDATA                                    
 ;       Get the next key-down message.
 ;
 .20                     getConsoleMessage                                       ;get a console message
-
+;
                         mov     edx,eax                                         ;message and params
                         and     edx,0FFFF0000h                                  ;mask for message
                         cmp     edx,EMSGKEYDOWN                                 ;keydown message?
@@ -5000,7 +4417,7 @@ ConHandlerMain          push    ebx                                             
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Routine:        ConHandlerMem
+;       Routine:        ConHandlerView
 ;
 ;       Description:    This routine is called to handle user input in the mem console panel when a field is exited.
 ;                       The event handler must set the carry flag if the event is not completely handled. In this case
@@ -5012,7 +4429,7 @@ ConHandlerMain          push    ebx                                             
 ;                               0: Event handling not complete
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-ConHandlerMem           push    ebx                                             ;save non-volatile regs
+ConHandlerView          push    ebx                                             ;save non-volatile regs
 ;
 ;       Handle panel-specific input:
 ;
@@ -5189,6 +4606,24 @@ ConDetermineCommand     push    ebx                                             
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;       Routine:        ConInt6
+;
+;       Description:    This routine issues an interrupt 6 to exercise the interrupt handler.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConInt6                 ud2                                                     ;raise bad opcode exception
+                        ret                                                     ;return (not executed)
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConReset
+;
+;       Description:    This routine handles the reset command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConReset                resetSystem                                             ;issue system reset
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;       Routine:        ConClearField
 ;
 ;       Description:    This routine clears a panel field to nulls.
@@ -5225,70 +4660,6 @@ ConClearField           push    ebx                                             
 .10                     pop     edi                                             ;restore non-volatile regs
                         pop     ebx                                             ;
                         ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConExit
-;
-;       Description:    This routine handles the EXIT command and its SHUTDOWN and QUIT aliases.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConExit                 resetSystem                                             ;issue system reset
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConFree
-;
-;       Description:    This routine handles the FREE command.
-;
-;       Input:          wzConsoleInBuffer contains parameter(s)
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConFree                 push    ebx                                             ;save non-volatile regs
-                        push    ecx                                             ;
-                        push    esi                                             ;
-                        push    edi                                             ;
-;
-;       Get address parameter
-;
-                        mov     edx,wzConsoleInBuffer                           ;console input buffer address (param)
-                        mov     ebx,wzConsoleToken                              ;console command token address
-                        call    ConTakeToken                                    ;take first param as token
-;
-;       Convert input parameter from hexadecimal string to binary
-;
-                        cmp     byte [wzConsoleToken],0                         ;token found?
-                        je      .10                                             ;no, branch
-                        mov     edx,wzConsoleToken                              ;first param as token address
-                        hexadecimalToUnsigned                                   ;convert string token to unsigned
-                        test    eax,eax                                         ;valid parameter?
-                        jz      .10                                             ;no, branch
-;
-;       Free memory block
-;
-                        freeMemory eax                                          ;free memory
-                        cmp     eax,-1                                          ;memory freed?
-                        je      .10                                             ;no, branch
-;
-;       Indicate memory freed
-;
-;                        putConsoleString czOK                                   ;indicate success
-;
-;       Restore and return
-;
-.10                     pop     edi                                             ;restore non-volatile regs
-                        pop     esi                                             ;
-                        pop     ecx                                             ;
-                        pop     ebx                                             ;
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConInt6
-;
-;       Description:    This routine issues an interrupt 6 to exercise the interrupt handler.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConInt6                 ud2                                                     ;raise bad opcode exception
-                        ret                                                     ;return (not executed)
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        ConMain
@@ -5332,63 +4703,16 @@ ConMain                 push    ecx                                             
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Routine:        ConMalloc
+;       Routine:        ConView
 ;
-;       Description:    This routine handles the MALLOC command.
-;
-;       Input:          wzConsoleInBuffer contains parameter(s)
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConMalloc               push    ebx                                             ;save non-volatile regs
-                        push    ecx                                             ;
-                        push    esi                                             ;
-                        push    edi                                             ;
-;
-;       Get size parameter
-;
-                        mov     edx,wzConsoleInBuffer                           ;console input buffer address (params)
-                        mov     ebx,wzConsoleToken                              ;console command token address
-                        call    ConTakeToken                                    ;take first param as token
-;
-;       Convert input parameter from decimal string to binary
-;
-                        cmp     byte [wzConsoleToken],0                         ;token found?
-                        je      .10                                             ;no, branch
-                        mov     edx,wzConsoleToken                              ;first param as token address
-                        decimalToUnsigned                                       ;convert string token to unsigned
-                        test    eax,eax                                         ;valid parameter?
-                        jz      .10                                             ;no, branch
-;
-;       Allocate memory block
-;
-                        allocateMemory eax                                      ;allocate memory
-                        test    eax,eax                                         ;memory allocated?
-                        jz      .10                                             ;no, branch
-;
-;       Report allocated memory block address
-;
-                        mov     edx,wzConsoleOutBuffer                          ;output buffer address
-                        mov     ecx,eax                                         ;memory address
-                        unsignedToHexadecimal                                   ;convert memory address to hex
-;                        putConsoleString wzConsoleOutBuffer                     ;display memory address
-;                        call    ConPutNewLine                                   ;display new line
-.10                     pop     edi                                             ;restore non-volatile regs
-                        pop     esi                                             ;
-                        pop     ecx                                             ;
-                        pop     ebx                                             ;
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConMem
-;
-;       Description:    This routine handles the MEMORY command and its MEM alias.
+;       Description:    This routine handles the view command.
 ;
 ;       In:             ES:     OS data segment
 ;
 ;                       wzConsoleInBuffer contains parameter(s)
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-ConMem                  push    ebx                                             ;save non-volatile regs
+ConView                 push    ebx                                             ;save non-volatile regs
                         push    ecx                                             ;
                         push    esi                                             ;
                         push    edi                                             ;
@@ -5477,7 +4801,7 @@ ConMem                  push    ebx                                             
 ;
 ;       Display constructed output buffer and newline.
 ;
-                        add     ebx,68                                          ;next contiguous output buffer addr
+                        add     ebx,76                                          ;next contiguous output buffer addr
 ;
 ;       Repeat until all lines displayed and preserve source address.
 ;
@@ -5487,7 +4811,7 @@ ConMem                  push    ebx                                             
 ;
 ;       Update the handler, panel and field identifiers.
 ;
-                        mov     eax,[cdHandlerMem]                              ;mem panel handler
+                        mov     eax,[cdHandlerView]                             ;mem panel handler
                         mov     [wdConsoleHandler],eax                          ;set panel handler addr
                         mov     eax,czPnlMem001                                 ;initial console panel
                         mov     [wdConsolePanel],eax                            ;set panel template addr
@@ -5512,7 +4836,7 @@ ConMem                  push    ebx                                             
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 cdHandlerMain           dd      ConHandlerMain - ConCode                        ;main panel code segment offset
-cdHandlerMem            dd      ConHandlerMem - ConCode                         ;memory panel code segment offset
+cdHandlerView           dd      ConHandlerView - ConCode                        ;view panel code segment offset
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Panels
@@ -5650,7 +4974,7 @@ czPnlMem001             dd      czFldPnlIdMem001
 czPnlMenuInp            dd      wzConsoleInBuffer
                         db      23,1,79,0,0,0,7,80h
                         dd      0                                               ;end of panel
-;-----------------------------------------------------------------------------------------------------------------------
+;--------------------------------------------------------------------------------cd---------------------------------------
 ;
 ;       Tables
 ;
@@ -5659,30 +4983,20 @@ czPnlMenuInp            dd      wzConsoleInBuffer
                                                                                 ;  Command Jump Table
                                                                                 ;---------------------------------------
 tConJmpTbl              equ     $                                               ;command jump table
-                        dd      ConExit         - ConCode                       ;shutdown command routine offset
-                        dd      ConMalloc       - ConCode                       ;malloc command routine offset
-                        dd      ConMem          - ConCode                       ;memory command routine offset
-                        dd      ConExit         - ConCode                       ;exit command routine offset
-                        dd      ConFree         - ConCode                       ;free command routine offset
-                        dd      ConInt6         - ConCode                       ;int6 command routine offset
-                        dd      ConMain         - ConCode                       ;main command routine offset
-                        dd      ConExit         - ConCode                       ;quit command routine offset
-                        dd      ConMem          - ConCode                       ;mem command routine offset
+                        dd      ConInt6         - ConCode                       ;int6 command
+                        dd      ConMain         - ConCode                       ;go command
+                        dd      ConReset        - ConCode                       ;reset command
+                        dd      ConView         - ConCode                       ;view command
 ECONJMPTBLL             equ     ($-tConJmpTbl)                                  ;table length
 ECONJMPTBLCNT           equ     ECONJMPTBLL/4                                   ;table entries
                                                                                 ;---------------------------------------
                                                                                 ;  Command Name Table
                                                                                 ;---------------------------------------
 tConCmdTbl              equ     $                                               ;command name table
-                        db      9,"SHUTDOWN",0                                  ;shutdown command
-                        db      7,"MALLOC",0                                    ;malloc command
-                        db      7,"MEMORY",0                                    ;memory command
-                        db      5,"EXIT",0                                      ;exit command
-                        db      5,"FREE",0                                      ;free command
                         db      5,"INT6",0                                      ;int6 command
-                        db      5,"MAIN",0                                      ;main command
-                        db      5,"QUIT",0                                      ;quit command
-                        db      4,"MEM",0                                       ;mem command
+                        db      2,"G",0                                         ;go command
+                        db      2,"R",0                                         ;reset command
+                        db      2,"V",0                                         ;view command
                         db      0                                               ;end of table
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
