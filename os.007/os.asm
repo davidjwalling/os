@@ -2,7 +2,7 @@
 ;
 ;       File:           os.asm
 ;
-;       Project:        os.006
+;       Project:        os.007
 ;
 ;       Description:    In this sample, the kernel is expanded to support a simple message queue. Keyboard events
 ;                       are added to the queue by the keyboard interrupt handler and are read and processed by the
@@ -210,7 +210,6 @@ EKEYBWAITLOOP           equ     010000h                                         
                                                                                 ;       Keyboard Scan Codes
                                                                                 ;---------------------------------------
 EKEYBBACKSPACE          equ     00Eh                                            ;backspace down
-EKEYBTABDOWN            equ     00Fh                                            ;tab down
 EKEYBENTERDOWN          equ     01Ch                                            ;enter down
 EKEYBCTRLLDOWN          equ     01Dh                                            ;control down
 EKEYBSHIFTLDOWN         equ     02Ah                                            ;left shift down
@@ -224,8 +223,6 @@ EKEYBPADINSERTDOWN      equ     052h                                            
 EKEYBPADDELETEDOWN      equ     053h                                            ;keypad-delete down
 EKEYBWINLDOWN           equ     05Bh                                            ;left windows (R) down
 EKEYBWINRDOWN           equ     05Ch                                            ;right windows (R) down
-EKEYBCLICKRDOWN         equ     05Dh                                            ;right-click down
-EKEYBPAUSEBREAKDOWN     equ     065h                                            ;pause-break key down
 EKEYBUPARROWDOWN        equ     068h                                            ;up-arrow down (e0 48)
 EKEYBLEFTARROWDOWN      equ     06Bh                                            ;left-arrow down (e0 4b)
 EKEYBRIGHTARROWDOWN     equ     06Dh                                            ;right-arrow down (e0 4d)
@@ -245,11 +242,9 @@ EKEYBPADASTERISKUP      equ     0B7h                                            
 EKEYBALTLUP             equ     0B8h                                            ;left alt key up
 EKEYBWINLUP             equ     0DBh                                            ;left windows (R) up
 EKEYBWINRUP             equ     0DCh                                            ;right windows (R) up
-EKEYBCLICKRUP           equ     0DDh                                            ;right-click up
 EKEYBCODEEXT0           equ     0E0h                                            ;extended scan code 0
 EKEYBCODEEXT1           equ     0E1h                                            ;extended scan code 1
 EKEYBALTRUP             equ     0F8h                                            ;right-alt up
-KEYBPADENTERUP          equ     0FCh                                            ;keypad-enter up
 EKEYBCTRLRUP            equ     0FDh                                            ;left-control up
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -337,8 +332,6 @@ EBIOSFNKEYSTATUS        equ     001h                                            
 ;       ASCII                                                                   EASCII...
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-EASCIIBACKSPACE         equ     008h                                            ;backspace
-EASCIILINEFEED          equ     00Ah                                            ;line feed
 EASCIIRETURN            equ     00Dh                                            ;carriage return
 EASCIIESCAPE            equ     01Bh                                            ;escape
 EASCIISPACE             equ     020h                                            ;space
@@ -352,8 +345,6 @@ EASCIILOWERA            equ     061h                                            
 EASCIILOWERZ            equ     07Ah                                            ;'z'
 EASCIITILDE             equ     07Eh                                            ;'~'
 EASCIIDELETE            equ     07Fh                                            ;del
-EASCIICASE              equ     00100000b                                       ;case bit
-EASCIICASEMASK          equ     11011111b                                       ;case mask
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Operating System Values
@@ -2062,7 +2053,7 @@ irq0.20                 sti                                                     
 ;       E0 5B/E0 DB                     Left-Windows                    5B00/5B00       DB00/DB00
 ;       E0 5C/E0 DC                     Right-Windows                   5C00/5C00       DC00/DC00
 ;       E0 5D/E0 DD                     Right-Click                     5D00/5D00       DD00/DD00
-
+;
 ;       E1 1D 45/E1 9D C5               Pause-Break                    *6500/6500      *E500/E500
 ;       E1 1D 45/E1 9D C5               Shift Pause-Break              *6500/6500      *E500/E500
 ;       E1 1D 45/E1 9D C5               Alt Pause-Break                *6500/6500      *E500/E500
@@ -2466,7 +2457,9 @@ tscan2ext               db      000h,000h,000h,000h,000h,000h,000h,000h         
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;e8-ef
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;f0-f7
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;f8-ff
-
+;
+;       Scan Code to Base ASCII
+;
 tscan2ascii             db      000h,01Bh,031h,032h,033h,034h,035h,036h         ;00-07
                         db      037h,038h,039h,030h,02Dh,03Dh,008h,009h         ;08-0f
                         db      071h,077h,065h,072h,074h,079h,075h,069h         ;10-17
@@ -2483,7 +2476,9 @@ tscan2ascii             db      000h,01Bh,031h,032h,033h,034h,035h,036h         
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;68-6f
                         db      000h,000h,000h,07Fh,000h,02Fh,000h,000h         ;70-77
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;78-7f
-
+;
+;       Scan Code to Shifted ASCII
+;
 tscan2shift             db      000h,01Bh,021h,040h,023h,024h,025h,05Eh         ;80-87
                         db      026h,02Ah,028h,029h,05Fh,02Bh,008h,009h         ;88-8f
                         db      051h,057h,045h,052h,054h,059h,055h,049h         ;90-97
@@ -2984,7 +2979,7 @@ GetMessage              push    ebx                                             
 ;
 ;       Routine:        PutMessage
 ;
-;       Description:    This routine adda a message to the message queue.
+;       Description:    This routine adds a message to the message queue.
 ;
 ;       In:             ECX     hi-order data word
 ;                       EDX     lo-order data word
@@ -3353,7 +3348,7 @@ ConCode                 mov     edi,ECONDATA                                    
 ;       Get the next key-down message.
 ;
 .20                     getConsoleMessage                                       ;get a console message
-
+;
                         mov     edx,eax                                         ;message and params
                         and     edx,0FFFF0000h                                  ;mask for message
                         cmp     edx,EMSGKEYDOWN                                 ;keydown message?

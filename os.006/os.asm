@@ -4,8 +4,8 @@
 ;
 ;       Project:        os.006
 ;
-;       Description:    In this sample, the kernel is expanded to include a keyboard interupt handler. This handler
-;                       updates data visible on the console in an operator information area.
+;       Description:    In this sample, the keyboard interrupt handler is expanded to add messages to the current
+;                       task message queue when keyboard events occur.
 ;
 ;       Revised:        2 September 2019
 ;
@@ -206,9 +206,6 @@ EKEYBWAITLOOP           equ     010000h                                         
                                                                                 ;---------------------------------------
                                                                                 ;       Keyboard Scan Codes
                                                                                 ;---------------------------------------
-EKEYBBACKSPACE          equ     00Eh                                            ;backspace down
-EKEYBTABDOWN            equ     00Fh                                            ;tab down
-EKEYBENTERDOWN          equ     01Ch                                            ;enter down
 EKEYBCTRLLDOWN          equ     01Dh                                            ;control down
 EKEYBSHIFTLDOWN         equ     02Ah                                            ;left shift down
 EKEYBSHIFTRDOWN         equ     036h                                            ;right shift down
@@ -221,17 +218,10 @@ EKEYBPADINSERTDOWN      equ     052h                                            
 EKEYBPADDELETEDOWN      equ     053h                                            ;keypad-delete down
 EKEYBWINLDOWN           equ     05Bh                                            ;left windows (R) down
 EKEYBWINRDOWN           equ     05Ch                                            ;right windows (R) down
-EKEYBCLICKRDOWN         equ     05Dh                                            ;right-click down
-EKEYBPAUSEBREAKDOWN     equ     065h                                            ;pause-break key down
-EKEYBUPARROWDOWN        equ     068h                                            ;up-arrow down (e0 48)
-EKEYBLEFTARROWDOWN      equ     06Bh                                            ;left-arrow down (e0 4b)
-EKEYBRIGHTARROWDOWN     equ     06Dh                                            ;right-arrow down (e0 4d)
-EKEYBDOWNARROWDOWN      equ     070h                                            ;down-arrow down (e0 50)
 EKEYBINSERTDOWN         equ     072h                                            ;insert down (e0 52)
 EKEYBDELETEDOWN         equ     073h                                            ;delete down (e0 53)
 EKEYBPADSLASHDOWN       equ     075h                                            ;keypad slash down
 EKEYBALTRDOWN           equ     078h                                            ;right-alt down
-EKEYBPADENTERDOWN       equ     07Ch                                            ;keypad-enter down
 EKEYBCTRLRDOWN          equ     07Dh                                            ;right-control key down
 EKEYBMAKECODEMASK       equ     07Fh                                            ;make code mask
 EKEYBUP                 equ     080h                                            ;up
@@ -242,11 +232,9 @@ EKEYBPADASTERISKUP      equ     0B7h                                            
 EKEYBALTLUP             equ     0B8h                                            ;left alt key up
 EKEYBWINLUP             equ     0DBh                                            ;left windows (R) up
 EKEYBWINRUP             equ     0DCh                                            ;right windows (R) up
-EKEYBCLICKRUP           equ     0DDh                                            ;right-click up
 EKEYBCODEEXT0           equ     0E0h                                            ;extended scan code 0
 EKEYBCODEEXT1           equ     0E1h                                            ;extended scan code 1
 EKEYBALTRUP             equ     0F8h                                            ;right-alt up
-KEYBPADENTERUP          equ     0FCh                                            ;keypad-enter up
 EKEYBCTRLRUP            equ     0FDh                                            ;left-control up
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -347,8 +335,6 @@ EASCIILOWERA            equ     061h                                            
 EASCIILOWERZ            equ     07Ah                                            ;'z'
 EASCIITILDE             equ     07Eh                                            ;'~'
 EASCIIDELETE            equ     07Fh                                            ;del
-EASCIICASE              equ     00100000b                                       ;case bit
-EASCIICASEMASK          equ     11011111b                                       ;case mask
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Operating System Values

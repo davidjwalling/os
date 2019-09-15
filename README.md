@@ -17,8 +17,8 @@ Click on the subproject name below for details.
 <tr><td><a href="docs/OS004.md">os.004</a></td><td>Expand the loader to enter protected mode and start a task.</td></tr>
 <tr><td><a href="docs/OS005.md">os.005</a></td><td>Add a panel definition to the console task main screen.</td></tr>
 <tr><td><a href="docs/OS006.md">os.006</a></td><td>Add a keyboard interrupt handler to display characters and shift-key status.</td></tr>
+<tr><td><a href="docs/OS007.md">os.007</a></td><td>Add a message queue to route keyboard events to a task.</td></tr>
 <!--
-<tr><td><a href="docs/OS006.md">os.006</a></td><td>Add a message queue to route keyboard events to a task</td></tr>
 <tr><td><a href="docs/OS007.md">os.007</a></td><td>Interpret "exit", "quit" and "shutdown" as commands</td></tr>
 <tr><td><a href="docs/OS008.md">os.008</a></td><td>Add a "int6" command to demonstrate CPU interrupt handling</td></tr>
 <tr><td><a href="docs/OS009.md">os.009</a></td><td>Add a memory display panel</td></tr>
