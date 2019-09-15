@@ -4,7 +4,7 @@
 ;
 ;       Project:        os.008
 ;
-;       Description:    In this sample, the console task is expanded to support the reboot/restart command.
+;       Description:    In this sample, the console task is expanded to support the reset command.
 ;
 ;       Revised:        2 September 2019
 ;
@@ -3409,8 +3409,8 @@ section                 conmque                                                 
 ;       ConHandlerMain          Handle attention keys on the main panel
 ;       ConTakeToken            Extract the next token from a buffer
 ;       ConDetermineCommand     Determine if a buffer value is a command
+;       ConReset                Handle the reset command
 ;       ConClearField           Clear a panel field to nulls
-;       ConExit                 Handle the exit command
 ;       ConMain                 Handle the main command
 ;
 ;=======================================================================================================================
@@ -3987,7 +3987,7 @@ ECONJMPTBLCNT           equ     ECONJMPTBLL/4                                   
                                                                                 ;  Command Name Table
                                                                                 ;---------------------------------------
 tConCmdTbl              equ     $                                               ;command name table
-                        db      2,"R",0                                         ;reboot/restart command
+                        db      2,"R",0                                         ;reset command
                         db      0                                               ;end of table
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
