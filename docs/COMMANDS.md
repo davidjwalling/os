@@ -112,11 +112,12 @@ myprogram             Start a task on the executable file "myprogram" (implicit 
 ```
 ### View
 ```
-v readme.md           View the file "readme.md" (implicit type specifier)
-v i,readme.md         View the file "readme.md"
 v                     View memory contents at last viewed address or zero
+v 5000                View memory contents at address 5000
 v m                   View memory contents at last viewed address or zero
 v m,5000              view memory contents at address 5000
+v readme.md           View the file "readme.md" (implicit type specifier)
+v i,readme.md         View the file "readme.md"
 ```
 ### Stop
 ```

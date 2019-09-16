@@ -4710,6 +4710,12 @@ ConMain                 push    ecx                                             
 ;
 ;                       wzConsoleInBuffer contains parameter(s)
 ;
+;                       <none>          view memory at current location
+;                       m               view memory at current location
+;                       <num>           view memory at <num>
+;                       m,<num>         view memory at <num>
+;
+;
 ;-----------------------------------------------------------------------------------------------------------------------
 ConView                 push    ebx                                             ;save non-volatile regs
                         push    ecx                                             ;
@@ -4721,10 +4727,22 @@ ConView                 push    ebx                                             
                         mov     edx,wzConsoleInBuffer                           ;console input buffer address (params)
                         mov     ebx,wzConsoleToken                              ;console command token address
                         call    ConTakeToken                                    ;take first param as token
-                        cmp     byte [wzConsoleToken],0                         ;token found?
+
+                        mov     edx,wzConsoleToken                              ;first param
+
+                        cmp     byte [edx],0                                    ;token found?
                         je      .10                                             ;no, branch
-                        mov     edx,wzConsoleToken                              ;first param as token address
-                        hexadecimalToUnsigned                                   ;convert string token to unsigned
+                        cmp     byte [edx],'m'                                  ;v m...?
+                        jne     .08                                             ;no, assume v <val> for now
+                        cmp     byte [edx+1],0                                  ;v m?
+                        je      .10                                             ;yes, use current mem addr
+                        cmp     byte [edx+1],','                                ;v m,...?
+                        jne     .10                                             ;no, use current mem addr (check for file at some point)
+                        cmp     byte [wzConsoleToken+2],0                       ;v m,?
+                        je      .10                                             ;yes, use current mem addr
+                        lea     edx,[edx+2]
+
+.08                     hexadecimalToUnsigned                                   ;convert string token to unsigned
                         mov     [wdConsoleMemBase],eax                          ;save console memory address
 ;
 ;       Initialize panel storage areas.
