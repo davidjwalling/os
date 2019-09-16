@@ -4,7 +4,8 @@
 ;
 ;       Project:        os.017
 ;
-;       Description:    In this sample, the kernel is expanded to iterate across tasks in a task queue.
+;       Description:    In this sample, the console task is expanded to add a "pciprobe" command that searches the
+;                       system for PCI expansion BIOS.
 ;
 ;       Revised:        July 4, 2018
 ;
@@ -144,6 +145,7 @@
 ;       EKEYB...        8042 or "PS/2 Controller" (Keyboard Controller) values
 ;       EPIC...         8259 Programmable Interrupt Controller (PIC) values
 ;       EPIT...         8253 Programmable Interval Timer (PIT) values
+;       ERTC...         Motorola MC 146818 Real-Time Clock (RTC) values
 ;       EX86...         Intel x86 CPU architecture values
 ;
 ;       Firmware-Defined Values
@@ -153,12 +155,14 @@
 ;       Standards-Based Values
 ;
 ;       EASCII...       American Standard Code for Information Interchange (ASCII) values
+;       EPCI...         Peripheral Component Interconnect (PCI) values
 ;
 ;       Operating System Values
 ;
 ;       EBOOT...        Boot sector and loader values
 ;       ECON...         Console values (dimensions and attributes)
 ;       EGDT...         Global Descriptor Table (GDT) selector values
+;       EHWF...         Hardware flags
 ;       EKEYF...        Keyboard status flags
 ;       EKRN...         Kernel values (fixed locations and sizes)
 ;       ELDT...         Local Descriptor Table (LDT) selector values
@@ -261,12 +265,6 @@ EPICEOI                 equ     020h                                            
 EPITDAYTICKS            equ     01800B0h                                        ;ticks per day
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       x86 CPU Architecture                                                    ;EX86...
-;
-;-----------------------------------------------------------------------------------------------------------------------
-EX86DESCLEN             equ     8                                               ;size of a protected mode descriptor
-;-----------------------------------------------------------------------------------------------------------------------
-;
 ;       Motorola MC 146818 Real-Time Clock                                      ERTC...
 ;
 ;       The Motorola MC 146818 was the original real-time clock in PCs.
@@ -288,6 +286,12 @@ ERTCEXTRAMLO            equ     017h                                            
 ERTCEXTRAMHI            equ     018h                                            ;extended RAM high
 ERTCCENTURYREG          equ     032h                                            ;century
 ERTCBINARYVALS          equ     00000100b                                       ;values are binary
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       x86 CPU Architecture                                                    ;EX86...
+;
+;-----------------------------------------------------------------------------------------------------------------------
+EX86DESCLEN             equ     8                                               ;size of a protected mode descriptor
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       x86 Descriptor Access Codes                                             EX86ACC...
@@ -373,9 +377,11 @@ EASCIICASE              equ     00100000b                                       
 EASCIICASEMASK          equ     11011111b                                       ;case mask
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       PCI                                                                     EPCI...
+;       Peripheral Component Interconnect (PCI)                                 EPCI...
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+EPCIPORTCONFIGADDR      equ     0CF8h                                           ;PCI Configuration Address Port
+EPCIPORTCONFIGDATA      equ     0CFCh                                           ;PCI Configuration Data Port
 EPCIVENDORAPPLE         equ     106Bh                                           ;Apple
 EPCIVENDORINTEL         equ     8086h                                           ;Intel
 EPCIVENDORORACLE        equ     80EEh                                           ;Oracle
@@ -393,10 +399,6 @@ EPCIORACLEVBOXDEVICE    equ     0CAFEh                                          
 ;       Operating System Values
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-;-----------------------------------------------------------------------------------------------------------------------
-;       Background Task Identifiers                                             EBG...
-;-----------------------------------------------------------------------------------------------------------------------
-EBGTIMELEN              equ     9                                               ;length of time string HH:MM:SS\0
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Boot Sector and Loader Constants                                        EBOOT...
@@ -426,7 +428,6 @@ ECONOIADWORD            equ     070207020h                                      
 ;-----------------------------------------------------------------------------------------------------------------------
 ;       Global Descriptor Table (GDT) Selectors                                 EGDT...
 ;-----------------------------------------------------------------------------------------------------------------------
-EGDTALIAS               equ     008h                                            ;gdt alias selector
 EGDTOSDATA              equ     018h                                            ;kernel data selector
 EGDTCGA                 equ     020h                                            ;cga video selector
 EGDTLOADERCODE          equ     030h                                            ;loader code selector
@@ -435,13 +436,10 @@ EGDTLOADERLDT           equ     050h                                            
 EGDTLOADERTSS           equ     058h                                            ;loader task state segment selector
 EGDTCONSOLELDT          equ     060h                                            ;console local descriptor table selector
 EGDTCONSOLETSS          equ     068h                                            ;console task state segment selector
-EGDTBACKGROUNDLDT       equ     070h                                            ;background local descr table selector
-EGDTBACKGROUNDTSS       equ     078h                                            ;background task state segment selector
-EGDTKEYBOARDMQ          equ     080h                                            ;keyboard focus message queue (IRQ1)
 ;-----------------------------------------------------------------------------------------------------------------------
-;       LDT Selectors                                                           ESEL...
+;       Hardware Flags                                                          EHWF...
 ;-----------------------------------------------------------------------------------------------------------------------
-ESELMQ                  equ     02Ch                                            ;console task message queue
+EHWETHERNET             equ     80h                                             ;ethernet adapter found
 ;-----------------------------------------------------------------------------------------------------------------------
 ;       Keyboard Flags                                                          EKEYF...
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -459,10 +457,9 @@ EKEYFTIMEOUT            equ     10000000b                                       
 ;-----------------------------------------------------------------------------------------------------------------------
 ;       Kernel Constants                                                        EKRN...
 ;-----------------------------------------------------------------------------------------------------------------------
-EKRNDATASEG             equ     00000h                                          ;kernel data segment (0000:0800)
 EKRNCODEBASE            equ     01000h                                          ;kernel base address (0000:1000)
 EKRNCODESEG             equ     (EKRNCODEBASE >> 4)                             ;kernel code segment (0100:0000)
-EKRNCODELEN             equ     07000h                                          ;kernel code size (1000h to 8000h)
+EKRNCODELEN             equ     05000h                                          ;kernel code size (1000h to 6000h)
 EKRNCODESRCADR          equ     0500h                                           ;kernel code offset to loader DS:
 EKRNHEAPSIZE            equ     080000000h                                      ;kernel heap size
 EKRNHEAPBASE            equ     010000h                                         ;kernel heap base
@@ -470,10 +467,6 @@ EKRNHEAPBASE            equ     010000h                                         
 ;       Local Descriptor Table (LDT) Selectors                                  ELDT...
 ;-----------------------------------------------------------------------------------------------------------------------
 ELDTMQ                  equ     02Ch                                            ;console task message queue
-;-----------------------------------------------------------------------------------------------------------------------
-;       Hardware Flags
-;-----------------------------------------------------------------------------------------------------------------------
-EHWETHERNET             equ     80h                                             ;ethernet adapter found
 ;-----------------------------------------------------------------------------------------------------------------------
 ;       Memory Management Constants                                             EMEM...
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -555,6 +548,30 @@ struc                   MQUEUE
 MQHead                  resd    1                                               ;000 head ptr
 MQTail                  resd    1                                               ;004 tail ptr
 MQData                  resd    254                                             ;message queue
+endstruc
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       PCI
+;
+;       The PCI structure defines a PCI bus, device and function context.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+struc                   PCI
+.configdata             equ     $                                               ;data read from port 0CFCh
+.configdata_lo          resw    1                                               ;low-order data
+.configdata_hi          resw    1                                               ;high-order data
+.selector               resd    1                                               ;1000 0000 bbbb bbbb dddd dfff 0000 0000
+.bus                    resb    1                                               ;bus identifier (00-FF)
+.device                 resb    1                                               ;device identifier (00-1F)
+.function               resb    1                                               ;function identifer (0-7)
+.register               resb    1                                               ;register identifier (00-FF)
+.bar0                   resd    1                                               ;base address register 0
+.bar1                   resd    1                                               ;base address register 1
+.bar2                   resd    1                                               ;base address register 2
+.bar3                   resd    1                                               ;base address register 3
+.bar4                   resd    1                                               ;base address register 4
+.bar5                   resd    1                                               ;base address register 5
+EPCILEN                 equ     ($-.configdata)
 endstruc
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -673,48 +690,22 @@ wbClockDays             resb    1                                               
 ;       Kernel variables may be accessed by interrupts or by the initial task (Console).
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Kernel Data
-;
-;       These variables are not task-specific. They are initialized by the OS loader before the system is placed into
-;       protected mode. This is necessary because as soon as the system enters protected mode, the timer interrupt
-;       (IRQ0) will begin to reference the task selectors queue to implement task switching.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-                        alignb  4
-EKERNELDATA             equ     ($)
-wwTaskQueue             resw    256                                             ;task selector queue
-wdFarJumpEIP            resd    1                                               ;destination EIP of next task (ignored)
-wwFarJumpSelector       resw    1                                               ;destination task gate
-wbTaskIndex             resb    1                                               ;task selector index
-wbInCriticalSection     resb    1                                               ;task in critical section
-EKERNELDATALEN          equ     ($-EKERNELDATA)
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Console Task Variables
-;
-;       These variables are exclusve to the console task. These variables are initialized by the console task when
-;       the console task starts.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-                        alignb  4
 ECONDATA                equ     ($)
 wdConsoleMemBase        resd    1                                               ;console memory address
 wdConsoleHeapSize       resd    1                                               ;kernel heap size
 wdBaseMemSize           resd    1                                               ;base memory size (int 12h)
 wdExtendedMemSize       resd    1                                               ;extended memory size (int 12h)
 wdROMMemSize            resd    1                                               ;ROM memory size
-wdConsolePCISelector    resd    1                                               ;PCI selector (bbbbbbbb dddddfff)
-wdConsolePCIData        equ     $                                               ;PCI register data value
-wwConsolePCIVendor      resw    1                                               ;PCI data vendor
-wwConsolePCIChip        resw    1                                               ;PCI data chip
+;wdConsolePCISelector   resd    1                                               ;PCI selector (bbbbbbbb dddddfff)
+;wdConsolePCIData       equ     $                                               ;PCI register data value
+;wwConsolePCIVendor     resw    1                                               ;PCI data vendor
+;wwConsolePCIChip       resw    1                                               ;PCI data chip
 wdConsolePCIVendorStr   resd    1                                               ;PCI vendor name string addr
 wdConsolePCIChipStr     resd    1                                               ;PCI device name string addr
 wdConsoleEthernetDevice resd    1                                               ;PCI ethernet adapter selector
-wdConsoleEthernetMem    resd    1                                               ;PCI ethernet memory mapped i/o address
-wdConsoleEthernetPort   resd    1                                               ;PCI ethernet i/o port
-wdConsoleEthernetCtrl   resd    1                                               ;PCI ethernet control register value
+;wdConsoleEthernetMem   resd    1                                               ;PCI ethernet memory mapped i/o address
+;wdConsoleEthernetPort  resd    1                                               ;PCI ethernet i/o port
+;wdConsoleEthernetCtrl  resd    1                                               ;PCI ethernet control register value
 wbConsoleColumn         resb    1                                               ;console column
 wbConsoleRow            resb    1                                               ;console row
 wbConsoleShift          resb    1                                               ;console shift flags
@@ -739,21 +730,8 @@ wzROMMemSize            resb    11                                              
 wzExtendedMemSize       resb    11                                              ;CMOS extended memory bytes zz,zzz,zz9\0
 wsConsoleMemRoot        resb    EMEMROOTLEN                                     ;kernel base memory map
 wsConsoleDateTime       resb    EDATETIMELEN                                    ;date-time buffer
+wsConsolePCI            resb    EPCILEN                                         ;PCI context
 ECONDATALEN             equ     ($-ECONDATA)                                    ;size of console data area
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Background Task Variables
-;
-;       These variables are exclusve to the background task. These variables are initialized by the background task when
-;       the task starts.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-                        alignb  4
-EBGDATA                 equ     ($)
-wsBgDateTime            resb    EDATETIMELEN                                    ;date-time buffer
-wzBgTime                resb    EBGTIMELEN                                      ;time string buffer
-wzBgTimeCmpr            resb    EBGTIMELEN                                      ;time string comparison buffer
-EBGDATALEN              equ     ($-EBGDATA)
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       End of OS Variables
@@ -1318,10 +1296,10 @@ wcPrepInBuf             equ     $
 ;
 ;       The disk contains two copies of the File Allocation Table (FAT). On our disk, each FAT copy is 1200h bytes in
 ;       length. Each FAT entry contains the logical number of the next cluster. The first two entries are reserved. Our
-;       OS.COM file here is 7400h bytes in length. The first 400h bytes are the 16-bit loader code. The remaining 7000h
+;       OS.COM file here is 5400h bytes in length. The first 400h bytes are the 16-bit loader code. The remaining 5000h
 ;       bytes are the 32-bit kernel code. Our disk parameter table defines a cluster as containing one sector and each
-;       sector having 200h bytes. Therefore, our FAT table must reserve 58 clusters for OS.COM. The clusters used by
-;       OS.COM, then, will be cluster 2 through 59. The entry for cluster 59 is set to "0fffh" to indicate that it is
+;       sector having 200h bytes. Therefore, our FAT table must reserve 42 clusters for OS.COM. The clusters used by
+;       OS.COM, then, will be cluster 2 through 43. The entry for cluster 43 is set to "0fffh" to indicate that it is
 ;       the last cluster in the chain.
 ;
 ;       Every three bytes encode two FAT entries as follows:
@@ -1335,21 +1313,17 @@ wcPrepInBuf             equ     $
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 fat1                                                    ;first copy of FAT
-                        db      0F0h,0FFh,0FFh, 003h,040h,000h                  ;clusters 0-3           ff0 fff 003 004
-                        db      005h,060h,000h, 007h,080h,000h                  ;custters 4-7           005 006 007 008
-                        db      009h,0A0h,000h, 00Bh,0C0h,000h                  ;clusters 8-11          009 00a 00b 00c
-                        db      00Dh,0E0h,000h, 00Fh,000h,001h                  ;clusters 12-15         00d 00e 00f 010
-                        db      011h,020h,001h, 013h,040h,001h                  ;clusters 16-19         011 012 013 014
-                        db      015h,060h,001h, 017h,080h,001h                  ;clusters 20-23         015 016 017 018
-                        db      019h,0A0h,001h, 01Bh,0C0h,001h                  ;clusters 24-27         019 01a 01b 01c
-                        db      01Dh,0E0h,001h, 01Fh,000h,002h                  ;clusters 28-31         01d 01e 01f 020
-                        db      021h,020h,002h, 023h,040h,002h                  ;clusters 32-35         021 022 023 024
-                        db      025h,060h,002h, 027h,080h,002h                  ;clusters 36-39         025 026 027 028
-                        db      029h,0A0h,002h, 02Bh,0C0h,002h                  ;clusters 40-43         029 02A 02B 02C
-                        db      02Dh,0E0h,002h, 02Fh,000h,003h                  ;clusters 44-47         02D 02E 02F 030
-                        db      031h,020h,003h, 033h,040h,003h                  ;clusters 48-51         031 032 033 034
-                        db      035h,060h,003h, 037h,080h,003h                  ;clusters 52-55         035 036 037 038
-                        db      039h,0A0h,003h, 03Bh,0F0h,0FFh                  ;clusters 56-59         039 03A 03B FFF
+                        db      0F0h,0FFh,0FFh, 003h,040h,000h
+                        db      005h,060h,000h, 007h,080h,000h
+                        db      009h,0A0h,000h, 00Bh,0C0h,000h
+                        db      00Dh,0E0h,000h, 00Fh,000h,001h
+                        db      011h,020h,001h, 013h,040h,001h
+                        db      015h,060h,001h, 017h,080h,001h
+                        db      019h,0A0h,001h, 01Bh,0C0h,001h
+                        db      01Dh,0E0h,001h, 01Fh,000h,002h
+                        db      021h,020h,002h, 023h,040h,002h
+                        db      025h,060h,002h, 027h,080h,002h
+                        db      029h,0A0h,002h, 02Bh,0F0h,0FFh
                         times   (9*512)-($-$$) db 0                             ;zero fill to end of section
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1357,21 +1331,17 @@ section                 fat1                                                    
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 fat2                                                    ;second copy of FAT
-                        db      0F0h,0FFh,0FFh, 003h,040h,000h                  ;clusters 0-3           ff0 fff 003 004
-                        db      005h,060h,000h, 007h,080h,000h                  ;custters 4-7           005 006 007 008
-                        db      009h,0A0h,000h, 00Bh,0C0h,000h                  ;clusters 8-11          009 00a 00b 00c
-                        db      00Dh,0E0h,000h, 00Fh,000h,001h                  ;clusters 12-15         00d 00e 00f 010
-                        db      011h,020h,001h, 013h,040h,001h                  ;clusters 16-19         011 012 013 014
-                        db      015h,060h,001h, 017h,080h,001h                  ;clusters 20-23         015 016 017 018
-                        db      019h,0A0h,001h, 01Bh,0C0h,001h                  ;clusters 24-27         019 01a 01b 01c
-                        db      01Dh,0E0h,001h, 01Fh,000h,002h                  ;clusters 28-31         01d 01e 01f 020
-                        db      021h,020h,002h, 023h,040h,002h                  ;clusters 32-35         021 022 023 024
-                        db      025h,060h,002h, 027h,080h,002h                  ;clusters 36-39         025 026 027 028
-                        db      029h,0A0h,002h, 02Bh,0C0h,002h                  ;clusters 40-43         029 02A 02B 02C
-                        db      02Dh,0E0h,002h, 02Fh,000h,003h                  ;clusters 44-47         02D 02E 02F 030
-                        db      031h,020h,003h, 033h,040h,003h                  ;clusters 48-51         031 032 033 034
-                        db      035h,060h,003h, 037h,080h,003h                  ;clusters 52-55         035 036 037 038
-                        db      039h,0A0h,003h, 03Bh,0F0h,0FFh                  ;clusters 56-59         039 03A 03B FFF
+                        db      0F0h,0FFh,0FFh, 003h,040h,000h
+                        db      005h,060h,000h, 007h,080h,000h
+                        db      009h,0A0h,000h, 00Bh,0C0h,000h
+                        db      00Dh,0E0h,000h, 00Fh,000h,001h
+                        db      011h,020h,001h, 013h,040h,001h
+                        db      015h,060h,001h, 017h,080h,001h
+                        db      019h,0A0h,001h, 01Bh,0C0h,001h
+                        db      01Dh,0E0h,001h, 01Fh,000h,002h
+                        db      021h,020h,002h, 023h,040h,002h
+                        db      025h,060h,002h, 027h,080h,002h
+                        db      029h,0A0h,002h, 02Bh,0F0h,0FFh
                         times   (9*512)-($-$$) db 0                             ;zero fill to end of section
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1390,7 +1360,7 @@ section                 dir                                                     
                         db      01000001b                                       ;mmm = 10 MOD 8 = 2; ddddd = 1
                         db      01001001b                                       ;yyyyyyy = 2016-1980 = 36 = 24h; m/8 = 1
                         dw      2                                               ;first cluster
-                        dd      07200h                                          ;file size
+                        dd      05400h                                          ;file size
                         times   (EBOOTDIRENTRIES*32)-($-$$) db 0h               ;zero fill to end of section
 %endif
 %ifdef BUILDCOM
@@ -1462,28 +1432,6 @@ Loader                  push    cs                                              
                         mov     si,czCPUOKMsg                                   ;cpu ok message
                         call    PutTTYString                                    ;display message
 ;
-;       Initialize kernel data areas. The task queue is initialized here because as soon as we enter protected mode,
-;       the timer interrupt code will begin inspecting the task queue to determine if a task switch must be made. To
-;       start with, we set every 16th queue element to reference the background task selector. This will ensure that
-;       the background task, which updates the visible clock on the console, will be called at least once per second.
-;
-                        push    EKRNDATASEG                                     ;load kernel data segment address ...
-                        pop     es                                              ;... into extra segment reg
-                        mov     di,wwTaskQueue                                  ;task queue address
-                        mov     cx,64                                           ;outer loop
-.10                     push    cx                                              ;save remaining outer iterations
-                        mov     cx,3                                            ;inner loop
-                        mov     ax,EGDTCONSOLETSS                               ;console task state segment selector
-                        cld                                                     ;forward strings
-                        rep     stosw                                           ;store selectors in task queue
-                        mov     ax,EGDTBACKGROUNDTSS                            ;background task state segment selector
-                        stosw                                                   ;store selector in task queue
-                        pop     cx                                              ;restore remaining outer iterations
-                        loop    .10                                             ;next
-                        xor     ax,ax                                           ;zero register
-                        mov     cl,4                                            ;remaining words to reset
-                        rep     stosw                                           ;reset remaining kernel data
-;
 ;       Fixup the GDT descriptor for the current (loader) code segment.
 ;
                         mov     si,EKRNCODESRCADR                               ;GDT offset
@@ -1517,10 +1465,10 @@ Loader                  push    cs                                              
                         mov     ah,EBIOSFNINITPROTMODE                          ;initialize protected mode fn.
                         mov     bx,02028h                                       ;BH,BL = IRQ int bases
                         mov     dx,001Fh                                        ;outer delay loop count
-.20                     mov     cx,0FFFFh                                       ;inner delay loop count
+.10                     mov     cx,0FFFFh                                       ;inner delay loop count
                         loop    $                                               ;wait out pending interrupts
                         dec     dx                                              ;restore outer loop count
-                        jnz     .20                                             ;continue outer loop
+                        jnz     .10                                             ;continue outer loop
                         int     EBIOSINTMISC                                    ;call BIOS to set protected mode
 ;
 ;       Enable hardware and maskable interrupts.
@@ -1675,17 +1623,33 @@ czStartingMsg           db      "Starting OS",13,10,0                           
 ;       3210987654321098765432109876543210987654321098765432109876543210
 ;       ----------------------------------------------------------------
 ;       h......hffffmmmma......ab......................bn..............n
-;       00000000                        all areas have base addresses below 2^24
-;               0100                    (0x4) 32-bit single-byte granularity
-;               1100                    (0xC) 32-bit 4KB granularity
-;                   1001                present, ring-0, selector
 ;
-;       h...h   hi-order base address (bits 24-31)
-;       ffff    flags
-;       mmmm    hi-order limit (bits 16-19)
-;       a...a   access
-;       b...b   lo-order base address (bits 0-23)
-;       n...n   lo-order limit (bits 0-15)
+;       h......h                                                                hi-order base address (bits 24-31)
+;               ffff                                                            flags
+;                   mmmm                                                        hi-order limit (bits 16-19)
+;                       a......a                                                access
+;                               b......................b                        lo-order base address (bits 0-23)
+;                                                       n..............n        lo-order limit (bits 0-15)
+;
+;       00000000                                                                all areas have base addresses below 2^24
+;               0...                                                            single-byte size granularity
+;               1...                                                            4-kilobyte size granularity
+;               .0..                                                            16-bit default for code segments
+;               .1..                                                            32-bit default for code segments
+;               ..0.                                                            intel-reserved; should be zero
+;               ...0                                                            available for operating system use
+;                   0000                                                        segment is less than 2^16 in size
+;                   1111                                                        segment is greater than 2^24-2 in size
+;                       1.......                                                segment is present in memory
+;                       .00.....                                                segment is of privilege level 0
+;                       ...0....                                                segment is of system or gate type
+;                       ...00010                                                local decriptor table (LDT)
+;                       ...01001                                                task state segment (TSS) available
+;                       ...01011                                                task state segment (TSS) busy
+;                       ...10...                                                data segment
+;                       ...10011                                                writable data (accessed)
+;                       ...11...                                                code segment
+;                       ...11011                                                readable non-conforming code (accessed)
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 gdt                                                     ;global descriptor table
@@ -1703,9 +1667,6 @@ section                 gdt                                                     
                         dq      004089000F80007Fh                               ;58 80B  writable TSS   (loader)
                         dq      004082004700007Fh                               ;60 80B  writable LDT   (console)
                         dq      004089004780007Fh                               ;88 80B  writable TSS   (console)
-                        dq      004082006700007Fh                               ;70 80B  writable LDT   (background)
-                        dq      004089006780007Fh                               ;78 80B  writable TSS   (background)
-                        dq      00409300480007FFh                               ;80 2KB  foreground task message queue
                         times   2048-($-$$) db 0h                               ;zero fill to end of section
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -2541,30 +2502,9 @@ irq0.15                 mov     dh,EFDCPORTHI                                   
 ;
 irq0.20                 call    PutPrimaryEndOfInt                              ;send end-of-interrupt to PIC
 ;
-;       Determine if a task switch is appropriate
+;       Restore and return.
 ;
-                        cmp     byte [wbInCriticalSection],0                    ;any task holding a critical section?
-                        jne     irq0.30                                         ;yes, do not switch tasks
-                        inc     byte [wbTaskIndex]                              ;increment task queue index (0-255)
-                        movzx   eax,byte [wbTaskIndex]                          ;load task queue index
-                        mov     dx,[wwTaskQueue+eax*2]                          ;next task selector
-                        str     ax                                              ;current task selector
-                        cmp     dx,ax                                           ;next task same is current task?
-                        je      irq0.30                                         ;yes, skip task switch
-;
-;       Switch task
-;
-                        push    es                                              ;save extra segment register
-                        push    EGDTALIAS                                         ;load GDT alias selector ...
-                        pop     es                                              ;... into extra segment reg
-                        and     byte [es:eax+5],0FDh                            ;reset task-busy bit of current task
-                        pop     es                                              ;restore extra segment register
-                        mov     word [wwFarJumpSelector],dx                     ;set next task selector in jmp instr
-                        jmp     far [wdFarJumpEIP]                              ;jump to next task
-;
-;       Restore and return
-;
-irq0.30                 pop     ds                                              ;restore modified regs
+                        pop     ds                                              ;restore modified regs
                         pop     edx                                             ;
                         pop     eax                                             ;
                         iretd                                                   ;return
@@ -2575,10 +2515,7 @@ irq0.30                 pop     ds                                              
 ;       This handler is called when an IRQ1 hardware interrupt occurs, caused by a keyboard event. The scan-code(s)
 ;       corresponding to the keyboard event are read and message events are appended to the message queue. Since this
 ;       code is called in response to a hardware interrupt, no task switch occurs. We need to preseve the state of
-;       ALL modified registers upon return. Note that keyboard messages are added to the keyboard focus message queue.
-;       This is a queue referenced in the global descriptor table and must always reference the message queue for the
-;       task that has the keyboard focus. To direct keyboard messages to another task, update the GDT descriptor to
-;       point to the message queue for that task.
+;       ALL modified registers upon return.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  keyboard                                        ;keyboard interrrupt
@@ -2735,7 +2672,6 @@ irq1.120                and     eax,0FFFFh                                      
                         or      edx,eax                                         ;msg id and codes
                         xor     ecx,ecx                                         ;null param
                         push    eax                                             ;save codes
-                        mov     eax,EGDTKEYBOARDMQ                              ;keyboard focus message queue
                         call    PutMessage                                      ;put message to console
                         pop     eax                                             ;restore codes
                         test    al,al                                           ;ASCII translation?
@@ -2744,7 +2680,6 @@ irq1.120                and     eax,0FFFFh                                      
                         and     eax,0FFFFh                                      ;clear high-order word
                         or      edx,eax                                         ;msg id and codes
                         xor     ecx,ecx                                         ;null param
-                        mov     eax,EGDTKEYBOARDMQ                              ;keyboard focus message queue
                         call    PutMessage                                      ;put message to console
 irq1.130                jmp     irq1.150                                        ;finish keyboard handling
 irq1.140                mov     al,EKEYFTIMEOUT                                 ;controller timeout flag
@@ -2949,7 +2884,6 @@ svc90                   iretd                                                   
 tsvc                    tsvce   AllocateMemory                                  ;allocate memory block
                         tsvce   ClearConsoleScreen                              ;clear console screen
                         tsvce   CompareMemory                                   ;compare memory
-                        tsvce   CopyMemory                                      ;copy memory
                         tsvce   DecimalToUnsigned                               ;convert decimal string to unsigned integer
                         tsvce   FreeMemory                                      ;free memory block
                         tsvce   GetBaseMemSize                                  ;get base RAM size in bytes
@@ -2973,11 +2907,9 @@ tsvc                    tsvce   AllocateMemory                                  
                         tsvce   PutYearString                                   ;put YYYY string
                         tsvce   ReadRealTimeClock                               ;get real-time clock date and time
                         tsvce   ResetSystem                                     ;reset system using 8042 chip
-                        tsvce   SetConsoleString                                ;set console string
                         tsvce   UnsignedToDecimalString                         ;convert unsigned integer to decimal string
                         tsvce   UnsignedToHexadecimal                           ;convert unsigned integer to hexadecimal string
                         tsvce   UpperCaseString                                 ;upper-case string
-                        tsvce   Yield                                           ;halt until interrupt
 maxtsvc                 equ     ($-tsvc)/4                                      ;function out of range
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -3002,20 +2934,6 @@ maxtsvc                 equ     ($-tsvc)/4                                      
 %macro                  decimalToUnsigned 0
                         mov     al,eDecimalToUnsigned                           ;function code
                         int     _svc                                            ;invoke OS servie
-%endmacro
-%macro                  compareMemory 3
-                        mov     edx,%1                                          ;first memory address
-                        mov     ebx,%2                                          ;second memory address
-                        mov     ecx,%3                                          ;length
-                        mov     al,eCompareMemory                               ;function code
-                        int     _svc                                            ;invoke OS service
-%endmacro
-%macro                  copyMemory 3
-                        mov     edx,%1                                          ;first memory address
-                        mov     ebx,%2                                          ;second memory address
-                        mov     ecx,%3                                          ;length
-                        mov     al,eCopyMemory                                  ;function code
-                        int     _svc                                            ;invoke OS service
 %endmacro
 %macro                  freeMemory 1
                         mov     edx,%1                                          ;address of memory block
@@ -3147,10 +3065,6 @@ maxtsvc                 equ     ($-tsvc)/4                                      
                         mov     al,eResetSystem                                 ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
-%macro                  setConsoleString 0
-                        mov     al,eSetConsoleString                            ;function code
-                        int     _svc                                            ;invoke OS service
-%endmacro
 %macro                  unsignedToDecimalString 0
                         mov     al,eUnsignedToDecimalString                     ;function code
                         int     _svc                                            ;invoke OS service
@@ -3161,10 +3075,6 @@ maxtsvc                 equ     ($-tsvc)/4                                      
 %endmacro
 %macro                  upperCaseString 0
                         mov     al,eUpperCaseString                             ;function code
-                        int     _svc                                            ;invoke OS service
-%endmacro
-%macro                  yield 0
-                        mov     al,eYield                                       ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
 ;=======================================================================================================================
@@ -4052,7 +3962,6 @@ FreeMemory              push    ebx                                             
 ;       String Helper Routines
 ;
 ;       CompareMemory
-;       CopyMemory
 ;       UpperCaseString
 ;
 ;=======================================================================================================================
@@ -4091,38 +4000,6 @@ CompareMemory           push    esi                                             
                         pop     es                                              ;restore non-volatile regs
                         pop     edi                                             ;
                         pop     esi                                             ;
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        CopyMemory
-;
-;       Description:    This routine copies a byte array.
-;
-;       In:             DS:EDX  first source address
-;                       DS:EBX  second source address
-;                       ECX     copy length
-;
-;-----------------------------------------------------------------------------------------------------------------------
-CopyMemory              push    ecx                                             ;save non-volatile regs
-                        push    esi                                             ;
-                        push    edi                                             ;
-                        push    es                                              ;
-;
-;       Compare byte array
-;
-                        push    ds                                              ;load data selector
-                        pop     es                                              ;... into ES register
-                        mov     esi,edx                                         ;first source address
-                        mov     edi,ebx                                         ;second source address
-                        cld                                                     ;forward strings
-                        rep     movsb                                           ;copy bytes
-;
-;       Restore and return
-;
-                        pop     es                                              ;restore non-volatile regs
-                        pop     edi                                             ;
-                        pop     esi                                             ;
-                        pop     ecx                                             ;
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -4802,8 +4679,7 @@ GetMessage              push    ebx                                             
 ;
 ;       Description:    This routine adda a message to the message queue.
 ;
-;       In:             EAX     message queue selector
-;                       ECX     hi-order data word
+;       In:             ECX     hi-order data word
 ;                       EDX     lo-order data word
 ;
 ;       Out:            CY      0 = success
@@ -4811,7 +4687,7 @@ GetMessage              push    ebx                                             
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 PutMessage              push    ds                                              ;save non-volatile regs
-                        push    eax                                             ;load task message queue selector ...
+                        push    ELDTMQ                                          ;load task message queue selector ...
                         pop     ds                                              ;... into data segment register
                         mov     eax,[MQTail]                                    ;tail ptr
                         cmp     dword [eax],0                                   ;is queue full?
@@ -5716,7 +5592,7 @@ ConMem                  push    ebx                                             
                         push    esi                                             ;
                         push    edi                                             ;
 ;
-;                       update the source address if a parameter is given
+;       Update the source address if a parameter is given.
 ;
                         mov     edx,wzConsoleInBuffer                           ;console input buffer address (params)
                         mov     ebx,wzConsoleToken                              ;console command token address
@@ -5729,13 +5605,13 @@ ConMem                  push    ebx                                             
 
                         mov     [wdConsoleMemBase],eax                          ;save console memory address
 ;
-;                       setup source address and row count
+;       Setup source address and row count.
 ;
 .10                     mov     esi,[wdConsoleMemBase]                          ;source memory address
                         xor     ecx,ecx                                         ;zero register
                         mov     cl,16                                           ;row count
 ;
-;                       start the row with the source address in hexadecimal
+;       Start the row with the source address in hexadecimal.
 ;
 .20                     push    ecx                                             ;save remaining rows
                         mov     edi,wzConsoleOutBuffer                          ;output buffer address
@@ -5748,7 +5624,7 @@ ConMem                  push    ebx                                             
                         mov     al,' '                                          ;ascii space
                         stosb                                                   ;store delimiter
 ;
-;                       output 16 ASCII hexadecimal byte values for the row
+;       Output 16 ASCII hexadecimal byte values for the row.
 ;
                         xor     ecx,ecx                                         ;zero register
                         mov     cl,16                                           ;loop count
@@ -5773,7 +5649,7 @@ ConMem                  push    ebx                                             
                         pop     ecx                                             ;loop count
                         loop    .30                                             ;next
 ;
-;                       output printable ASCII character section for the row
+;       Output printable ASCII character section for the row.
 ;
                         sub     esi,16                                          ;reset source pointer
                         mov     cl,16                                           ;loop count
@@ -5788,12 +5664,12 @@ ConMem                  push    ebx                                             
                         xor     al,al                                           ;nul-terminator
                         stosb                                                   ;terminate output line
 ;
-;                       display constructed output buffer and newline
+;       Display constructed output buffer and newline.
 ;
                         putConsoleString wzConsoleOutBuffer                     ;display constructed output
                         putConsoleString czNewLine                              ;display new line
 ;
-;                       repeat until all lines displayed and preserve source address
+;       Repeat until all lines displayed and preserve source address.
 ;
                         pop     ecx                                             ;remaining rows
                         loop    .20                                             ;next row
@@ -5847,33 +5723,56 @@ ConMonthName            readRealTimeClock  wsConsoleDateTime                    
 ;-----------------------------------------------------------------------------------------------------------------------
 ConPCIProbe             push    ebx                                             ;save non-volatile regs
 ;
-;                       initialize variables
+;       Setup addressability.
 ;
-                        xor     al,al                                           ;zero register
-                        mov     [wbConsolePCIBus],al                            ;initialize bus
-                        mov     [wbConsolePCIDevice],al                         ;initialize device
-                        mov     [wbConsolePCIFunction],al                       ;initialize function
+                        mov     ebx,wsConsolePCI                                ;PCI structure address
 ;
-;                       construct PCI selector
+;       Initialize PCI variables.
 ;
-.10                     mov     ah,[wbConsolePCIBus]                            ;AH = bbbb bbbb
-                        mov     dl,[wbConsolePCIDevice]                         ;DL = ???d dddd
+                        xor     eax,eax                                         ;zero register
+                        mov     [ebx+PCI.configdata],eax                        ;initialize config-data
+                        mov     [ebx+PCI.selector],eax                          ;initialize selector
+                        mov     [ebx+PCI.bus],al                                ;initialize bus
+                        mov     [ebx+PCI.device],al                             ;initialize device
+                        mov     [ebx+PCI.function],al                           ;initialize function
+                        mov     [ebx+PCI.register],al                           ;initialize register
+                        mov     [ebx+PCI.bar0],eax                              ;initialize base address reg 0
+                        mov     [ebx+PCI.bar1],eax                              ;initialize base address reg 1
+                        mov     [ebx+PCI.bar2],eax                              ;initialize base address reg 2
+                        mov     [ebx+PCI.bar3],eax                              ;initialize base address reg 3
+                        mov     [ebx+PCI.bar4],eax                              ;initialize base address reg 4
+                        mov     [ebx+PCI.bar5],eax                              ;initialize base address reg 5
+;                       mov     [wbConsolePCIBus],al                            ;initialize bus
+;                       mov     [wbConsolePCIDevice],al                         ;initialize device
+;                       mov     [wbConsolePCIFunction],al                       ;initialize function
+;
+;       Construct PCI selector.
+;
+.10                     mov     ah,[ebx+PCI.bus]                                ;AH = bbbb bbbb
+                        mov     dl,[ebx+PCI.device]                             ;DL = ???d dddd
+;.10                    mov     ah,[wbConsolePCIBus]                            ;AH = bbbb bbbb
+;                       mov     dl,[wbConsolePCIDevice]                         ;DL = ???d dddd
                         shl     dl,3                                            ;DL = dddd d000
-                        mov     al,[wbConsolePCIFunction]                       ;AL = ???? ?fff
+                        mov     al,[ebx+PCI.function]                           ;AL = ???? ?fff
+;                       mov     al,[wbConsolePCIFunction]                       ;AL = ???? ?fff
                         and     al,007h                                         ;AL = 0000 0fff
                         or      al,dl                                           ;AL = dddd dfff
                         movzx   eax,ax                                          ;0000 0000 0000 0000 bbbb bbbb dddd dfff
                         shl     eax,8                                           ;0000 0000 bbbb bbbb dddd dfff 0000 0000
                         or      eax,80000000h                                   ;1000 0000 bbbb bbbb dddd dfff 0000 0000
-                        mov     [wdConsolePCISelector],eax                      ;save selector
+                        mov     [ebx+PCI.selector],eax                          ;save selector
+;                       mov     [wdConsolePCISelector],eax                      ;save selector
 ;
-;                       read PCI data register
+;       Read PCI data register.
 ;
-                        mov     dx,0cf8h                                        ;register port
+                        mov     dx,EPCIPORTCONFIGADDR                           ;PCI config address port
+;                       mov     dx,0cf8h                                        ;register port
                         out     dx,eax                                          ;select device
-                        mov     dx,0cfch                                        ;data port
+                        mov     dx,EPCIPORTCONFIGDATA                           ;PCI config data port
+;                       mov     dx,0cfch                                        ;data port
                         in      eax,dx                                          ;read register data
-                        mov     [wdConsolePCIData],eax                          ;save data
+                        mov     [ebx+PCI.configdata],eax                        ;save config data
+;                       mov     [wdConsolePCIData],eax                          ;save data
 ;
 ;                       interpret PCI data value and display finding
 ;
@@ -5894,87 +5793,29 @@ ConPCIProbe             push    ebx                                             
 ;
 ;                       step to next function, device, bus
 ;
-.20                     inc     byte [wbConsolePCIFunction]                     ;next function
-                        cmp     byte [wbConsolePCIFunction],8                   ;at limit?
+.20                     inc     byte [ebx+PCI.function]                         ;next function
+                        cmp     byte [ebx+PCI.function],8                       ;at limit?
+;.20                    inc     byte [wbConsolePCIFunction]                     ;next function
+;                       cmp     byte [wbConsolePCIFunction],8                   ;at limit?
                         jb      .10                                             ;no, continue
-                        mov     byte [wbConsolePCIFunction],0                   ;zero function
-                        inc     byte [wbConsolePCIDevice]                       ;next device
-                        cmp     byte [wbConsolePCIDevice],32                    ;at limit?
+                        mov     byte [ebx+PCI.function],0                       ;zero function
+                        inc     byte [ebx+PCI.device]                           ;next device
+                        cmp     byte [ebx+PCI.device],32                        ;at limit?
+;                       mov     byte [wbConsolePCIFunction],0                   ;zero function
+;                       inc     byte [wbConsolePCIDevice]                       ;next device
+;                       cmp     byte [wbConsolePCIDevice],32                    ;at limit?
                         jb      .10                                             ;no, continue
-                        mov     byte [wbConsolePCIDevice],0                     ;zero device
-                        inc     byte [wbConsolePCIBus]                          ;next bus
-                        cmp     byte [wbConsolePCIBus],0                        ;at limit?
+                        mov     byte [ebx+PCI.device],0                         ;zero device
+                        inc     byte [ebx+PCI.bus]                              ;next bus
+                        cmp     byte [ebx+PCI.bus],8                            ;at limit?
+;                       mov     byte [wbConsolePCIDevice],0                     ;zero device
+;                       inc     byte [wbConsolePCIBus]                          ;next bus
+;                       cmp     byte [wbConsolePCIBus],8                        ;at limit?
                         jb      .10                                             ;no, continue
-
-                        jmp     .30
-
 ;
-;                       report if ethernet adapter found
+;       Restore and return.
 ;
-                        test    byte [wbConsoleHWFlags],EHWETHERNET             ;ethernet h/w switch set?
-                        jz      .30                                             ;branch if no
-
-                        putConsoleString czEthernetAdapterFound                 ;report adapter found
-;
-;                       read base address register 0 at offset 10h
-;
-                        mov     eax,[wdConsoleEthernetDevice]                   ;adapter PCI selector
-                        or      eax,10h                                         ;set function bits
-                        mov     dx,0cf8h                                        ;register port
-                        out     dx,eax                                          ;select register
-                        mov     dx,0cfch                                        ;data port
-                        in      eax,dx                                          ;register data
-                        mov     [wdConsoleEthernetMem],eax                      ;save ethernet memory mapped i/o addr
-;
-;                       report base address register 0 value
-;
-                        mov     ecx,eax                                         ;unsigned integer param
-                        mov     edx,wzConsoleToken                              ;target buffer address
-
-                        unsignedToHexadecimal                                   ;convert unsigned to ASCII hex string
-                        putConsoleString wzConsoleToken                         ;output string to console
-                        putConsoleString czNewLine                              ;output newline to console
-;
-;                       read base address register 2 at offset 18h
-;
-                        mov     eax,[wdConsoleEthernetDevice]                   ;adapter PCI selector
-                        or      eax,18h                                         ;set function bits
-                        mov     dx,0cf8h                                        ;register port
-                        out     dx,eax                                          ;select register
-                        mov     dx,0cfch                                        ;data port
-                        in      eax,dx                                          ;register data
-                        and     al,0feh                                         ;clear bit zero
-                        mov     [wdConsoleEthernetPort],eax                     ;save ethernet i/o port
-;
-;                       report base address register 2 value
-;
-                        mov     ecx,eax                                         ;unsigned integer param
-                        mov     edx,wzConsoleToken                              ;target buffer address
-
-                        unsignedToHexadecimal                                   ;convert unsigned to ASCII hex string
-                        putConsoleString wzConsoleToken                         ;output string to console
-                        putConsoleString czNewLine                              ;output newline to console
-;
-;                       read ethernet control register using port i/o
-;
-                        mov     eax,[wdConsoleEthernetPort]                     ;ethernet i/o port
-                        mov     dx,ax                                           ;ethernet i/o port
-                        xor     eax,eax                                         ;control register (zero)
-                        out     dx,eax                                          ;select register
-                        add     dx,4                                            ;data register
-                        in      eax,dx                                          ;read register data
-                        mov     [wdConsoleEthernetCtrl],eax                     ;save ethernet control register value
-;
-;                       report adapter control register value
-;
-                        mov     ecx,eax                                         ;unsigned integer param
-                        mov     edx,wzConsoleToken                              ;target buffer address
-
-                        unsignedToHexadecimal                                   ;convert unsigned to ASCII hex string
-                        putConsoleString wzConsoleToken                         ;output string to console
-                        putConsoleString czNewLine                              ;output newline to console
-
-.30                     pop     ebx                                             ;restore non-volatile regs
+                        pop     ebx                                             ;restore non-volatile regs
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5983,12 +5824,14 @@ ConPCIProbe             push    ebx                                             
 ;       Description:    This routine constructs a PCI identification string from the current PCI Bus, Device, and
 ;                       Function code values.
 ;
-;       In:             DS:EDX  output buffer address
+;       In:             DS:EBX  PCI structure address
+;                       DS:EDX  output buffer address
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ConBuildPCIIdent        push    edi                                             ;save non-volatile regs
                         mov     edi,edx                                         ;output buffer address
-                        mov     al,[wbConsolePCIBus]                            ;current PCI bus (0-255)
+                        mov     al,[ebx+PCI.bus]                                ;current PCI bus (0-255)
+;                       mov     al,[wbConsolePCIBus]                            ;current PCI bus (0-255)
                         xor     ah,ah                                           ;zero high-order dividend
                         mov     cl,100                                          ;divisor (10^2)
                         div     cl                                              ;AL=100's, AH=bus MOD 100
@@ -6003,7 +5846,8 @@ ConBuildPCIIdent        push    edi                                             
                         stosw                                                   ;store 10's and 1's
                         mov     al,EASCIIPERIOD                                 ;ASCII period delimiter
                         stosb                                                   ;store delimiter
-                        mov     al,[wbConsolePCIDevice]                         ;current PCI device (0-15)
+                        mov     al,[ebx+PCI.device]                             ;current PCI device (0-15)
+;                       mov     al,[wbConsolePCIDevice]                         ;current PCI device (0-15)
                         xor     ah,ah                                           ;zero high order dividend
                         mov     cl,10                                           ;divisor (10^1)
                         div     cl                                              ;AL=10's, AH=1's
@@ -6011,7 +5855,8 @@ ConBuildPCIIdent        push    edi                                             
                         stosw                                                   ;store 10's and 1's
                         mov     al,EASCIIPERIOD                                 ;ASCII period delimiter
                         stosb                                                   ;store delimiter
-                        mov     al,[wbConsolePCIFunction]                       ;current PCI function (0-7)
+                        mov     al,[ebx+PCI.function]                           ;current PCI function (0-7)
+;                       mov     al,[wbConsolePCIFunction]                       ;current PCI function (0-7)
                         or      al,30h                                          ;apply ASCII zone
                         stosb                                                   ;store 1's
                         xor     al,al                                           ;null terminator
@@ -6024,46 +5869,60 @@ ConBuildPCIIdent        push    edi                                             
 ;
 ;       Description:    This routine interprets the PCI vendor and device IDs.
 ;
+;       In:             DS:EBX  PCI structure address
+;
 ;-----------------------------------------------------------------------------------------------------------------------
 ConInterpretPCIData     mov     eax,czApple
-                        cmp     word [wwConsolePCIVendor],EPCIVENDORAPPLE       ;Apple?
+                        cmp     word [ebx+PCI.configdata_lo],EPCIVENDORAPPLE    ;Apple?
+;                       cmp     word [wwConsolePCIVendor],EPCIVENDORAPPLE       ;Apple?
                         jne     .10                                             ;no, branch
                         mov     edx,czUSBController
-                        cmp     word [wwConsolePCIChip],EPCIAPPLEUSB            ;USB?
+                        cmp     word [ebx+PCI.configdata_hi],EPCIAPPLEUSB       ;USB?
+;                       cmp     word [wwConsolePCIChip],EPCIAPPLEUSB            ;USB?
                         je      .80                                             ;yes, branch
                         mov     edx,czOther                                     ;other
                         jmp     .80                                             ;continue
 .10                     mov     eax,czIntel                                     ;Intel
-                        cmp     word [wwConsolePCIVendor],EPCIVENDORINTEL       ;Intel?
+                        cmp     word [ebx+PCI.configdata_lo],EPCIVENDORINTEL    ;Intel?
+;                       cmp     word [wwConsolePCIVendor],EPCIVENDORINTEL       ;Intel?
                         jne     .20                                             ;no, branch
                         mov     edx,czPro1000MT                                 ;Pro/1000 MT
-                        cmp     word [wwConsolePCIChip],EPCIINTELPRO1000MT      ;Pro/1000 MT?
+                        cmp     word [ebx+PCI.configdata_hi],EPCIINTELPRO1000MT ;Pro/1000 MT?
+;                       cmp     word [wwConsolePCIChip],EPCIINTELPRO1000MT      ;Pro/1000 MT?
                         je      .80                                             ;yes, branch
                         mov     edx,czPCIAndMem                                 ;PCI and Memory
-                        cmp     word [wwConsolePCIChip],EPCIINTELPCIMEM         ;PCI and Memory?
+                        cmp     word [ebx+PCI.configdata_hi],EPCIINTELPCIMEM    ;PCI and Memory?
+;                       cmp     word [wwConsolePCIChip],EPCIINTELPCIMEM         ;PCI and Memory?
                         je      .80                                             ;yes, branch
                         mov     edx,czAurealAD1881                              ;Aureal 1881 SOUNDMAX
-                        cmp     word [wwConsolePCIChip],EPCIINTELAD1881         ;Aureal 1881 SOUNDMAX?
+                        cmp     word [ebx+PCI.configdata_hi],EPCIINTELAD1881    ;Aureal 1881 SOUNDMAX?
+;                       cmp     word [wwConsolePCIChip],EPCIINTELAD1881         ;Aureal 1881 SOUNDMAX?
                         je      .80                                             ;yes, branch
                         mov     edx,czPIIX3PCItoIDEBridge                       ;PIIX3 PCI-to-IDE Bridge
-                        cmp     word [wwConsolePCIChip],EPCIINTELPIIX3          ;PIIX3 PCI-to-IDE Bridge?
+                        cmp     word [ebx+PCI.configdata_hi],EPCIINTELPIIX3     ;PIIX3 PCI-to-IDE Bridge?
+;                       cmp     word [wwConsolePCIChip],EPCIINTELPIIX3          ;PIIX3 PCI-to-IDE Bridge?
                         je      .80                                             ;yes, branch
                         mov     edx,cz82371ABBusMaster                          ;82371AB Bus Master
-                        cmp     word [wwConsolePCIChip],EPCIINTEL82371AB        ;82371AB Bus Master?
+                        cmp     word [ebx+PCI.configdata_hi],EPCIINTEL82371AB   ;82371AB Bua Master?
+;                       cmp     word [wwConsolePCIChip],EPCIINTEL82371AB        ;82371AB Bus Master?
                         je      .80                                             ;yes, branch
                         mov     edx,czPIIX4PowerMgmt                            ;PIIX4/4E/4M Power Mgmt Controller
-                        cmp     word [wwConsolePCIChip],EPCIINTELPIIX4          ;PIIX4/4E/4M Power Mgmt Controller?
+                        cmp     word [ebx+PCI.configdata_hi],EPCIINTELPIIX4     ;PIIX4/4E/4M Power Mgmt Controller?
+;                       cmp     word [wwConsolePCIChip],EPCIINTELPIIX4          ;PIIX4/4E/4M Power Mgmt Controller?
                         je      .80                                             ;yes, branch
                         mov     edx,czOther                                     ;other
                         jmp     .80                                             ;continue
 .20                     mov     eax,czOracle                                    ;Oracle
-                        cmp     word [wwConsolePCIVendor],EPCIVENDORORACLE      ;Oracle?
+                        cmp     word [ebx+PCI.configdata_lo],EPCIVENDORORACLE   ;Oracle?
+;                       cmp     word [wwConsolePCIVendor],EPCIVENDORORACLE      ;Oracle?
                         jne     .30                                             ;no, branch
                         mov     edx,czVirtualBoxGA                              ;VirtulaBox Graphics Adapter
-                        cmp     word [wwConsolePCIChip],EPCIORACLEVBOXGA        ;VirtualBox Graphics Adapter?
+                        cmp     word [ebx+PCI.configdata_hi],EPCIORACLEVBOXGA   ;VirtualBox Graphics Adapter?
+;                       cmp     word [wwConsolePCIChip],EPCIORACLEVBOXGA        ;VirtualBox Graphics Adapter?
                         je      .80                                             ;yes, branch
                         mov     edx,czVirtualBoxDevice                          ;VirtualBox Device
-                        cmp     word [wwConsolePCIChip],EPCIORACLEVBOXDEVICE    ;VirtualBox Device?
+                        cmp     word [ebx+PCI.configdata_hi],EPCIORACLEVBOXDEVICE       ;VirtualBox Device?
+;                       cmp     word [wwConsolePCIChip],EPCIORACLEVBOXDEVICE    ;VirtualBox Device?
                         je      .80                                             ;yes, branch
                         mov     edx,czOther                                     ;other
                         jmp     .80                                             ;continue
@@ -6071,10 +5930,15 @@ ConInterpretPCIData     mov     eax,czApple
                         mov     edx,czOther                                     ;other
 .80                     mov     [wdConsolePCIVendorStr],eax                     ;save vendor string
                         mov     [wdConsolePCIChipStr],edx                       ;save chip string
-                        cmp     word [wwConsolePCIChip],EPCIINTELPRO1000MT      ;Pro/1000 MT Ethernet Adapter
+;
+;       Set hardware flag if supported adapter found.
+;
+                        cmp     word [ebx+PCI.configdata_hi],EPCIINTELPRO1000MT ;Pro/1000 MT Ethernet Adpater
+;                       cmp     word [wwConsolePCIChip],EPCIINTELPRO1000MT      ;Pro/1000 MT Ethernet Adapter
                         jne     .90                                             ;no, branch
                         or      byte [wbConsoleHWFlags],EHWETHERNET             ;ethernet adapter found
-                        mov     eax,[wdConsolePCISelector]                      ;PCI selector
+                        mov     eax,[ebx+PCI.selector]                          ;PCI selector
+;                       mov     eax,[wdConsolePCISelector]                      ;PCI selector
                         mov     [wdConsoleEthernetDevice],eax                   ;save as ethernet device selector
 .90                     ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -6265,197 +6129,17 @@ czYearIsLeap            db      "The year is a leap year.",13,10,0              
 czYearIsNotLeap         db      "The year is not a leap year.",13,10,0          ;not leap year message
 cz82371ABBusMaster      db      "82371AB/EB PCI Bus Master IDE Controller",0    ;bus-master strin
                         times   4096-($-$$) db 0h                               ;zero fill to end of section
-;=======================================================================================================================
-;
-;       Background Task                                                         @disk: 009600   @mem: 006000
-;
-;       This task executes monitoring and self-correcting functions.
-;
-;                       000000  +-----------------------------------------------+
-;                               |  Real Mode Interrupt Vectors                  |
-;                       000400  +-----------------------------------------------+ DS,ES:0400
-;                               |  Reserved BIOS Memory Area                    |
-;                       000800  +-----------------------------------------------+ DS,ES:0800
-;                               |  Shared Kernel Memory Area                    |
-;                       001000  +-----------------------------------------------+               <-- GDTR
-;                               |  Global Descriptor Table (GDT)                |
-;                       001800  +-----------------------------------------------+               <-- IDTR
-;                               |  Interrupt Descriptor Table (IDT)             |
-;                       002000  +-----------------------------------------------+
-;                               |  Interrupt Handlers                           |
-;                               |  Kernel Function Library                      |
-;                       004000  +===============================================+
-;                               |  Console Task Stack Area                      |
-;                       004700  +-----------------------------------------------+
-;                               |  Console Task Local Descriptor Table (LDT)    |
-;                       004780  +-----------------------------------------------+
-;                               |  Console Task Task State Segment (TSS)        |
-;                       004800  +-----------------------------------------------+
-;                               |  Console Task Message Queue                   |
-;                       005000  +-----------------------------------------------+
-;                               |  Console Task Code                            |
-;                               |  Console Task Constants                       |
-;                       006000  +===============================================+
-;                               |  Background Task Stack Area                   |
-;       SS:SP --------> 006700  +-----------------------------------------------+ SS:0700       <-- LDTR = GDT.SEL 0060h
-;                               |  Background Task Local Descriptor Table (LDT) |
-;                       006780  +-----------------------------------------------+               <-- TR = GDT.SEL 0068h
-;                               |  Background Task Task State Segment (TSS)     |
-;                       006800  +-----------------------------------------------+
-;                               |  Background Task Message Queue                |
-;       CS,CS:IP -----> 007000  +-----------------------------------------------+ CS:0000
-;                               |  Background Task Code                         |
-;                               |  Background Task Constants                    |
-;                       008000  +===============================================+
-;
-;=======================================================================================================================
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Background Task Stack                                                   @disk: 009600   @mem:  006000
-;
-;       This is the stack for the background task. It supports 448 nested calls.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-section                 bgstack                                                 ;background task stack
-                        times   1792-($-$$) db 0h                               ;zero fill to end of section
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Background Task Local Descriptor Table                                  @disk: 009D00   @mem:  006700
-;
-;       This is the LDT for the background task. It defines the stack, code, data and queue segments as well as data
-;       aliases for the TSS LDT. Data aliases allow inspection and altering of the TSS and LDT. This LDT can hold up to
-;       16 descriptors. Six are initially defined.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-section                 bgldt                                                   ;background task local descriptors
-                        dq      004093006780007Fh                               ;04 TSS alias           128B  @ 6780
-                        dq      004093006700007Fh                               ;0C LDT alias           128B  @ 6700
-                        dq      00409300600006FFh                               ;14 stack               1792B @ 6600
-                        dq      00CF93000000FFFFh                               ;1C data                4GB   @ 0000
-                        dq      00409B0070000FFFh                               ;24 code                4KB   @ 7000
-                        dq      00409300680007FFh                               ;2C message queue       2KB   @ 6800
-                        times   128-($-$$) db 0h                                ;zero fill to end of section
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Background Task State Segment                                           @disk: 009D80   @mem:  006780
-;
-;       This is the TSS for the console task. All rings share the same stack. DS and ES are set to the console data
-;       segment. CS to console code.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-section                 bgtss                                                   ;background task state segment
-                        dd      0                                               ;00 back-link tss
-                        dd      0700h                                           ;04 esp ring 0
-                        dd      0014h                                           ;08 ss ring 0
-                        dd      0700h                                           ;0C esp ring 1
-                        dd      0014h                                           ;10 es ring 1
-                        dd      0700h                                           ;14 esp ring 2
-                        dd      0014h                                           ;18 ss ring 2
-                        dd      0                                               ;1C cr ring 3
-                        dd      0                                               ;20 eip
-                        dd      0200h                                           ;24 eflags
-                        dd      0                                               ;28 eax
-                        dd      0                                               ;2C ecx
-                        dd      0                                               ;30 edx
-                        dd      0                                               ;34 ebx
-                        dd      0700h                                           ;38 esp ring 3
-                        dd      0                                               ;3C ebp
-                        dd      0                                               ;40 esi
-                        dd      0                                               ;44 edi
-                        dd      001Ch                                           ;48 es
-                        dd      0024h                                           ;4C cs
-                        dd      0014h                                           ;50 ss ring 3
-                        dd      001Ch                                           ;54 ds
-                        dd      0                                               ;58 fs
-                        dd      0                                               ;5c gs
-                        dd      EGDTBACKGROUNDLDT                               ;60 ldt selector in gdt
-                        times   128-($-$$) db 0h                                ;zero fill to end of section
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Background Task Message Queue                                           @disk: 009E00   @mem: 006800
-;
-;       The console message queue is 2048 bytes of memory organized as a queue of 510 double words (4 bytes each) and
-;       two double word values that act as indices. The queue is a FIFO that is fed by the keyboard hardware interrupt
-;       handler and consumed by a service routine called from a task. Each queue entry defines an input (keystroke)
-;       event.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-section                 bgmque                                                  ;console message queue
-                        dd      8                                               ;head pointer
-                        dd      8                                               ;tail pointer
-                        times   510 dd 0                                        ;queue elements
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Background Task Code                                                    @disk: 00A600   @mem: 007000
-;
-;-----------------------------------------------------------------------------------------------------------------------
-section                 bgcode  vstart=07000h                                   ;labels relative to 7000h
-BackgroundCode          call    BgInitializeData                                ;initialize the background variables
-
-.10                     readRealTimeClock wsBgDateTime                          ;read real-time clock data
-                        putTimeString     wsBgDateTime,wzBgTime                 ;create ASCII time string
-                        compareMemory     wzBgTime,wzBgTimeCmpr,EBGTIMELEN      ;compare to previous time string
-
-                        jecxz   .10                                             ;repeat if equal
-                        push    es                                              ;save non-volatile reg
-                        push    EGDTCGA                                         ;load CGA selector ...
-                        pop     es                                              ;... into extra segment reg
-                        mov     esi,wzBgTime                                    ;string address
-                        mov     ch,24                                           ;OIA row
-                        mov     cl,67                                           ;OIA column
-
-                        setConsoleString                                        ;display string
-
-                        pop     es                                              ;restore non-volatile reg
-
-                        copyMemory        wzBgTime,wzBgTimeCmpr,EBGTIMELEN      ;copy to comparison string
-                        yield                                                   ;halt until interrupt
-
-                        jmp     .10                                             ;continue
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        BgInitializeData
-;
-;       Description:    This routine initializes background task variables.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-BgInitializeData        push    ecx                                             ;save non-volatile regs
-                        push    edi                                             ;
-                        push    es                                              ;
-;
-;       Initialize console work areas
-;
-                        push    EGDTOSDATA                                      ;load OS data selector ...
-                        pop     es                                              ;... into extra segment register
-                        mov     edi,EBGDATA                                     ;OS console data address
-                        xor     al,al                                           ;initialization value
-                        mov     ecx,EBGDATALEN                                  ;size of OS console data
-                        cld                                                     ;forward strings
-                        rep     stosb                                           ;initialize data
-;
-;       Restore and return
-;
-                        pop     es                                              ;restore non-volatile regs
-                        pop     edi                                             ;
-                        pop     ecx                                             ;
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Background Task Constants
-;
-;-----------------------------------------------------------------------------------------------------------------------
-                        times   4096-($-$$) db 0h                               ;zero fill to end of section
 %endif
 %ifdef BUILDDISK
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Free Disk Space                                                         @disk: 00B600   @mem:  n/a
+;       Free Disk Space                                                         @disk: 009600   @mem:  n/a
 ;
 ;       Following the convention introduced by DOS, we use the value 'F6' to indicate unused floppy disk storage.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 unused                                                  ;unused disk space
-                        times   EBOOTDISKBYTES-0B600h db 0F6h                   ;fill to end of disk image
+                        times   EBOOTDISKBYTES-09600h db 0F6h                   ;fill to end of disk image
 %endif
 ;=======================================================================================================================
 ;

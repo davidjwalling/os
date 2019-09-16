@@ -2,20 +2,20 @@
 ;
 ;       File:           os.asm
 ;
-;       Project:        os.010
+;       Project:        os.018
 ;
-;       Description:    In this sample program, logic is added to allocate and free memory blocks at the kernel level.
+;       Description:    In this sample, the kernel is expanded to iterate across tasks in a task queue.
 ;
-;       Revised:        2 September 2019
+;       Revised:        July 4, 2018
 ;
 ;       Assembly:       nasm os.asm -f bin -o os.dat     -l os.dat.lst     -DBUILDBOOT
 ;                       nasm os.asm -f bin -o os.dsk     -l os.dsk.lst     -DBUILDDISK
 ;                       nasm os.asm -f bin -o os.com     -l os.com.lst     -DBUILDCOM
 ;                       nasm os.asm -f bin -o osprep.com -l osprep.com.lst -DBUILDPREP
 ;
-;       Assembler:      Netwide Assembler (NASM) 2.14.02, 26 Dec 2018
+;       Assembler:      Netwide Assembler (NASM) 2.13.03, Feb 7 2018
 ;
-;       Notice:         Copyright (C) 2010-2019 David J. Walling
+;       Notice:         Copyright (C) 2010-2018 David J. Walling. All Rights Reserved.
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -27,11 +27,11 @@
 ;       BUILDBOOT       Creates os.dat, a 512-byte boot sector as a standalone file.
 ;       BUILDDISK       Creates os.dsk, a 1.44MB (3.5") floppy disk image file.
 ;       BUILDCOM        Creates os.com, the OS loader and kernel as a standalone DOS program.
-;       BUILDPREP       Creates osprep.com, a DOS program that prepares a floppy disk to boot the OS.
+;       BUILDPREP       Creates osprep.com, a DOS program that prepares a floppy disk to boot the OS
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 %ifdef BUILDDISK                                                                ;if we are building a disk image ...
-%define BUILDBOOT                                                               ;... also build the boot sector
+%define BUILDBOOT                                                               ;... build the boot sector
 %define BUILDCOM                                                                ;... and the OS kernel
 %endif
 %ifdef BUILDPREP                                                                ;if creating the disk prep program ...
@@ -41,80 +41,85 @@
 ;
 ;       Conventions
 ;
-;       Alignment:      In this document, columns are numbered beginning with 1. Logical tabs are set after every
-;                       eight columns. Tabs are simulated using SPACE characters. Comments that span an entire line
-;                       have a semicolon in line 1 and text begins in column 9. Assembly instructions (mnemonics)
-;                       begin in column 25. Assembly operands begin in column 33. Inline comments begin in column 81.
+;       Alignment:      In this document, columns are numbered beginning with 1.
+;                       Assembly instructions (mnemonics) begin in column 25.
+;                       Assembly operands begin in column 33.
+;                       Inline comments begin in column 81.
 ;                       Lines should not extend beyond column 120.
 ;
-;       Arguments:      Arguments are passed as registers and generally follow this order: EAX, ECX, EDX, EBX. ECX
-;                       may be used as the sole parameter if a test for zero is required. EBX and EBP may be used as
-;                       parameters if the routine is considered a "method" of an "object". In this case, EBX or EBP
-;                       will address the object storage. If the routine is a general-purpose string or byte-array
-;                       manipulator, ESI and EDI may be used as parameters to address input and/or ouput buffers.
+;       Arguments:      Arguments are passed as registers and generally follow this order: EAX, ECX, EDX, EBX.
+;                       However, ECX may be used as the first parameter if a test for zero is required. EBX and EBP
+;                       may be used as parameters if the routine is considered a "method" of an "object". In this
+;                       case, EBX or EBP will address the object storage. If the routine is general-purpose string
+;                       or character-array manipulator, ESI and EDI may be used as parameters to address input and/or
+;                       ouput buffers, respectively.
 ;
-;       Code Order:     Routines should appear in the order of their first likely use. Negative relative call or jump
-;                       addresses usually, therefore, indicate reuse.
+;       Code Order:     Routines should appear in the order of their first likely use.
+;                       Negative relative call or jump addresses indicate reuse.
 ;
-;       Comments:       A comment that spans the entire line begins with a semicolon in column 1. A comment that
-;                       accompanies code on a line begins with a semicolon in column 81. Register names in comments
-;                       are in upper case (EAX, EDI). Hexadecimal values in comments are in lower case (01fh, 0dah).
+;       Comments:       A comment that spans the entire line begins with a semicolon in column 1.
+;                       A comment that accompanies code on a line begins with a semicolon in column 81.
+;                       Register names in comments are in upper case (EAX, EDI).
+;                       Hexadecimal values in comments are in lower case (01fh, 0dah).
 ;                       Routines are preceded with a comment box that includes the routine name, description, and
-;                       register contents on entry and exit, if applicable.
+;                       register contents on entry and exit.
 ;
-;       Constants:      Symbolic constants (equates) are named in all-caps beginning with 'E' (EDATAPORT). Constant
-;                       stored values are named in camel case, starting with 'c' (cbMaxLines). The 2nd letter of the
-;                       constant label indicates the storage type.
+;       Constants:      Symbolic constants (equates) are named in all-caps beginning with 'E' (EDATAPORT).
+;                       Constant stored values are named in camel case, starting with 'c' (cbMaxLines).
+;                       The 2nd letter of the constant label indicates the storage type.
 ;
 ;                       cq......        constant quad-word (dq)
 ;                       cd......        constant double-word (dd)
 ;                       cw......        constant word (dw)
 ;                       cb......        constant byte (db)
 ;                       cz......        constant ASCIIZ (null-terminated) string
-;                       cs......        constant non-terminated string (sequence of characters)
 ;
-;       Instructions:   32-bit instructions are generally favored. 8-bit instructions and data are preferred for
-;                       flags and status fields, etc. 16-bit instructions are avoided wherever possible to limit
-;                       the generation of prefix bytes.
+;       Instructions:   32-bit instructions are generally favored.
+;                       8-bit instructions and data are preferred for flags and status fields, etc.
+;                       16-bit instructions are avoided wherever possible to avoid prefix bytes.
 ;
-;       Labels:         Labels within a routine are numeric and begin with a period (.10, .20). Labels within a
-;                       routine begin at ".10" and increment by 10.
+;       Labels:         Labels within a routine are numeric and begin with a period (.10, .20).
+;                       Labels within a routine begin at ".10" and increment by 10.
 ;
-;       Literals:       Literal values defined by external standards should be defined as symbolic constants
-;                       (equates). Hexadecimal literals in code are in upper case with a leading '0' and trailing
-;                       'h' (01Fh). Binary literal values in source code are encoded with a final 'b' (1010b).
-;                       Decimal literal values in source code are strictly numerals (2048). Octal literal values
-;                       are avoided. String literals are enclosed in double quotes, e.g. "Loading OS". Single
-;                       character literals are enclosed in single quotes, e.g. 'A'.
+;       Literals:       Literal values defined by external standards should be defined as symbolic constants (equates).
+;                       Hexadecimal literals in code are in upper case with a leading '0' and trailing 'h' (01Fh).
+;                       Binary literal values in source code are encoded with a final 'b' (1010b).
+;                       Decimal literal values in source code are strictly numerals (2048).
+;                       Octal literal values are avoided.
+;                       String literals are enclosed in double quotes, e.g. "Loading OS".
+;                       Single character literals are enclosed in single quotes, e.g. 'A'.
 ;
-;       Macros:         Macro names are in camel case, beginning with a lower-case letter (getDateString). Macro
-;                       names describe an action and begin with a verb.
+;       Macros:         Macro names are in camel case, beginning with a lower-case letter (getDateString).
+;                       Macro names describe an action and so DO begin with a verb.
 ;
-;       Memory Use:     Operating system memory allocation is avoided. Buffers are kept to as small a size as
-;                       practicable. Data and code intermingling is avoided.
+;       Memory Use:     Operating system memory allocation is avoided wherever possible.
+;                       Buffers are kept to as small a size as practicable.
+;                       Data and code intermingling is avoided wherever possible.
 ;
-;       Registers:      Register names in comments are in upper case (EAX, EDX). Register names in source code are
-;                       in lower case (eax, edx).
+;       Registers:      Register names in comments are in upper case (EAX, EDX).
+;                       Register names in source code are in lower case (eax, edx).
 ;
 ;       Return Values:  Routines return result values in EAX or ECX or both. Routines should indicate failure by
 ;                       setting the carry flag to 1. Routines may prefer the use of ECX as a return value if the
 ;                       value is to be tested for null upon return (using the jecxz instruction).
 ;
-;       Routines:       Routine names are in mixed case and capitalized (GetYear, ReadRealTimeClock). Routine names
-;                       begin with a verb (Get, Read, Load). Routines should have a single entry address and a single
-;                       exit instruction (ret, iretd, etc.). Routines that serve as wrappers for library functions
-;                       carry the same name as the library function but begin with a leading underscore (_) character.
+;       Routines:       Routine names are in mixed case, capitalized (GetYear, ReadRealTimeClock).
+;                       Routine names begin with a verb (Get, Read, Load).
+;                       Routines should have a single entry address and a single exit instruction (ret, iretd, etc.).
+;                       Routines that serve as wrappers for library functions carry the same name as the library
+;                       function but begin with a leading underscore (_) character.
 ;
-;       Structures:     Structure names are in all-caps (DATETIME). Structure names describe a "thing" and so do NOT
-;                       begin with a verb.
+;       Structures:     Structure names are in all-caps (DATETIME).
+;                       Structure names describe a "thing" and so do NOT begin with a verb.
 ;
-;       Usage:          Registers EBX, ECX, EBP, SS, CS, DS and ES are preserved by routines. Registers ESI and EDI
-;                       are preserved unless they are input parameters. Registers EAX and ECX are preferred for
-;                       returning response/result values. Registers EBX and EBP are preferred for context (structure)
-;                       address parameters. Registers EAX, ECX, EDX and EBX are preferred for integral parameters.
+;       Usage:          Registers EBX, ECX, EBP, SS, CS, DS and ES are preserved by routines.
+;                       Registers ESI and EDI are preserved unless they are input parameters.
+;                       Registers EAX and ECX are preferred for returning response/result values.
+;                       Registers EBX and EBP are preferred for context (structure) address parameters.
+;                       Registers EAX, ECX, EDX and EBX are preferred for integral parameters.
 ;
-;       Variables:      Variables are named in camel case, starting with 'w'. The 2nd letter of the variable label
-;                       indicates the storage type.
+;       Variables:      Variables are named in camel case, starting with 'w'.
+;                       The 2nd letter of the variable label indicates the storage type.
 ;
 ;                       wq......        variable quad-word (resq)
 ;                       wd......        variable double-word (resd)
@@ -130,7 +135,7 @@
 ;       The equate (equ) statement defines a symbolic name for a fixed value so that such a value can be defined and
 ;       verified once and then used throughout the code. Using symbolic names simplifies searching for where logical
 ;       values are used. Equate names are in all-caps and begin with the letter 'E'. Equates are grouped into related
-;       sets. Equates in this sample program are defined in the following groupings:
+;       sets. Equates here are defined in the following groupings:
 ;
 ;       Hardware-Defined Values
 ;
@@ -158,7 +163,7 @@
 ;       EKRN...         Kernel values (fixed locations and sizes)
 ;       ELDT...         Local Descriptor Table (LDT) selector values
 ;       EMEM...         Memory Management values
-;       EMSG...         Message identifiers
+;       EMSG...         Message identifers
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -208,48 +213,30 @@ EKEYBWAITLOOP           equ     010000h                                         
                                                                                 ;---------------------------------------
                                                                                 ;       Keyboard Scan Codes
                                                                                 ;---------------------------------------
-EKEYBBACKSPACE          equ     00Eh                                            ;backspace down
-EKEYBTABDOWN            equ     00Fh                                            ;tab down
-EKEYBENTERDOWN          equ     01Ch                                            ;enter down
-EKEYBCTRLLDOWN          equ     01Dh                                            ;control down
-EKEYBSHIFTLDOWN         equ     02Ah                                            ;left shift down
-EKEYBSHIFTRDOWN         equ     036h                                            ;right shift down
-EKEYBALTLDOWN           equ     038h                                            ;alt down
+EKEYBCTRLDOWN           equ     01Dh                                            ;control key down
+EKEYBPAUSEDOWN          equ     01Dh                                            ;pause key down (e1 1d ... )
+EKEYBSHIFTLDOWN         equ     02Ah                                            ;left shift key down
+EKEYBPRTSCRDOWN         equ     02Ah                                            ;print-screen key down (e0 2a ...)
+EKEYBSLASH              equ     035h                                            ;slash
+EKEYBSHIFTRDOWN         equ     036h                                            ;right shift key down
+EKEYBALTDOWN            equ     038h                                            ;alt key down
 EKEYBCAPSDOWN           equ     03Ah                                            ;caps-lock down
 EKEYBNUMDOWN            equ     045h                                            ;num-lock down
 EKEYBSCROLLDOWN         equ     046h                                            ;scroll-lock down
-EKEYBPAD7DOWN           equ     047h                                            ;keypad-7 down
-EKEYBPADINSERTDOWN      equ     052h                                            ;keypad-insert down
-EKEYBPADDELETEDOWN      equ     053h                                            ;keypad-delete down
-EKEYBWINLDOWN           equ     05Bh                                            ;left windows (R) down
-EKEYBWINRDOWN           equ     05Ch                                            ;right windows (R) down
-EKEYBCLICKRDOWN         equ     05Dh                                            ;right-click down
-EKEYBPAUSEBREAKDOWN     equ     065h                                            ;pause-break key down
-EKEYBUPARROWDOWN        equ     068h                                            ;up-arrow down (e0 48)
-EKEYBLEFTARROWDOWN      equ     06Bh                                            ;left-arrow down (e0 4b)
-EKEYBRIGHTARROWDOWN     equ     06Dh                                            ;right-arrow down (e0 4d)
-EKEYBDOWNARROWDOWN      equ     070h                                            ;down-arrow down (e0 50)
-EKEYBINSERTDOWN         equ     072h                                            ;insert down (e0 52)
-EKEYBDELETEDOWN         equ     073h                                            ;delete down (e0 53)
-EKEYBPADSLASHDOWN       equ     075h                                            ;keypad slash down
-EKEYBALTRDOWN           equ     078h                                            ;right-alt down
-EKEYBPADENTERDOWN       equ     07Ch                                            ;keypad-enter down
-EKEYBCTRLRDOWN          equ     07Dh                                            ;right-control key down
-EKEYBMAKECODEMASK       equ     07Fh                                            ;make code mask
+EKEYBINSERTDOWN         equ     052h                                            ;insert down (e0 52)
 EKEYBUP                 equ     080h                                            ;up
-EKEYBCTRLLUP            equ     09Dh                                            ;control key up
+EKEYBCTRLUP             equ     09Dh                                            ;control key up
 EKEYBSHIFTLUP           equ     0AAh                                            ;left shift key up
+EKEYBSLASHUP            equ     0B5h                                            ;slash key up
 EKEYBSHIFTRUP           equ     0B6h                                            ;right shift key up
-EKEYBPADASTERISKUP      equ     0B7h                                            ;keypad asterisk up
-EKEYBALTLUP             equ     0B8h                                            ;left alt key up
-EKEYBWINLUP             equ     0DBh                                            ;left windows (R) up
-EKEYBWINRUP             equ     0DCh                                            ;right windows (R) up
-EKEYBCLICKRUP           equ     0DDh                                            ;right-click up
+EKEYBPRTSCRUP           equ     0B7h                                            ;print-screen key up (e0 b7 ...)
+EKEYBALTUP              equ     0B8h                                            ;alt key up
+EKEYBCAPSUP             equ     0BAh                                            ;caps-lock up
+EKEYBNUMUP              equ     0C5h                                            ;num-lock up
+EKEYBSCROLLUP           equ     0C6h                                            ;scroll-lock up
+EKEYBINSERTUP           equ     0D2h                                            ;insert up (e0 d2)
 EKEYBCODEEXT0           equ     0E0h                                            ;extended scan code 0
 EKEYBCODEEXT1           equ     0E1h                                            ;extended scan code 1
-EKEYBALTRUP             equ     0F8h                                            ;right-alt up
-KEYBPADENTERUP          equ     0FCh                                            ;keypad-enter up
-EKEYBCTRLRUP            equ     0FDh                                            ;left-control up
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       8259 Peripheral Interrupt Controller                                    EPIC...
@@ -280,6 +267,29 @@ EPITDAYTICKS            equ     01800B0h                                        
 EX86DESCLEN             equ     8                                               ;size of a protected mode descriptor
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;       Motorola MC 146818 Real-Time Clock                                      ERTC...
+;
+;       The Motorola MC 146818 was the original real-time clock in PCs.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ERTCREGPORT             equ     070h                                            ;register select port
+ERTCDATAPORT            equ     071h                                            ;data port
+ERTCSECONDREG           equ     000h                                            ;second
+ERTCMINUTEREG           equ     002h                                            ;minute
+ERTCHOURREG             equ     004h                                            ;hour
+ERTCWEEKDAYREG          equ     006h                                            ;weekday
+ERTCDAYREG              equ     007h                                            ;day
+ERTCMONTHREG            equ     008h                                            ;month
+ERTCYEARREG             equ     009h                                            ;year of the century
+ERTCSTATUSREG           equ     00bh                                            ;status
+ERTCBASERAMLO           equ     015h                                            ;base RAM low
+ERTCBASERAMHI           equ     016h                                            ;base RAM high
+ERTCEXTRAMLO            equ     017h                                            ;extended RAM low
+ERTCEXTRAMHI            equ     018h                                            ;extended RAM high
+ERTCCENTURYREG          equ     032h                                            ;century
+ERTCBINARYVALS          equ     00000100b                                       ;values are binary
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;       x86 Descriptor Access Codes                                             EX86ACC...
 ;
 ;       The x86 architecture supports the classification of memory areas or segments. Segment attributes are defined by
@@ -300,8 +310,14 @@ EX86DESCLEN             equ     8                                               
 ;       ...11CR.                Code (C:1=Conforming,R:1=Readable)
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+EX86ACCLDT              equ     10000010b                                       ;local descriptor table
+EX86ACCTASK             equ     10000101b                                       ;task gate
+EX86ACCTSS              equ     10001001b                                       ;task-state segment
+EX86ACCGATE             equ     10001100b                                       ;call gate
 EX86ACCINT              equ     10001110b                                       ;interrupt gate
 EX86ACCTRAP             equ     10001111b                                       ;trap gate
+EX86ACCDATA             equ     10010011b                                       ;upward writable data
+EX86ACCCODE             equ     10011011b                                       ;non-conforming readable code
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Firmware-Defined Values
@@ -312,7 +328,7 @@ EX86ACCTRAP             equ     10001111b                                       
 ;       BIOS Interrupts and Functions                                           EBIOS...
 ;
 ;       Basic Input/Output System (BIOS) functions are grouped and accessed by issuing an interrupt call. Each
-;       BIOS interrupt supports several functions. The function code is typically passed in the AH register.
+;       BIOS interrupt supports several funtions. The function code is typically passed in the AH register.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 EBIOSINTVIDEO           equ     010h                                            ;video services interrupt
@@ -341,17 +357,12 @@ EASCIILINEFEED          equ     00Ah                                            
 EASCIIRETURN            equ     00Dh                                            ;carriage return
 EASCIIESCAPE            equ     01Bh                                            ;escape
 EASCIISPACE             equ     020h                                            ;space
-EASCIISLASH             equ     02Fh                                            ;slash
-EASCIIZERO              equ     030h                                            ;zero
-EASCIININE              equ     039h                                            ;nine
+EASCIIPERIOD            equ     02Eh                                            ;period
 EASCIIUPPERA            equ     041h                                            ;'A'
 EASCIIUPPERZ            equ     05Ah                                            ;'Z'
-EASCIICARET             equ     05Eh                                            ;'^'
-EASCIIUNDERSCORE        equ     05Fh                                            ;'_'
 EASCIILOWERA            equ     061h                                            ;'a'
 EASCIILOWERZ            equ     07Ah                                            ;'z'
 EASCIITILDE             equ     07Eh                                            ;'~'
-EASCIIDELETE            equ     07Fh                                            ;del
 EASCIIBORDSGLVERT       equ     0B3h                                            ;vertical single border
 EASCIIBORDSGLUPRRGT     equ     0BFh                                            ;upper-right single border
 EASCIIBORDSGLLWRLFT     equ     0C0h                                            ;lower-left single border
@@ -362,9 +373,30 @@ EASCIICASE              equ     00100000b                                       
 EASCIICASEMASK          equ     11011111b                                       ;case mask
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;       PCI                                                                     EPCI...
+;
+;-----------------------------------------------------------------------------------------------------------------------
+EPCIVENDORAPPLE         equ     106Bh                                           ;Apple
+EPCIVENDORINTEL         equ     8086h                                           ;Intel
+EPCIVENDORORACLE        equ     80EEh                                           ;Oracle
+EPCIAPPLEUSB            equ     003Fh                                           ;USB Controller
+EPCIINTELPRO1000MT      equ     100Fh                                           ;Pro/1000 MT Ethernet Adapter
+EPCIINTELPCIMEM         equ     1237h                                           ;PCI & Memory
+EPCIINTELAD1881         equ     2415h                                           ;Aureal AD1881 SOUNDMAX
+EPCIINTELPIIX3          equ     7000h                                           ;PIIX3 PCI-to-ISA Bridge (Triton II)
+EPCIINTEL82371AB        equ     7111h                                           ;82371AB/EB PCI Bus Master IDE Cntrlr
+EPCIINTELPIIX4          equ     7113h                                           ;PIIX4/4E/4M Power Mgmt Cntrlr
+EPCIORACLEVBOXGA        equ     0BEEFh                                          ;VirtualBox Graphics Adapter
+EPCIORACLEVBOXDEVICE    equ     0CAFEh                                          ;VirtualBox Device
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;       Operating System Values
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+;-----------------------------------------------------------------------------------------------------------------------
+;       Background Task Identifiers                                             EBG...
+;-----------------------------------------------------------------------------------------------------------------------
+EBGTIMELEN              equ     9                                               ;length of time string HH:MM:SS\0
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Boot Sector and Loader Constants                                        EBOOT...
@@ -375,8 +407,8 @@ EASCIICASEMASK          equ     11011111b                                       
 ;-----------------------------------------------------------------------------------------------------------------------
 EBOOTSTACKTOP           equ     0100h                                           ;boot sector stack top relative to DS
 EBOOTSECTORBYTES        equ     512                                             ;bytes per sector
-EBOOTDIRENTRIES         equ     224                                             ;directory entries (1.44MB 3.5" FD)
-EBOOTDISKSECTORS        equ     2880                                            ;sectors per disk (1.44MB 3.5" FD)
+EBOOTDIRENTRIES         equ     224                                             ;directory entries
+EBOOTDISKSECTORS        equ     2880                                            ;sectors per disk
 EBOOTDISKBYTES          equ     (EBOOTSECTORBYTES*EBOOTDISKSECTORS)             ;bytes per disk
 EBOOTFATBASE            equ     (EBOOTSTACKTOP+EBOOTSECTORBYTES)                ;offset of FAT I/O buffer rel to DS
 EBOOTMAXTRIES           equ     5                                               ;max read retries
@@ -394,6 +426,7 @@ ECONOIADWORD            equ     070207020h                                      
 ;-----------------------------------------------------------------------------------------------------------------------
 ;       Global Descriptor Table (GDT) Selectors                                 EGDT...
 ;-----------------------------------------------------------------------------------------------------------------------
+EGDTALIAS               equ     008h                                            ;gdt alias selector
 EGDTOSDATA              equ     018h                                            ;kernel data selector
 EGDTCGA                 equ     020h                                            ;cga video selector
 EGDTLOADERCODE          equ     030h                                            ;loader code selector
@@ -402,6 +435,13 @@ EGDTLOADERLDT           equ     050h                                            
 EGDTLOADERTSS           equ     058h                                            ;loader task state segment selector
 EGDTCONSOLELDT          equ     060h                                            ;console local descriptor table selector
 EGDTCONSOLETSS          equ     068h                                            ;console task state segment selector
+EGDTBACKGROUNDLDT       equ     070h                                            ;background local descr table selector
+EGDTBACKGROUNDTSS       equ     078h                                            ;background task state segment selector
+EGDTKEYBOARDMQ          equ     080h                                            ;keyboard focus message queue (IRQ1)
+;-----------------------------------------------------------------------------------------------------------------------
+;       LDT Selectors                                                           ESEL...
+;-----------------------------------------------------------------------------------------------------------------------
+ESELMQ                  equ     02Ch                                            ;console task message queue
 ;-----------------------------------------------------------------------------------------------------------------------
 ;       Keyboard Flags                                                          EKEYF...
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -412,19 +452,17 @@ EKEYFCTRLRIGHT          equ     00001000b                                       
 EKEYFSHIFTRIGHT         equ     00010000b                                       ;right shift
 EKEYFSHIFT              equ     00010010b                                       ;left or right shift
 EKEYFALTRIGHT           equ     00100000b                                       ;right alt
-EKEYFWINLEFT            equ     01000000b                                       ;left windows(R)
-EKEYFWINRIGHT           equ     10000000b                                       ;right windows (R)
 EKEYFLOCKSCROLL         equ     00000001b                                       ;scroll-lock flag
 EKEYFLOCKNUM            equ     00000010b                                       ;num-lock flag
 EKEYFLOCKCAPS           equ     00000100b                                       ;cap-lock flag
-EKEYFLOCKINSERT         equ     00001000b                                       ;insert-lock flag
 EKEYFTIMEOUT            equ     10000000b                                       ;controller timeout
 ;-----------------------------------------------------------------------------------------------------------------------
 ;       Kernel Constants                                                        EKRN...
 ;-----------------------------------------------------------------------------------------------------------------------
+EKRNDATASEG             equ     00000h                                          ;kernel data segment (0000:0800)
 EKRNCODEBASE            equ     01000h                                          ;kernel base address (0000:1000)
 EKRNCODESEG             equ     (EKRNCODEBASE >> 4)                             ;kernel code segment (0100:0000)
-EKRNCODELEN             equ     05000h                                          ;kernel code size (1000h to 6000h)
+EKRNCODELEN             equ     07000h                                          ;kernel code size (1000h to 8000h)
 EKRNCODESRCADR          equ     0500h                                           ;kernel code offset to loader DS:
 EKRNHEAPSIZE            equ     080000000h                                      ;kernel heap size
 EKRNHEAPBASE            equ     010000h                                         ;kernel heap base
@@ -432,6 +470,10 @@ EKRNHEAPBASE            equ     010000h                                         
 ;       Local Descriptor Table (LDT) Selectors                                  ELDT...
 ;-----------------------------------------------------------------------------------------------------------------------
 ELDTMQ                  equ     02Ch                                            ;console task message queue
+;-----------------------------------------------------------------------------------------------------------------------
+;       Hardware Flags
+;-----------------------------------------------------------------------------------------------------------------------
+EHWETHERNET             equ     80h                                             ;ethernet adapter found
 ;-----------------------------------------------------------------------------------------------------------------------
 ;       Memory Management Constants                                             EMEM...
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -452,23 +494,21 @@ EMSGKEYCHAR             equ     041020000h                                      
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       KEYBDATA
+;       DATETIME
 ;
-;       The KEYBDATA structure holds variables used to handle keyboard events.
+;       The DATETIME structure stores date and time values from the real-time clock.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-struc                   KEYBDATA
-.scan0                  resb    1                                               ;1st scan code
-.scan1                  resb    1                                               ;2nd scan code
-.scan2                  resb    1                                               ;3rd scan code
-.scan3                  resb    1                                               ;4th scan code
-.scan                   resb    1                                               ;active scan code
-.char                   resb    1                                               ;ASCII character
-.last                   resb    1                                               ;previous scan code
-.shift                  resb    1                                               ;shift flags (shift, ctrl, alt, win)
-.lock                   resb    1                                               ;lock flags (caps, num, scroll, insert)
-.status                 resb    1                                               ;status (timeout)
-EKEYBDATAL              equ     ($-.scan0)                                      ;structure length
+struc                   DATETIME
+.second                 resb    1                                               ;seconds
+.minute                 resb    1                                               ;minutes
+.hour                   resb    1                                               ;hours
+.weekday                resb    1                                               ;day of week
+.day                    resb    1                                               ;day of month
+.month                  resb    1                                               ;month of year
+.year                   resb    1                                               ;year of century
+.century                resb    1                                               ;century
+EDATETIMELEN            equ     ($-.second)
 endstruc
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -536,7 +576,7 @@ struc                   OSDATA
                         resw    1                                               ;40e LPT4 port address
                         resb    2                                               ;410 equipment list flags
                         resb    1                                               ;412 errors in PCjr infrared keybd link
-                        resw    1                                               ;413 memory size (kb) INT 12h
+wwROMMemSize            resw    1                                               ;413 memory size (kb) INT 12h
                         resb    1                                               ;415 mfr error test scratchpad
                         resb    1                                               ;416 PS/2 BIOS control flags
                         resb    1                                               ;417 keyboard flag byte 0
@@ -633,78 +673,87 @@ wbClockDays             resb    1                                               
 ;       Kernel variables may be accessed by interrupts or by the initial task (Console).
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Kernel Data
+;
+;       These variables are not task-specific. They are initialized by the OS loader before the system is placed into
+;       protected mode. This is necessary because as soon as the system enters protected mode, the timer interrupt
+;       (IRQ0) will begin to reference the task selectors queue to implement task switching.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+                        alignb  4
+EKERNELDATA             equ     ($)
+wwTaskQueue             resw    256                                             ;task selector queue
+wdFarJumpEIP            resd    1                                               ;destination EIP of next task (ignored)
+wwFarJumpSelector       resw    1                                               ;destination task gate
+wbTaskIndex             resb    1                                               ;task selector index
+wbInCriticalSection     resb    1                                               ;task in critical section
+EKERNELDATALEN          equ     ($-EKERNELDATA)
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Console Task Variables
+;
+;       These variables are exclusve to the console task. These variables are initialized by the console task when
+;       the console task starts.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+                        alignb  4
 ECONDATA                equ     ($)
-                                                                                ;---------------------------------------
-                                                                                ;  panel handling
-                                                                                ;---------------------------------------
-wdConsoleHandler        resd    1                                               ;handler function
-wdConsolePanel          resd    1                                               ;panel definition addr
-wdConsoleField          resd    1                                               ;active field definition addr
 wdConsoleMemBase        resd    1                                               ;console memory address
 wdConsoleHeapSize       resd    1                                               ;kernel heap size
-wzConsoleInBuffer       resb    80                                              ;command input buffer
-wzConsoleToken          resb    80                                              ;token buffer
-wzConsoleOutBuffer      resb    80                                              ;output buffer
-                                                                                ;---------------------------------------
-                                                                                ;  memory panel fields
-                                                                                ;---------------------------------------
-wzConsoleMemBuf0        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf1        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf2        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf3        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf4        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf5        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf6        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf7        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf8        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf9        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBufA        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBufB        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBufC        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBufD        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBufE        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBufF        resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf10       resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf11       resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf12       resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-wzConsoleMemBuf13       resb    68                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ........\0
-                                                                                ;---------------------------------------
-                                                                                ;  reusable menu option input
-                                                                                ;---------------------------------------
-wzFldMenuOptn0          resb    2                                               ;menu option 0  _\0
-wzFldMenuOptn1          resb    2                                               ;menu option 1
-wzFldMenuOptn2          resb    2                                               ;menu option 2
-wzFldMenuOptn3          resb    2                                               ;menu option 3
-wzFldMenuOptn4          resb    2                                               ;menu option 4
-wzFldMenuOptn5          resb    2                                               ;menu option 5
-wzFldMenuOptn6          resb    2                                               ;menu option 6
-wzFldMenuOptn7          resb    2                                               ;menu option 7
-wzFldMenuOptn8          resb    2                                               ;menu option 8
-wzFldMenuOptn9          resb    2                                               ;menu option 9
-wzFldMenuOptnA          resb    2                                               ;menu option A
-wzFldMenuOptnB          resb    2                                               ;menu option B
-wzFldMenuOptnC          resb    2                                               ;menu option C
-wzFldMenuOptnD          resb    2                                               ;menu option D
-wzFldMenuOptnE          resb    2                                               ;menu option E
-wzFldMenuOptnF          resb    2                                               ;menu option F
-wzFldMenuOptn10         resb    2                                               ;menu option 10
-wzFldMenuOptn11         resb    2                                               ;menu option 11
-wzFldMenuOptn12         resb    2                                               ;menu option 12
-wzFldMenuOptn13         resb    2                                               ;menu option 13
-                                                                                ;---------------------------------------
-                                                                                ;  cursor placement
-                                                                                ;---------------------------------------
+wdBaseMemSize           resd    1                                               ;base memory size (int 12h)
+wdExtendedMemSize       resd    1                                               ;extended memory size (int 12h)
+wdROMMemSize            resd    1                                               ;ROM memory size
+wdConsolePCISelector    resd    1                                               ;PCI selector (bbbbbbbb dddddfff)
+wdConsolePCIData        equ     $                                               ;PCI register data value
+wwConsolePCIVendor      resw    1                                               ;PCI data vendor
+wwConsolePCIChip        resw    1                                               ;PCI data chip
+wdConsolePCIVendorStr   resd    1                                               ;PCI vendor name string addr
+wdConsolePCIChipStr     resd    1                                               ;PCI device name string addr
+wdConsoleEthernetDevice resd    1                                               ;PCI ethernet adapter selector
+wdConsoleEthernetMem    resd    1                                               ;PCI ethernet memory mapped i/o address
+wdConsoleEthernetPort   resd    1                                               ;PCI ethernet i/o port
+wdConsoleEthernetCtrl   resd    1                                               ;PCI ethernet control register value
 wbConsoleColumn         resb    1                                               ;console column
 wbConsoleRow            resb    1                                               ;console row
-                                                                                ;---------------------------------------
-                                                                                ;  set by keyboard interrupt
-                                                                                ;---------------------------------------
-wsKeybData              resb    EKEYBDATAL                                      ;keyboard data
-                                                                                ;---------------------------------------
-                                                                                ;  memory management
-                                                                                ;---------------------------------------
-wsConsoleMemRoot        resb    EMEMROOTLEN                                     ;memory root structure
+wbConsoleShift          resb    1                                               ;console shift flags
+wbConsoleLock           resb    1                                               ;console lock flags
+wbConsoleStatus         resb    1                                               ;controller status
+wbConsoleScan0          resb    1                                               ;scan code
+wbConsoleScan1          resb    1                                               ;scan code
+wbConsoleScan2          resb    1                                               ;scan code
+wbConsoleScan3          resb    1                                               ;scan code
+wbConsoleScan4          resb    1                                               ;scan code
+wbConsoleScan5          resb    1                                               ;scan code
+wbConsoleChar           resb    1                                               ;ASCII code
+wbConsolePCIBus         resb    1                                               ;PCI bus
+wbConsolePCIDevice      resb    1                                               ;PCI device
+wbConsolePCIFunction    resb    1                                               ;PCI function
+wbConsoleHWFlags        resb    1                                               ;Hardware Flags
+wzConsoleInBuffer       resb    80                                              ;command input buffer
+wzConsoleToken          resb    80                                              ;token buffer
+wzConsoleOutBuffer      resb    80                                              ;response output buffer
+wzBaseMemSize           resb    11                                              ;CMOS base memory bytes     zz,zzz,zz9\0
+wzROMMemSize            resb    11                                              ;ROM base memory bytes      zz,zzz,zz9\0
+wzExtendedMemSize       resb    11                                              ;CMOS extended memory bytes zz,zzz,zz9\0
+wsConsoleMemRoot        resb    EMEMROOTLEN                                     ;kernel base memory map
+wsConsoleDateTime       resb    EDATETIMELEN                                    ;date-time buffer
 ECONDATALEN             equ     ($-ECONDATA)                                    ;size of console data area
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Background Task Variables
+;
+;       These variables are exclusve to the background task. These variables are initialized by the background task when
+;       the task starts.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+                        alignb  4
+EBGDATA                 equ     ($)
+wsBgDateTime            resb    EDATETIMELEN                                    ;date-time buffer
+wzBgTime                resb    EBGTIMELEN                                      ;time string buffer
+wzBgTimeCmpr            resb    EBGTIMELEN                                      ;time string comparison buffer
+EBGDATALEN              equ     ($-EBGDATA)
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       End of OS Variables
@@ -738,16 +787,16 @@ e%1                     equ     ($-tsvc)/4
 ;
 ;       Boot Sector                                                             @disk: 000000   @mem: 007c00
 ;
-;       The first sector of the diskette is the boot sector. The BIOS will load the boot sector into memory and pass
+;       The first sector of the disk is the boot sector. The BIOS will load the boot sector into memory and pass
 ;       control to the code at the start of the sector. The boot sector code is responsible for loading the operating
 ;       system into memory. The boot sector contains a disk parameter table describing the geometry and allocation
-;       of the diskette. Following the disk parameter table is code to load the operating system kernel into memory.
+;       of the disk. Following the disk parameter table is code to load the operating system kernel into memory.
 ;
 ;       The "cpu" directive limits emitted code to those instructions supported by the most primitive processor
 ;       we expect to ever execute our code. The "vstart" parameter indicates addressability of symbols so as to
 ;       emulate the DOS .COM program model. Although the BIOS is expected to load the boot sector at address 7c00,
 ;       we do not make that assumption. The CPU starts in 16-bit addressing mode. A three-byte jump instruction is
-;       immediately followed by the disk parameter table.
+;       immediately followed by a disk parameter table.
 ;
 ;=======================================================================================================================
                         cpu     8086                                            ;assume minimal CPU
@@ -766,7 +815,7 @@ Boot                    jmp     word Boot.10                                    
 ;       3.5" 1.44MB floppy disk since this format is widely supported by virtual machine hypervisors.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-                        db      "OS      "                                      ;eight-byte label
+                        db      "CustomOS"                                      ;eight-byte label
 cwSectorBytes           dw      EBOOTSECTORBYTES                                ;bytes per sector
 cbClusterSectors        db      1                                               ;sectors per cluster
 cwReservedSectors       dw      1                                               ;reserved sectors
@@ -780,11 +829,11 @@ cwTrackSectors          dw      18                                              
 cwDiskSides             dw      2                                               ;sides per disk
 cwSpecialSectors        dw      0                                               ;special sectors
 ;
-;       BIOS typically loads the boot sector at absolute address 7c00 and sets the stack pointer at 512 bytes past
-;       the end of the boot sector. But, since BIOS code varies, we don't make any assumptions as to where our boot
-;       sector is loaded. For example, the initial CS:IP could be 0:7c00, 700:c00, 7c0:0, etc. To avoid assumptions,
-;       we first normalize CS:IP to get the absolute segment address in BX. The comments below show the effect of this
-;       code given several possible starting values for CS:IP.
+;       BIOS typically loads the boot sector at absolute address 7c00 and sets the stack pointer at 512 bytes past the
+;       end of the boot sector. But, since BIOS code varies, we don't make any assumptions as to where our boot sector
+;       is loaded. For example, the initial CS:IP could be 0:7c00, 700:c00, 7c0:0, etc. So, to avoid assumptions, we
+;       first normalize CS:IP to get the absolute segment address in BX. The comments below show the effect of this code
+;       given several possible starting values for CS:IP.
 ;
                                                                                 ;CS:IP   0:7c00 700:c00 7c0:0
 Boot.10                 call    word .20                                        ;[ESP] =   7c21     c21    21
@@ -802,9 +851,6 @@ Boot.10                 call    word .20                                        
 ;       the assembler to produce addresses for our symbols that are offset from our code by 100h. See the "vstart"
 ;       parameter for the "section" directive above. We also set SS to the PSP and SP to the address of our i/o
 ;       buffer. This leaves 256 bytes of usable stack from 7b0:0 to 7b0:100.
-;
-;       Note that when a value is loaded into the stack segment register (SS) interrupts are disabled until the
-;       completion of the following instruction.
 ;
                         sub     bx,16                                           ;BX = 07b0
                         mov     ds,bx                                           ;DS = 07b0 = psp
@@ -1207,7 +1253,7 @@ Prep                    mov     si,czPrepMsg10                                  
                         cmp     al,6                                            ;diskette removed?
                         je      .110                                            ;yes, continue
                         mov     si,czPrepMsgErr80                               ;drive timed out message
-                        cmp     al,80h                                          ;drive timed out?
+                        cmp     al,80H                                          ;drive timed out?
                         je      .110                                            ;yes, continue
                         mov     si,czPrepMsgErrXX                               ;unknown error message
 .110                    call    BootPrint                                       ;display result message
@@ -1219,8 +1265,8 @@ Prep                    mov     si,czPrepMsg10                                  
 ;       Diskette Preparation Messages
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-czPrepMsg10             db      13,10,"OS Boot-Diskette Preparation Program"
-                        db      13,10,"Copyright (C) 2010-2019 David J. Walling"
+czPrepMsg10             db      13,10,"CustomOS Boot-Diskette Preparation Program"
+                        db      13,10,"Copyright (C) 2010-2018 David J. Walling. All rights reserved."
                         db      13,10
                         db      13,10,"This program overwrites the boot sector of a diskette with startup code that"
                         db      13,10,"will load the operating system into memory when the computer is restarted."
@@ -1272,10 +1318,10 @@ wcPrepInBuf             equ     $
 ;
 ;       The disk contains two copies of the File Allocation Table (FAT). On our disk, each FAT copy is 1200h bytes in
 ;       length. Each FAT entry contains the logical number of the next cluster. The first two entries are reserved. Our
-;       OS.COM file here is 5400h bytes in length. The first 400h bytes are the 16-bit loader code. The remaining 5000h
+;       OS.COM file here is 7400h bytes in length. The first 400h bytes are the 16-bit loader code. The remaining 7000h
 ;       bytes are the 32-bit kernel code. Our disk parameter table defines a cluster as containing one sector and each
-;       sector having 200h bytes. Therefore, our FAT table must reserve 42 clusters for OS.COM. The clusters used by
-;       OS.COM, then, will be cluster 2 through 43. The entry for cluster 43 is set to "0fffh" to indicate that it is
+;       sector having 200h bytes. Therefore, our FAT table must reserve 58 clusters for OS.COM. The clusters used by
+;       OS.COM, then, will be cluster 2 through 59. The entry for cluster 59 is set to "0fffh" to indicate that it is
 ;       the last cluster in the chain.
 ;
 ;       Every three bytes encode two FAT entries as follows:
@@ -1289,17 +1335,21 @@ wcPrepInBuf             equ     $
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 fat1                                                    ;first copy of FAT
-                        db      0F0h,0FFh,0FFh, 003h,040h,000h
-                        db      005h,060h,000h, 007h,080h,000h
-                        db      009h,0A0h,000h, 00Bh,0C0h,000h
-                        db      00Dh,0E0h,000h, 00Fh,000h,001h
-                        db      011h,020h,001h, 013h,040h,001h
-                        db      015h,060h,001h, 017h,080h,001h
-                        db      019h,0A0h,001h, 01Bh,0C0h,001h
-                        db      01Dh,0E0h,001h, 01Fh,000h,002h
-                        db      021h,020h,002h, 023h,040h,002h
-                        db      025h,060h,002h, 027h,080h,002h
-                        db      029h,0A0h,002h, 02Bh,0F0h,0FFh
+                        db      0F0h,0FFh,0FFh, 003h,040h,000h                  ;clusters 0-3           ff0 fff 003 004
+                        db      005h,060h,000h, 007h,080h,000h                  ;custters 4-7           005 006 007 008
+                        db      009h,0A0h,000h, 00Bh,0C0h,000h                  ;clusters 8-11          009 00a 00b 00c
+                        db      00Dh,0E0h,000h, 00Fh,000h,001h                  ;clusters 12-15         00d 00e 00f 010
+                        db      011h,020h,001h, 013h,040h,001h                  ;clusters 16-19         011 012 013 014
+                        db      015h,060h,001h, 017h,080h,001h                  ;clusters 20-23         015 016 017 018
+                        db      019h,0A0h,001h, 01Bh,0C0h,001h                  ;clusters 24-27         019 01a 01b 01c
+                        db      01Dh,0E0h,001h, 01Fh,000h,002h                  ;clusters 28-31         01d 01e 01f 020
+                        db      021h,020h,002h, 023h,040h,002h                  ;clusters 32-35         021 022 023 024
+                        db      025h,060h,002h, 027h,080h,002h                  ;clusters 36-39         025 026 027 028
+                        db      029h,0A0h,002h, 02Bh,0C0h,002h                  ;clusters 40-43         029 02A 02B 02C
+                        db      02Dh,0E0h,002h, 02Fh,000h,003h                  ;clusters 44-47         02D 02E 02F 030
+                        db      031h,020h,003h, 033h,040h,003h                  ;clusters 48-51         031 032 033 034
+                        db      035h,060h,003h, 037h,080h,003h                  ;clusters 52-55         035 036 037 038
+                        db      039h,0A0h,003h, 03Bh,0F0h,0FFh                  ;clusters 56-59         039 03A 03B FFF
                         times   (9*512)-($-$$) db 0                             ;zero fill to end of section
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1307,17 +1357,21 @@ section                 fat1                                                    
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 fat2                                                    ;second copy of FAT
-                        db      0F0h,0FFh,0FFh, 003h,040h,000h
-                        db      005h,060h,000h, 007h,080h,000h
-                        db      009h,0A0h,000h, 00Bh,0C0h,000h
-                        db      00Dh,0E0h,000h, 00Fh,000h,001h
-                        db      011h,020h,001h, 013h,040h,001h
-                        db      015h,060h,001h, 017h,080h,001h
-                        db      019h,0A0h,001h, 01Bh,0C0h,001h
-                        db      01Dh,0E0h,001h, 01Fh,000h,002h
-                        db      021h,020h,002h, 023h,040h,002h
-                        db      025h,060h,002h, 027h,080h,002h
-                        db      029h,0A0h,002h, 02Bh,0F0h,0FFh
+                        db      0F0h,0FFh,0FFh, 003h,040h,000h                  ;clusters 0-3           ff0 fff 003 004
+                        db      005h,060h,000h, 007h,080h,000h                  ;custters 4-7           005 006 007 008
+                        db      009h,0A0h,000h, 00Bh,0C0h,000h                  ;clusters 8-11          009 00a 00b 00c
+                        db      00Dh,0E0h,000h, 00Fh,000h,001h                  ;clusters 12-15         00d 00e 00f 010
+                        db      011h,020h,001h, 013h,040h,001h                  ;clusters 16-19         011 012 013 014
+                        db      015h,060h,001h, 017h,080h,001h                  ;clusters 20-23         015 016 017 018
+                        db      019h,0A0h,001h, 01Bh,0C0h,001h                  ;clusters 24-27         019 01a 01b 01c
+                        db      01Dh,0E0h,001h, 01Fh,000h,002h                  ;clusters 28-31         01d 01e 01f 020
+                        db      021h,020h,002h, 023h,040h,002h                  ;clusters 32-35         021 022 023 024
+                        db      025h,060h,002h, 027h,080h,002h                  ;clusters 36-39         025 026 027 028
+                        db      029h,0A0h,002h, 02Bh,0C0h,002h                  ;clusters 40-43         029 02A 02B 02C
+                        db      02Dh,0E0h,002h, 02Fh,000h,003h                  ;clusters 44-47         02D 02E 02F 030
+                        db      031h,020h,003h, 033h,040h,003h                  ;clusters 48-51         031 032 033 034
+                        db      035h,060h,003h, 037h,080h,003h                  ;clusters 52-55         035 036 037 038
+                        db      039h,0A0h,003h, 03Bh,0F0h,0FFh                  ;clusters 56-59         039 03A 03B FFF
                         times   (9*512)-($-$$) db 0                             ;zero fill to end of section
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1336,7 +1390,7 @@ section                 dir                                                     
                         db      01000001b                                       ;mmm = 10 MOD 8 = 2; ddddd = 1
                         db      01001001b                                       ;yyyyyyy = 2016-1980 = 36 = 24h; m/8 = 1
                         dw      2                                               ;first cluster
-                        dd      05400h                                          ;file size
+                        dd      07200h                                          ;file size
                         times   (EBOOTDIRENTRIES*32)-($-$$) db 0h               ;zero fill to end of section
 %endif
 %ifdef BUILDCOM
@@ -1408,6 +1462,28 @@ Loader                  push    cs                                              
                         mov     si,czCPUOKMsg                                   ;cpu ok message
                         call    PutTTYString                                    ;display message
 ;
+;       Initialize kernel data areas. The task queue is initialized here because as soon as we enter protected mode,
+;       the timer interrupt code will begin inspecting the task queue to determine if a task switch must be made. To
+;       start with, we set every 16th queue element to reference the background task selector. This will ensure that
+;       the background task, which updates the visible clock on the console, will be called at least once per second.
+;
+                        push    EKRNDATASEG                                     ;load kernel data segment address ...
+                        pop     es                                              ;... into extra segment reg
+                        mov     di,wwTaskQueue                                  ;task queue address
+                        mov     cx,64                                           ;outer loop
+.10                     push    cx                                              ;save remaining outer iterations
+                        mov     cx,3                                            ;inner loop
+                        mov     ax,EGDTCONSOLETSS                               ;console task state segment selector
+                        cld                                                     ;forward strings
+                        rep     stosw                                           ;store selectors in task queue
+                        mov     ax,EGDTBACKGROUNDTSS                            ;background task state segment selector
+                        stosw                                                   ;store selector in task queue
+                        pop     cx                                              ;restore remaining outer iterations
+                        loop    .10                                             ;next
+                        xor     ax,ax                                           ;zero register
+                        mov     cl,4                                            ;remaining words to reset
+                        rep     stosw                                           ;reset remaining kernel data
+;
 ;       Fixup the GDT descriptor for the current (loader) code segment.
 ;
                         mov     si,EKRNCODESRCADR                               ;GDT offset
@@ -1441,10 +1517,10 @@ Loader                  push    cs                                              
                         mov     ah,EBIOSFNINITPROTMODE                          ;initialize protected mode fn.
                         mov     bx,02028h                                       ;BH,BL = IRQ int bases
                         mov     dx,001Fh                                        ;outer delay loop count
-.10                     mov     cx,0FFFFh                                       ;inner delay loop count
+.20                     mov     cx,0FFFFh                                       ;inner delay loop count
                         loop    $                                               ;wait out pending interrupts
                         dec     dx                                              ;restore outer loop count
-                        jnz     .10                                             ;continue outer loop
+                        jnz     .20                                             ;continue outer loop
                         int     EBIOSINTMISC                                    ;call BIOS to set protected mode
 ;
 ;       Enable hardware and maskable interrupts.
@@ -1474,8 +1550,7 @@ LoaderExit              call    PutTTYString                                    
 ;       However, some hypervisor BIOS implementations have been seen to implement the "wait" as simply a fast
 ;       iteration of the keyboard status function call (INT 16h, AH=1), causing a max CPU condition. So, instead,
 ;       we will use the keyboard status call and iterate over a halt (HLT) instruction until a key is pressed.
-;       The STI instruction enables maskable interrupts, including the keyboard. The CPU assures that the
-;       instruction immediately following STI will be executed before any interrupt is serviced.
+;       By convention, we enable maskable interrupts with STI before issuing HLT, so as not to catch fire.
 ;
 .30                     mov     ah,EBIOSFNKEYSTATUS                             ;keyboard status function
                         int     EBIOSINTKEYBOARD                                ;call BIOS keyboard interrupt
@@ -1533,7 +1608,7 @@ GetCPUType              mov     al,1                                            
 ;                       TTY output function of the BIOS video interrupt, passing the address of the string in DS:SI
 ;                       and the BIOS teletype function code in AH. After a return from the BIOS interrupt, we repeat
 ;                       for the next string character until a NUL is found. Note that we clear the direction flag (DF)
-;                       with CLD before the first LODSB. The direction flag is not guaranteed to be preserved between
+;                       with CLD before the first LODSB. The direction flag is not guaranteed to be preseved between
 ;                       calls within the OS. However, the "int" instruction does store the EFLAGS register on the
 ;                       stack and restores it on return. Therefore, clearing the direction flag before subsequent calls
 ;                       to LODSB is not needed.
@@ -1600,33 +1675,17 @@ czStartingMsg           db      "Starting OS",13,10,0                           
 ;       3210987654321098765432109876543210987654321098765432109876543210
 ;       ----------------------------------------------------------------
 ;       h......hffffmmmma......ab......................bn..............n
+;       00000000                        all areas have base addresses below 2^24
+;               0100                    (0x4) 32-bit single-byte granularity
+;               1100                    (0xC) 32-bit 4KB granularity
+;                   1001                present, ring-0, selector
 ;
-;       h......h                                                                hi-order base address (bits 24-31)
-;               ffff                                                            flags
-;                   mmmm                                                        hi-order limit (bits 16-19)
-;                       a......a                                                access
-;                               b......................b                        lo-order base address (bits 0-23)
-;                                                       n..............n        lo-order limit (bits 0-15)
-;
-;       00000000                                                                all areas have base addresses below 2^24
-;               0...                                                            single-byte size granularity
-;               1...                                                            4-kilobyte size granularity
-;               .0..                                                            16-bit default for code segments
-;               .1..                                                            32-bit default for code segments
-;               ..0.                                                            intel-reserved; should be zero
-;               ...0                                                            available for operating system use
-;                   0000                                                        segment is less than 2^16 in size
-;                   1111                                                        segment is greater than 2^24-2 in size
-;                       1.......                                                segment is present in memory
-;                       .00.....                                                segment is of privilege level 0
-;                       ...0....                                                segment is of system or gate type
-;                       ...00010                                                local decriptor table (LDT)
-;                       ...01001                                                task state segment (TSS) available
-;                       ...01011                                                task state segment (TSS) busy
-;                       ...10...                                                data segment
-;                       ...10011                                                writable data (accessed)
-;                       ...11...                                                code segment
-;                       ...11011                                                readable non-conforming code (accessed)
+;       h...h   hi-order base address (bits 24-31)
+;       ffff    flags
+;       mmmm    hi-order limit (bits 16-19)
+;       a...a   access
+;       b...b   lo-order base address (bits 0-23)
+;       n...n   lo-order limit (bits 0-15)
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 gdt                                                     ;global descriptor table
@@ -1644,6 +1703,9 @@ section                 gdt                                                     
                         dq      004089000F80007Fh                               ;58 80B  writable TSS   (loader)
                         dq      004082004700007Fh                               ;60 80B  writable LDT   (console)
                         dq      004089004780007Fh                               ;88 80B  writable TSS   (console)
+                        dq      004082006700007Fh                               ;70 80B  writable LDT   (background)
+                        dq      004089006780007Fh                               ;78 80B  writable TSS   (background)
+                        dq      00409300480007FFh                               ;80 2KB  foreground task message queue
                         times   2048-($-$$) db 0h                               ;zero fill to end of section
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1668,54 +1730,54 @@ section                 gdt                                                     
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 idt                                                     ;interrupt descriptor table
-                        mtrap   dividebyzero                                    ;00 divide by zero
-                        mtrap   singlestep                                      ;01 single step
-                        mtrap   nmi                                             ;02 non-maskable
-                        mtrap   break                                           ;03 break
-                        mtrap   into                                            ;04 into
-                        mtrap   bounds                                          ;05 bounds
-                        mtrap   badopcode                                       ;06 bad op code
-                        mtrap   nocoproc                                        ;07 no coprocessor
-                        mtrap   doublefault                                     ;08 double-fault
-                        mtrap   operand                                         ;09 operand
-                        mtrap   badtss                                          ;0a bad TSS
-                        mtrap   notpresent                                      ;0b not-present
-                        mtrap   stacklimit                                      ;0c stack limit
-                        mtrap   protection                                      ;0d general protection fault
-                        mtrap   int14                                           ;0e (reserved)
-                        mtrap   int15                                           ;0f (reserved)
-                        mtrap   coproccalc                                      ;10 (reserved)
-                        mtrap   int17                                           ;11 (reserved)
-                        mtrap   int18                                           ;12 (reserved)
-                        mtrap   int19                                           ;13 (reserved)
-                        mtrap   int20                                           ;14 (reserved)
-                        mtrap   int21                                           ;15 (reserved)
-                        mtrap   int22                                           ;16 (reserved)
-                        mtrap   int23                                           ;17 (reserved)
-                        mtrap   int24                                           ;18 (reserved)
-                        mtrap   int25                                           ;19 (reserved)
-                        mtrap   int26                                           ;1a (reserved)
-                        mtrap   int27                                           ;1b (reserved)
-                        mtrap   int28                                           ;1c (reserved)
-                        mtrap   int29                                           ;1d (reserved)
-                        mtrap   int30                                           ;1e (reserved)
-                        mtrap   int31                                           ;1f (reserved)
-                        mint    clocktick                                       ;20 IRQ0 clock tick
-                        mint    keyboard                                        ;21 IRQ1 keyboard
-                        mint    iochannel                                       ;22 IRQ2 second 8259A cascade
-                        mint    com2                                            ;23 IRQ3 com2
-                        mint    com1                                            ;24 IRQ4 com1
-                        mint    lpt2                                            ;25 IRQ5 lpt2
-                        mint    diskette                                        ;26 IRQ6 diskette
-                        mint    lpt1                                            ;27 IRQ7 lpt1
-                        mint    rtclock                                         ;28 IRQ8 real-time clock
-                        mint    retrace                                         ;29 IRQ9 CGA vertical retrace
-                        mint    irq10                                           ;2a IRQA (reserved)
-                        mint    irq11                                           ;2b IRQB (reserved)
-                        mint    ps2mouse                                        ;2c IRQC ps/2 mouse
-                        mint    coprocessor                                     ;2d IRQD coprocessor
-                        mint    fixeddisk                                       ;2e IRQE fixed disk
-                        mint    irq15                                           ;2f IRQF (reserved)
+                        mint    dividebyzero                                    ;00 divide by zero
+                        mint    singlestep                                      ;01 single step
+                        mint    nmi                                             ;02 non-maskable
+                        mint    break                                           ;03 break
+                        mint    into                                            ;04 into
+                        mint    bounds                                          ;05 bounds
+                        mint    badopcode                                       ;06 bad op code
+                        mint    nocoproc                                        ;07 no coprocessor
+                        mint    doublefault                                     ;08 double-fault
+                        mint    operand                                         ;09 operand
+                        mint    badtss                                          ;0a bad TSS
+                        mint    notpresent                                      ;0b not-present
+                        mint    stacklimit                                      ;0c stack limit
+                        mint    protection                                      ;0d general protection fault
+                        mint    int14                                           ;0e (reserved)
+                        mint    int15                                           ;0f (reserved)
+                        mint    coproccalc                                      ;10 (reserved)
+                        mint    int17                                           ;11 (reserved)
+                        mint    int18                                           ;12 (reserved)
+                        mint    int19                                           ;13 (reserved)
+                        mint    int20                                           ;14 (reserved)
+                        mint    int21                                           ;15 (reserved)
+                        mint    int22                                           ;16 (reserved)
+                        mint    int23                                           ;17 (reserved)
+                        mint    int24                                           ;18 (reserved)
+                        mint    int25                                           ;19 (reserved)
+                        mint    int26                                           ;1a (reserved)
+                        mint    int27                                           ;1b (reserved)
+                        mint    int28                                           ;1c (reserved)
+                        mint    int29                                           ;1d (reserved)
+                        mint    int30                                           ;1e (reserved)
+                        mint    int31                                           ;1f (reserved)
+                        mtrap   clocktick                                       ;20 IRQ0 clock tick
+                        mtrap   keyboard                                        ;21 IRQ1 keyboard
+                        mtrap   iochannel                                       ;22 IRQ2 second 8259A cascade
+                        mtrap   com2                                            ;23 IRQ3 com2
+                        mtrap   com1                                            ;24 IRQ4 com1
+                        mtrap   lpt2                                            ;25 IRQ5 lpt2
+                        mtrap   diskette                                        ;26 IRQ6 diskette
+                        mtrap   lpt1                                            ;27 IRQ7 lpt1
+                        mtrap   rtclock                                         ;28 IRQ8 real-time clock
+                        mtrap   retrace                                         ;29 IRQ9 CGA vertical retrace
+                        mtrap   irq10                                           ;2a IRQA (reserved)
+                        mtrap   irq11                                           ;2b IRQB (reserved)
+                        mtrap   ps2mouse                                        ;2c IRQC ps/2 mouse
+                        mtrap   coprocessor                                     ;2d IRQD coprocessor
+                        mtrap   fixeddisk                                       ;2e IRQE fixed disk
+                        mtrap   irq15                                           ;2f IRQF (reserved)
                         mtrap   svc                                             ;30 OS services
                         times   2048-($-$$) db 0h                               ;zero fill to end of section
 ;=======================================================================================================================
@@ -2037,11 +2099,11 @@ section                 kernel  vstart=0h                                       
 ;       Description:    This routine will be used to respond to processor interrupts that are not otherwise handled.
 ;                       At this stage, we simply restore the stack and return from the interrupt.
 ;
-;       In:             [ESP+16]        EFLAGS                                  stored by interrupt call
-;                       [ESP+12]        CS                                      stored by interrupt call
-;                       [ESP+8]         EIP                                     stored by interrupt call
-;                       [ESP+4]         interrupt number (0-31)                 stored by push instruction
-;                       [ESP+0]         error message address                   stored by push instructions
+;       In:             [esp+16]        eflags                                  stored by interrupt call
+;                       [esp+12]        cs                                      stored by interrupt call
+;                       [esp+8]         eip                                     stored by interrupt call
+;                       [esp+4]         interrupt number (0-31)                 stored by push instruction
+;                       [esp+0]         error message address                   stored by push instructions
 ;
 ;       Out:            N/A             This routine does not exit.
 ;
@@ -2049,32 +2111,32 @@ section                 kernel  vstart=0h                                       
 ReportInterrupt         push    ds                                              ;save DS at time of interrupt
                         push    es                                              ;save ES at time of interrupt
                         pushad                                                  ;save EAX,ECX,EDX,EBX,EBP,ESP,ESI,EDI
-                        mov     ebp,esp                                         ;EBP --> [EDI]
+                        mov     ebp,esp                                         ;ebp --> [EDI]
 ;
 ;       Addressability to registers at the time of the interrupt is now established as:
 ;
-;                       [EBP+56]        EFLAGS
-;                       [EBP+52]        CS
-;                       [EBP+48]        EIP
-;                       [EBP+44]        interrupt number (0-31)
-;                       [EBP+40]        error message address
-;                       [EBP+36]        DS
-;                       [EBP+32]        ES
-;                       [EBP+28]        EAX
-;                       [EBP+24]        ECX
-;                       [EBP+20]        EDX
-;                       [EBP+16]        EBX
-;                       [EBP+12]        ESP
-;                       [EBP+8]         EBP
-;                       [EBP+4]         ESI
-;                       [EBP+0]         EDI
+;                       [ebp+56]        eflags
+;                       [ebp+52]        cs
+;                       [ebp+48]        eip
+;                       [ebp+44]        interrupt number (0-31)
+;                       [ebp+40]        error message address
+;                       [ebp+36]        ds
+;                       [ebp+32]        es
+;                       [ebp+28]        eax
+;                       [ebp+24]        ecx
+;                       [ebp+20]        edx
+;                       [ebp+16]        ebx
+;                       [ebp+12]        esp
+;                       [ebp+8]         ebp
+;                       [ebp+4]         esi
+;                       [ebp+0]         edi
 ;
                         push    cs                                              ;load code selector ...
                         pop     ds                                              ;... into DS
                         push    EGDTCGA                                         ;load CGA memory selector ...
                         pop     es                                              ;... into ES
 ;
-;       Display the interrupt report boundary box.
+;       Display the interrupt report boundary box
 ;
                         mov     cl,13                                           ;column
                         mov     ch,6                                            ;row
@@ -2083,42 +2145,42 @@ ReportInterrupt         push    ds                                              
                         mov     bh,07h                                          ;attribute
                         call    DrawTextDialogBox                               ;draw text dialog box
 ;
-;       Display the report header.
+;       Display the report header
 ;
                         mov     cl,15                                           ;column
                         mov     ch,7                                            ;row
                         mov     esi,czIntHeader                                 ;interrupt message header
                         call    SetConsoleString                                ;draw text string
 ;
-;       Display the interrupt description label.
+;       Display the interrupt description label
 ;
                         mov     cl,15                                           ;column
                         mov     ch,8                                            ;row
                         mov     esi,czIntLabel                                  ;interrupt message description lead
                         call    SetConsoleString                                ;draw text string
 ;
-;       Display the interrupt number.
+;       Display the interrupt number
 ;
                         mov     eax,[ebp+44]                                    ;interrupt number
                         mov     cl,26                                           ;column
                         mov     ch,8                                            ;row
                         call    PutConsoleHexByte                               ;draw ASCII hex byte
 ;
-;       Display the interrupt name.
+;       Display the interrupt name
 ;
                         mov     cl,29                                           ;column
                         mov     ch,8                                            ;row
                         mov     esi,[ebp+40]                                    ;interrupt-specific message
                         call    SetConsoleString                                ;display interrupt description
 ;
-;       Display the register values header.
+;       Display the register values header
 ;
                         mov     cl,15                                           ;column
                         mov     ch,10                                           ;row
                         mov     esi,czIntRegsHeader                             ;interrupt registers header
                         call    SetConsoleString                                ;draw text string
 ;
-;       Display the EAX register label and value.
+;       Display the EAX register label and value
 ;
                         mov     cl,15                                           ;column
                         mov     ch,11                                           ;row
@@ -2129,7 +2191,7 @@ ReportInterrupt         push    ds                                              
                         mov     ch,11                                           ;row
                         call    PutConsoleHexDword                              ;draw ASCII hex doubleword
 ;
-;       Display the ECX register label and value.
+;       Display the ECX register label and value
 ;
                         mov     cl,15                                           ;column
                         mov     ch,12                                           ;row
@@ -2140,7 +2202,7 @@ ReportInterrupt         push    ds                                              
                         mov     ch,12                                           ;row
                         call    PutConsoleHexDword                              ;draw ASCII hex doubleword
 ;
-;       Display the EDX register label and value.
+;       Display the EDX register label and value
 ;
                         mov     cl,15                                           ;column
                         mov     ch,13                                           ;row
@@ -2151,7 +2213,7 @@ ReportInterrupt         push    ds                                              
                         mov     ch,13                                           ;row
                         call    PutConsoleHexDword                              ;draw ASCII hex doubleword
 ;
-;       Display the EBX register label and value.
+;       Display the EBX register label and value
 ;
                         mov     cl,15                                           ;column
                         mov     ch,14                                           ;row
@@ -2162,7 +2224,7 @@ ReportInterrupt         push    ds                                              
                         mov     ch,14                                           ;row
                         call    PutConsoleHexDword                              ;draw ASCII hex doubleword
 ;
-;       Display the ESI register label and value.
+;       Display the ESI register label and value
 ;
                         mov     cl,29                                           ;column
                         mov     ch,11                                           ;row
@@ -2173,7 +2235,7 @@ ReportInterrupt         push    ds                                              
                         mov     ch,11                                           ;row
                         call    PutConsoleHexDword                              ;draw ASCII hex doubleword
 ;
-;       Display the EDI register label and value.
+;       Display the EDI register label and value
 ;
                         mov     cl,29                                           ;column
                         mov     ch,12                                           ;row
@@ -2184,7 +2246,7 @@ ReportInterrupt         push    ds                                              
                         mov     ch,12                                           ;row
                         call    PutConsoleHexDword                              ;draw ASCII hex doubleword
 ;
-;       Display the EBP register label and value.
+;       Display the EBP register label and value
 ;
                         mov     cl,29                                           ;column
                         mov     ch,13                                           ;row
@@ -2195,7 +2257,7 @@ ReportInterrupt         push    ds                                              
                         mov     ch,13                                           ;row
                         call    PutConsoleHexDword                              ;draw ASCII hex doubleword
 ;
-;       Display the DS register label and value.
+;       Display the DS register label and value
 ;
                         mov     cl,42                                           ;column
                         mov     ch,11                                           ;row
@@ -2207,7 +2269,7 @@ ReportInterrupt         push    ds                                              
                         mov     ch,11                                           ;row
                         call    PutConsoleHexWord                               ;draw ASCII hex word
 ;
-;       Display the ES register label and value.
+;       Display the ES register label and value
 ;
                         mov     cl,42                                           ;column
                         mov     ch,12                                           ;row
@@ -2219,7 +2281,7 @@ ReportInterrupt         push    ds                                              
                         mov     ch,12                                           ;row
                         call    PutConsoleHexWord                               ;draw ASCII hex word
 ;
-;       Display the SS register label and value.
+;       Display the SS register label and value
 ;
                         mov     cl,42                                           ;column
                         mov     ch,13                                           ;row
@@ -2231,7 +2293,7 @@ ReportInterrupt         push    ds                                              
                         mov     ch,13                                           ;row
                         call    PutConsoleHexWord                               ;draw ASCII hex word
 ;
-;       Display the CS register lable and value.
+;       Display the CS register lable and value
 ;
                         mov     cl,42                                           ;column
                         mov     ch,14                                           ;row
@@ -2243,7 +2305,7 @@ ReportInterrupt         push    ds                                              
                         mov     ch,14                                           ;row
                         call    PutConsoleHexWord                               ;draw ASCII hex word
 ;
-;       Display the EFLAGS register label and value.
+;       Display the EFLAGS register label and value
 ;
                         mov     cl,51                                           ;column
                         mov     ch,11                                           ;row
@@ -2254,7 +2316,7 @@ ReportInterrupt         push    ds                                              
                         mov     ch,11                                           ;row
                         call    PutConsoleHexDword                              ;draw ASCII hex doubleword
 ;
-;       Display the ESP register label and value.
+;       Display the ESP register label and value
 ;
                         mov     cl,51                                           ;column
                         mov     ch,13                                           ;row
@@ -2265,18 +2327,18 @@ ReportInterrupt         push    ds                                              
                         mov     ch,13                                           ;row
                         call    PutConsoleHexDword                              ;draw ASCII hex doubleword
 ;
-;       Display the EIP register label and value.
+;       Display the EIP register label and value
 ;
                         mov     cl,51                                           ;column
                         mov     ch,14                                           ;row
                         mov     esi,czIntEIP                                    ;label
                         call    SetConsoleString                                ;draw label
-                        mov     eax,[ebp+48]                                    ;EIP lo-order 32-bits
+                        mov     eax,[ebp+48]                                    ;EIP
                         mov     cl,55                                           ;column
                         mov     ch,14                                           ;row
                         call    PutConsoleHexDword                              ;draw ASCII hex doubleword
 ;
-;       Halt and loop until reset.
+;       Halt and loop until reset
 ;
 .10                     sti                                                     ;enable maskable interrupts
                         hlt                                                     ;halt processor
@@ -2344,7 +2406,7 @@ DrawTextDialogBox       push    ecx                                             
                         push    EGDTCGA                                         ;load CGA selector ...
                         pop     es                                              ;... into ES
 ;
-;       Compute target display offset.
+;       Compute target display offset
 ;
                         xor     eax,eax                                         ;zero register
                         mov     al,ch                                           ;row
@@ -2356,7 +2418,7 @@ DrawTextDialogBox       push    ecx                                             
                         adc     ah,0                                            ;add overflow
                         mov     edi,eax                                         ;target row offset
 ;
-;       Display top border row.
+;       Display top border row
 ;
                         push    edi                                             ;save target row offset
                         mov     ah,bh                                           ;attribute
@@ -2371,7 +2433,7 @@ DrawTextDialogBox       push    ecx                                             
                         pop     edi                                             ;restore target row offset
                         add     edi,ECONROWBYTES                                ;next row
 ;
-;       Display dialog box body rows.
+;       Display dialog box body rows
 ;
                         xor     ecx,ecx                                         ;zero register
                         mov     cl,dh                                           ;height, excluding border
@@ -2391,7 +2453,7 @@ DrawTextDialogBox       push    ecx                                             
                         pop     ecx                                             ;remaining rows
                         loop    .10                                             ;next row
 ;
-;       Display bottom border row.
+;       Display bottom border row
 ;
                         push    edi                                             ;save target row offset
                         mov     ah,bh                                           ;attribute
@@ -2406,7 +2468,7 @@ DrawTextDialogBox       push    ecx                                             
                         pop     edi                                             ;restore target row offset
                         add     edi,ECONROWBYTES                                ;next row
 ;
-;       Restore and return.
+;       Restore and return
 ;
                         pop     es                                              ;restore non-volatile regs
                         pop     edi                                             ;
@@ -2442,10 +2504,6 @@ DrawTextDialogBox       push    ecx                                             
                         push    edx                                             ;
                         push    ds                                              ;
 ;
-;       End the interrupt.
-;
-                        call    PutPrimaryEndOfInt                              ;send EOI to primary PIC
-;
 ;       Update the clock tick count and the elapsed days as needed.
 ;
                         push    EGDTOSDATA                                      ;load OS data selector ...
@@ -2479,13 +2537,34 @@ irq0.15                 mov     dh,EFDCPORTHI                                   
                         mov     dl,EFDCPORTLOOUT                                ;FDC digital output register
                         out     dx,al                                           ;turn motor off
 ;
-;       Enable maskable interrupts.
+;       Signal the end of the hardware interrupt.
 ;
-irq0.20                 sti                                                     ;enable maskable interrupts
+irq0.20                 call    PutPrimaryEndOfInt                              ;send end-of-interrupt to PIC
 ;
-;       Restore and return.
+;       Determine if a task switch is appropriate
 ;
-                        pop     ds                                              ;restore modified regs
+                        cmp     byte [wbInCriticalSection],0                    ;any task holding a critical section?
+                        jne     irq0.30                                         ;yes, do not switch tasks
+                        inc     byte [wbTaskIndex]                              ;increment task queue index (0-255)
+                        movzx   eax,byte [wbTaskIndex]                          ;load task queue index
+                        mov     dx,[wwTaskQueue+eax*2]                          ;next task selector
+                        str     ax                                              ;current task selector
+                        cmp     dx,ax                                           ;next task same is current task?
+                        je      irq0.30                                         ;yes, skip task switch
+;
+;       Switch task
+;
+                        push    es                                              ;save extra segment register
+                        push    EGDTALIAS                                         ;load GDT alias selector ...
+                        pop     es                                              ;... into extra segment reg
+                        and     byte [es:eax+5],0FDh                            ;reset task-busy bit of current task
+                        pop     es                                              ;restore extra segment register
+                        mov     word [wwFarJumpSelector],dx                     ;set next task selector in jmp instr
+                        jmp     far [wdFarJumpEIP]                              ;jump to next task
+;
+;       Restore and return
+;
+irq0.30                 pop     ds                                              ;restore modified regs
                         pop     edx                                             ;
                         pop     eax                                             ;
                         iretd                                                   ;return
@@ -2496,470 +2575,184 @@ irq0.20                 sti                                                     
 ;       This handler is called when an IRQ1 hardware interrupt occurs, caused by a keyboard event. The scan-code(s)
 ;       corresponding to the keyboard event are read and message events are appended to the message queue. Since this
 ;       code is called in response to a hardware interrupt, no task switch occurs. We need to preseve the state of
-;       ALL modified registers upon return.
-;
-;       Make/Break                      Base            Shift           Message
-;                                                                       KEYDOWN         KEYUP           CHAR
-;                                                                       Norm/Shift      Norm/Shift      Norm/Shift
-;                                                                       AX   AX         AX   AX         AX   AX
-;       01/81                           Escape                          011B/011B       811B/811B       011B/011B
-;       02/82                           1               !               0231/0221       8231/8221       0231/0221
-;       03/83                           2               @               0332/0340       8332/8340       0332/0340
-;       04/84                           3               #               0433/0423       8433/8423       0433/0423
-;       05/85                           4               $               0534/0524       8534/8524       0534/0524
-;       06/86                           5               %               0635/0625       8635/8625       0635/0625
-;       07/87                           6               ^               0736/075E       8736/875E       0736/075E
-;       08/88                           7               &               0837/0826       8837/8826       0837/0826
-;       09/89                           8               *               0938/092A       8938/892A       0938/092A
-;       0A/8A                           9               (               0A39/0A28       8A39/8A28       0A39/9A28
-;       0B/8B                           0               )               0B30/0B29       8B30/8B29       0B30/0B29
-;       0C/8C                           -               _               0C2D/0C5F       8C2D/8C5F       0C2D/0C5F
-;       0D/8D                           =               +               0D3D/0D2B       8D3D/8D2B       0D3D/0D2B
-;       0E/8E                           Backspace                       0E08/0E08       8E08/8E08       0E08/0E08
-;       0F/8F                           Tab                             0F09/0F09       8F09/8F09       0F09/0F09
-;       10/90                           q               Q               1071/1051       9071/9051       1071/1051
-;       11/91                           w               W               1177/1157       9177/9157       1177/1157
-;       12/92                           e               E               1265/1245       9265/9245       1265/1245
-;       13/93                           r               R               1372/1352       9372/9352       1371/1352
-;       14/94                           t               T               1474/1454       9474/9454       1474/1454
-;       15/95                           y               Y               1579/1559       9579/9559       1579/1559
-;       16/96                           u               U               1675/1655       9675/9655       1675/1655
-;       17/97                           i               I               1769/1749       9769/9749       1769/1749
-;       18/98                           o               O               186F/184F       986F/984F       186F/184F
-;       19/99                           p               P               1970/1950       9970/9950       1970/1950
-;       1A/9A                           [               {               1A5B/1A7B       9A5B/9A7B       1A58/1A7B
-;       1B/9B                           ]               }               1B5D/1B7D       9B5D/9B7D       1B5D/1B7D
-;       1C/9C                           Enter                           1C00/1C00       9C00/9C00
-;       1D/9D                           Left Ctrl                       1D00/1D00       9D00/9D00
-;       1E/9E                           a               A               1E61/1E41       9E61/9E41       1E61/1E41
-;       1F/9F                           s               S               1F73/1F53       9F73/9F53       1F73/1F53
-;       20/A0                           d               D               2064/2044       A064/A044       2064/2044
-;       21/A1                           f               F               2166/2146       A166/A146       2166/2146
-;       22/A2                           g               G               2267/2247       A267/A247       2267/2247
-;       23/A3                           h               H               2368/2348       A368/A348       2368/2348
-;       24/A4                           j               J               246A/244A       A46A/A44A       246A/244A
-;       25/A5                           k               K               256B/254B       A56B/A54B       256B/254B
-;       26/A6                           l               L               266C/264C       A66C/A64C       266C/264C
-;       27/A7                           ;               :               273B/273A       A73B/A73A       273B/273A
-;       28/A8                           '               "               2827/2822       A827/A822       2827/2822
-;       29/A9                           `               ~               2960/297E       A960/A97E       2960/297E
-;       2A/AA                           Left Shift                      2A00/2A00       AA00/AA00
-;       2B/AB                           \               |               2B5C/2B7C       AB5C/AB7C       2B5C/2B7C
-;       2C/AC                           z               Z               2C7A/2C5A       AC7A/AC5A       2C7A/2C5A
-;       2D/AD                           x               X               2D78/2D58       AD78/AD58       2D78/2D58
-;       2E/AE                           c               C               2E63/2E43       AE63/AE43       2E63/2E43
-;       2F/AF                           v               V               2F76/2F56       AF76/AF56       2F76/2F56
-;       30/B0                           b               B               3062/3042       B062/B042       3062/3042
-;       31/B1                           n               N               316E/314E       B16E/B14E       316E/314E
-;       32/B2                           m               M               326D/324D       B26D/B24D       326D/324D
-;       33/B3                           ,               <               332C/333C       B32C/B33C       332C/333C
-;       34/B4                           .               >               342E/343E       B42E/B43E       342E/343E
-;       35/B5                           /               ?               352F/353F       B52F/B53F       352F/353F
-;       36/B6                           Right Shift                     3600/3600       B600/B600
-;       37/B7                           Keypad *                        372A/372A       B72A/B72A       372A/372A
-;       38/B8                           Left Alt                        3800/3800       B800/B800
-;       39/B9                           Spacebar                        3920/3920       B920/B920       3920/3920
-;       3A/BA                           Caps Lock                       3A00/3A00       BA00/BA00
-;       3B/BB                           F1                              3B00/3B00       BB00/BB00
-;       3C/BC                           F2                              3C00/3C00       BC00/BC00
-;       3D/BD                           F3                              3D00/3D00       BD00/BD00
-;       3E/BE                           F4                              3E00/3E00       BE00/BE00
-;       3F/BF                           F5                              3F00/3F00       BF00/BF00
-;       40/C0                           F6                              4000/4000       C000/C000
-;       41/C1                           F7                              4100/4100       C100/C100
-;       42/C2                           F8                              4200/4200       C200/C200
-;       43/C3                           F9                              4300/4300       C300/C300
-;       44/C4                           F10                             4400/4400       C400/C400
-;       45/C5                           Num-Lock                        4500/4500       C500/C500
-;       46/C6                           Scroll-Lock                     4600/4600       C600/C600
-;       47/C7                           Keypad-7                        4700/4700       C700/C700
-;       47/C7                           Num-Lock Keypad-7               4737/4737       C737/C737       4737/4737
-;       48/C8                           Keypad-8                        4800/4800       C800/C800
-;       48/C8                           Num-Lock Keypad-8               4838/4838       C838/C838       4838/4838
-;       49/C9                           Keypad-9                        4900/4900       C900/C900
-;       49/C9                           Num-Lock Keypad-9               4939/4939       C939/C939       4939/4939
-;       4A/CA                           Keypad-Minus                    4A2D/4A2D       CA2D/CA2D       4A2D/4A2D
-;       4B/CB                           Keypad-4                        4B00/4B00       CB00/CB00
-;       4B/CB                           Num-Lock Keypad-4               4B34/4B34       CB34/CB34       4B34/4B34
-;       4C/CC                           Keypad-5                        4C00/4C00       CC00/CC00
-;       4C/CC                           Num-Lock Keypad-5               4C35/4C35       CC35/CC35       4C35/4C35
-;       4D/CD                           Keypad-6                        4D00/4D00       CD00/CD00
-;       4D/CD                           Num-Lock Keypad-6               4D36/4D36       CD36/CD36       4D36/4D36
-;       4E/CE                           Keypad-Plus                     4E2B/4E2B       CE2B/CE2B       4E2B/4E2B
-;       4F/CF                           Keypad-1                        4F00/4F00       CF00/CF00
-;       4F/CF                           Num-Lock Keypad-1               4F31/4F31       CF31/CF31       4F31/4F31
-;       50/D0                           Keypad-2                        5000/5000       D000/D000
-;       50/D0                           Num-Lock Keypad-2               5032/5032       D032/D032       5032/5032
-;       51/D1                           Keypad-3                        5100/5100       D100/D100
-;       51/D1                           Num-Lock Keypad-3               5133/5133       D133/D133       5133/5133
-;       52/D2                           Keypad-0                        5200/5200       D200/D200
-;       52/D2                           Num-Lock Keypad-0               5230/5230       D230/D230       5230/5230
-;       53/D3                           Keypad-Period                   537F/537F       D37F/D37F       537F/537F
-;       53/D3                           Num-Lock Keypad-Period          532E/532E       D32E/D32E       532E/532E
-;       54/D4                           Alt-PrntScrn                    5400/5400       D400/D400
-;       57/D7                           F11                             5700/5700       D700/D700
-;       58/D8                           F12                             5800/5800       D800/D800
-;
-;       E0 5B/E0 DB                     Left-Windows                    5B00/5B00       DB00/DB00
-;       E0 5C/E0 DC                     Right-Windows                   5C00/5C00       DC00/DC00
-;       E0 5D/E0 DD                     Right-Click                     5D00/5D00       DD00/DD00
-
-;       E1 1D 45/E1 9D C5               Pause-Break                    *6500/6500      *E500/E500
-;       E1 1D 45/E1 9D C5               Shift Pause-Break              *6500/6500      *E500/E500
-;       E1 1D 45/E1 9D C5               Alt Pause-Break                *6500/6500      *E500/E500
-;
-;       E0 46/E0 C6                     Ctrl Pause-Break               *6600/6600      *E600/E600
-;
-;       E0 47/E0 C7                     Home                           *6700/6700      *E700/E700
-;       E0 47/E0 AA                     Num-Lock Home                  *6700/6700      *E700/E700
-;       E0 47/E0 2A                     Left-Shift Home                *6700/6700      *E700/E700
-;       E0 47/E0 36                     Right-Shift Home               *6700/6700      *E700/E700
-;
-;       E0 48/E0 C8                     Up-Arrow                       *6800/6800      *E800/E800
-;       E0 48/E0 AA                     Num-Lock Up-Arrow              *6800/6800      *E800/E800
-;       E0 48/E0 2A                     Left-Shift Up-Arrow            *6800/6800      *E800/E800
-;       E0 48/E0 36                     Right-Shift Up-Arrow           *6800/6800      *E800/E800
-;
-;       E0 49/E0 C9                     Page-Up                        *6900/6900      *E900/E900
-;       E0 49/E0 AA                     Num-Lock Page-Up               *6900/6900      *E900/E900
-;       E0 49/E0 2A                     left-Shift Page-Up             *6900/6900      *E900/E900
-;       E0 49/E0 36                     Right-Shift Page-Up            *6900/6900      *E900/E900
-;
-;       E0 4B/E0 CB                     Left-Arrow                     *6B00/6B00      *EB00/EB00
-;       E0 4B/E0 AA                     Num-Lock Left-Arrow            *6B00/6B00      *EB00/EB00
-;       E0 4B/E0 2A                     Left-Shift Left-Arrow          *6B00/6B00      *EB00/EB00
-;       E0 4B/E0 36                     Right-Shift Left-Arrow         *6B00/6B00      *EB00/EB00
-;
-;       E0 4D/E0 CD                     Right-Arrow                    *6D00/6D00      *ED00/ED00
-;       E0 4D/E0 AA                     Num-Lock Right-Arrow           *6D00/6D00      *ED00/ED00
-;       E0 4D/E0 2A                     Left-Shift Right-Arrow         *6D00/6D00      *ED00/ED00
-;       E0 4D/E0 36                     Right-Shift Right-Arrow        *6D00/6D00      *ED00/ED00
-;
-;       E0 4F/E0 CF                     End                            *6F00/6F00      *EF00/EF00
-;       E0 4F/E0 AA                     Num-Lock End                   *6F00/6F00      *EF00/EF00
-;       E0 4F/E0 2A                     Left-Shift End                 *6F00/6F00      *EF00/EF00
-;       E0 4F/E0 36                     Right-Shift End                *6F00/6F00      *EF00/EF00
-;
-;       E0 50/E0 D0                     Down-Arrow                     *7000/7000      *F000/F000
-;       E0 50/E0 AA                     Num-Lock Down-Arrow            *7000/7000      *F000/F000
-;       E0 50/E0 2A                     Left-Shift Down-Arrow          *7000/7000      *F000/F000
-;       E0 50/E0 36                     Right-Shift Down-Arrow         *7000/7000      *F000/F000
-;
-;       E0 51/E0 D1                     Page-Down                      *7100/7100      *F100/F100
-;       E0 51/E0 AA                     Num-Lock Page-Down             *7100/7100      *F100/F100
-;       E0 51/E0 2A                     Left-Shift Page-Down           *7100/7100      *F100/F100
-;       E0 51/E0 36                     Right-Shift Page-Down          *7100/7100      *F100/F100
-;
-;       E0 52/E0 D2                     Insert                         *7200/7200      *F200/F200
-;       E0 52/E0 AA                     Num-Lock Insert                *7200/7200      *F200/F200
-;       E0 52/E0 2A                     Left-Shift Insert              *7200/7200      *F200/F200
-;       E0 52/E0 36                     Right-Shift Insert             *7200/7200      *F200/F200
-;
-;       E0 53/E0 D3                     Delete                         *737F/737F      *F37F/F37F      *737F/737F
-;       E0 53/E0 AA                     Num-Lock Delete                *737F/737F      *F37F/F37F      *737F/737F
-;       E0 53/E0 2A                     Left-Shift Delete              *737F/737F      *F37F/F37F      *737F/737F
-;       E0 53/E0 36                     Right-Shift Delete             *737F/737F      *F37F/F37F      *737F/737F
-;
-;       E0 35/E0 B5                     Keypad-Slash                   *752F/752F      *F52F/F52F      *752F/752F
-;       E0 35/E0 AA                     Num-Lock Keypad-Slash          *752F/752F      *F52F/F52F      *752F/752F
-;       E0 35/E0 2A                     Left-Shift Keypad-Slash        *752F/752F      *F52F/F52F      *752F/752F
-;       E0 35/E0 36                     Right-Shift Keypad-Slash       *752F/752F      *F52F/F52F      *752F/752F
-;
-;       E0 37/E0 B7 E0 AA               PrntScrn                       *7700/7700      *F700/F700
-;       E0 37/E0 B7 E0 B7               Shift/Ctrl PrntScrn            *7700/7700      *F700/F700
-;
-;       E0 38/E0 B8                     Right Alt                      *7800/7800      *F800/F800
-;       E0 1C/E0 9C                     Keypad Enter                   *7C00/7C00      *FC00/FC00
-;       E0 1D/E0 9D                     Right Ctrl                     *7D00/7D00      *FD00/FD00
-;
-;       *OS Custom Scan Code in Messages
+;       ALL modified registers upon return. Note that keyboard messages are added to the keyboard focus message queue.
+;       This is a queue referenced in the global descriptor table and must always reference the message queue for the
+;       task that has the keyboard focus. To direct keyboard messages to another task, update the GDT descriptor to
+;       point to the message queue for that task.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  keyboard                                        ;keyboard interrrupt
                         push    eax                                             ;save non-volatile regs
                         push    ebx                                             ;
                         push    ecx                                             ;
-                        push    edx                                             ;
                         push    esi                                             ;
                         push    ds                                              ;
-;
-;       End the interrupt.
-;
-                        call    PutPrimaryEndOfInt                              ;send EOI to primary PIC
-;
-;       Reset codes and flags.
-;
                         push    EGDTOSDATA                                      ;load OS data selector ...
                         pop     ds                                              ;... into data segment register
-                        mov     esi,wsKeybData                                  ;keyboard data addr
-                        mov     al,[esi+KEYBDATA.scan]                          ;load previous scan code
-                        mov     [esi+KEYBDATA.last],al                          ;... into previous scan code field
-                        xor     al,al                                           ;zero reg
-                        mov     [esi+KEYBDATA.char],al                          ;zero ASCII char code
-                        mov     [esi+KEYBDATA.scan],al                          ;zero ASCII scan code
-                        mov     [esi+KEYBDATA.scan0],al                         ;zero scan code buffer 0
-                        mov     [esi+KEYBDATA.scan1],al                         ;zero scan code buffer 1
-                        mov     [esi+KEYBDATA.scan2],al                         ;zero scan code buffer 2
-                        mov     [esi+KEYBDATA.scan3],al                         ;zero scan code buffer 3
-                        mov     al,EKEYFTIMEOUT                                 ;timeout indicator
-                        not     al                                              ;status flag mask
-                        and     byte [esi+KEYBDATA.status],al                   ;clear timeout indicator
-;
-;       Hold shift and lock settings. Get first scan code. Ignore ACK and NAK from the controller.
-;
-                        mov     bl,[esi+KEYBDATA.shift]                         ;shift flags
-                        mov     bh,[esi+KEYBDATA.lock]                          ;locl flags
+                        xor     al,al                                           ;zero
+                        mov     [wbConsoleScan0],al                             ;clear scan code 0
+                        mov     [wbConsoleScan1],al                             ;clear scan code 1
+                        mov     [wbConsoleScan2],al                             ;clear scan code 2
+                        mov     [wbConsoleScan3],al                             ;clear scan code 3
+                        mov     [wbConsoleScan4],al                             ;clear scan code 4
+                        mov     [wbConsoleScan5],al                             ;clear scan code 5
+                        mov     al,' '                                          ;space
+                        mov     [wbConsoleChar],al                              ;set character to space
+                        mov     al,EKEYFTIMEOUT                                 ;controller timeout flag
+                        not     al                                              ;controller timeout mask
+                        and     [wbConsoleStatus],al                            ;clear controller timeout flag
+                        mov     bl,[wbConsoleShift]                             ;shift flags
+                        mov     bh,[wbConsoleLock]                              ;lock flags
                         call    WaitForKeyOutBuffer                             ;controller timeout?
-                        jz      irq1.timeout                                    ;yes, skip ahead
-                        in      al,EKEYBPORTDATA                                ;read scan code
-                        cmp     al,0FAh                                         ;keyboard ACK?
-                        je      irq1.exit                                       ;yes, branch
-                        cmp     al,0FCh                                         ;keyboard NAK?
-                        je      irq1.exit                                       ;yes, branch
-                        mov     [esi+KEYBDATA.scan0],al                         ;save scan code 0
-;
-;       If the 1st scan code is e1, take the 2nd and 3rd scan code. Use the 3rd scan code.
-;
-                        cmp     al,EKEYBCODEEXT1                                ;extended scan code 1? (e1)
-                        jne     irq1.notext1                                    ;no, branch
+                        jz      irq1.140                                        ;yes, skip ahead
+                        in      al,EKEYBPORTDATA                                ;read scan code 0
+                        mov     [wbConsoleScan0],al                             ;save scan code 0
+                        mov     ah,al                                           ;copy scan code 0
+                        mov     al,EKEYFSHIFTLEFT                               ;left shift flag
+                        cmp     ah,EKEYBSHIFTLDOWN                              ;left shift key down code?
+                        je      irq1.30                                         ;yes, set flag
+                        cmp     ah,EKEYBSHIFTLUP                                ;left shift key up code?
+                        je      irq1.40                                         ;yes, reset flag
+                        mov     al,EKEYFSHIFTRIGHT                              ;right shift flag
+                        cmp     ah,EKEYBSHIFTRDOWN                              ;right shift key down code?
+                        je      irq1.30                                         ;yes, set flag
+                        cmp     ah,EKEYBSHIFTRUP                                ;right shift key up code?
+                        je      irq1.40                                         ;yes, reset flag
+                        mov     al,EKEYFCTRLLEFT                                ;left control flag
+                        cmp     ah,EKEYBCTRLDOWN                                ;control key down code?
+                        je      irq1.30                                         ;yes, set flag
+                        cmp     ah,EKEYBCTRLUP                                  ;control key up code?
+                        je      irq1.40                                         ;yes, reset flag
+                        mov     al,EKEYFALTLEFT                                 ;left alt flag
+                        cmp     ah,EKEYBALTDOWN                                 ;alt key down code?
+                        je      irq1.30                                         ;yes, set flag
+                        cmp     ah,EKEYBALTUP                                   ;alt key up code?
+                        je      irq1.40                                         ;yes, reset flag
+                        mov     al,EKEYFLOCKCAPS                                ;caps-lock flag
+                        cmp     ah,EKEYBCAPSDOWN                                ;caps-lock key down code?
+                        je      irq1.50                                         ;yes, toggle lamps and flags
+                        mov     al,EKEYFLOCKNUM                                 ;num-lock flag
+                        cmp     ah,EKEYBNUMDOWN                                 ;num-lock key down code?
+                        je      irq1.50                                         ;yes, toggle lamps and flags
+                        mov     al,EKEYFLOCKSCROLL                              ;scroll-lock flag
+                        cmp     ah,EKEYBSCROLLDOWN                              ;scroll-lock key down code?
+                        je      irq1.50                                         ;yes, toggle lamps and flags
+                        cmp     ah,EKEYBCODEEXT0                                ;extended scan code 0?
+                        jne     irq1.70                                         ;no, skip ahead
                         call    WaitForKeyOutBuffer                             ;controller timeout?
-                        jz      irq1.timeout                                    ;yes, skip ahead
-                        in      al,EKEYBPORTDATA                                ;read scan code
-                        mov     [esi+KEYBDATA.scan1],al                         ;save scan code 1 (1d)
-                        call    WaitForKeyOutBuffer                             ;controller timeout?
-                        jz      irq1.timeout                                    ;yes, skip ahead
-                        in      al,EKEYBPORTDATA                                ;read scan code
-                        mov     [esi+KEYBDATA.scan2],al                         ;save scan code 2 (45/c5)
-                        movzx   eax,al                                          ;expand scan code to index
-                        mov     al,[cs:tscan2ext+eax]                           ;translate scan code
-                        mov     [esi+KEYBDATA.scan],al                          ;save final scan code
-                        jmp     irq1.putkeydown                                 ;put key-down message
-;
-;       Handle keyboard read timeout. This should not occur under normal circumstances. Its occurrence suggests an error
-;       in the keyboard scan code handling. An error indicator will be shown in the OIA.
-;
-irq1.timeout            mov     al,EKEYFTIMEOUT                                 ;keyboard controller timeout flag
-                        or      [esi+KEYBDATA.status],al                        ;set controller status
-                        jmp     irq1.putoia                                     ;continue
-;
-;       If the 1st scan code is e0, take the 2nd scan code. If the 2nd scan code is b7 get the 2nd pair.
-;
-irq1.notext1            cmp     al,EKEYBCODEEXT0                                ;extended scan code 0?
-                        jne     irq1.notext0                                    ;no, branch
-                        call    WaitForKeyOutBuffer                             ;controller timeout?
-                        jz      irq1.timeout                                    ;yes, skip ahead
-                        in      al,EKEYBPORTDATA                                ;read scan code
-                        mov     [esi+KEYBDATA.scan1],al                         ;save scan code 1
-                        cmp     al,EKEYBPADASTERISKUP                           ;print-screen (b7)?
-                        jne     irq1.notprntscrn                                ;no, branch.
-;
-;       Get the second pair of scan-codes. Only the Print Screen key should generate a second pair.
-;
-                        call    WaitForKeyOutBuffer                             ;controller timeout?
-                        jz      irq1.timeout                                    ;yes, skip ahead
+                        jz      irq1.140                                        ;yes, skip ahead
+                        in      al,EKEYBPORTDATA                                ;read scan code 1
+                        mov     [wbConsoleScan1],al                             ;save scan code 1
+                        mov     ah,al                                           ;copy scan code 1
+                        mov     al,EKEYFCTRLRIGHT                               ;right control flag
+                        cmp     ah,EKEYBCTRLDOWN                                ;control key down code?
+                        je      irq1.30                                         ;yes, set flag
+                        cmp     ah,EKEYBCTRLUP                                  ;control key up code?
+                        je      irq1.40                                         ;yes, reset flag
+                        mov     al,EKEYFALTRIGHT                                ;right alt flag
+                        cmp     ah,EKEYBALTDOWN                                 ;alt key down code?
+                        je      irq1.30                                         ;yes, set flag
+                        cmp     ah,EKEYBALTUP                                   ;alt key up code?
+                        je      irq1.40                                         ;yes, reset flag
+                        cmp     ah,EKEYBSLASH                                   ;slash down code?
+                        je      irq1.80                                         ;yes, skip ahead
+                        cmp     ah,EKEYBSLASHUP                                 ;slash up code?
+                        je      irq1.80                                         ;yes, skip ahead
+                        cmp     ah,EKEYBPRTSCRDOWN                              ;print screen down code?
+                        je      irq1.10                                         ;yes, continue
+                        cmp     ah,EKEYBPRTSCRUP                                ;print screen up code?
+                        jne     irq1.20                                         ;no, skip ahead
+irq1.10                 call    WaitForKeyOutBuffer                             ;controller timeout?
+                        jz      irq1.140                                        ;yes, skip ahead
                         in      al,EKEYBPORTDATA                                ;read scan code 2
-                        mov     [esi+KEYBDATA.scan2],al                         ;save scan code 2
+                        mov     [wbConsoleScan2],al                             ;save scan code 2
                         call    WaitForKeyOutBuffer                             ;controller timeout?
-                        jz      irq1.timeout                                    ;yes, skip ahead
+                        jz      irq1.140                                        ;yes, skip ahead
                         in      al,EKEYBPORTDATA                                ;read scan code 3
-                        mov     [esi+KEYBDATA.scan3],al                         ;save scan code 3
-                        mov     al,0F7h                                         ;print-screen up
-                        mov     [esi+KEYBDATA.scan],al                          ;save final scan code
-                        jmp     irq1.putkeydown                                 ;put key-down message and update OIA
-;
-;       Where needed, use the last scan code and resume above.
-;
-irq1.uselastscan        mov     al,[esi+KEYBDATA.last]                          ;previous scan code
-                        or      al,EKEYBUP                                      ;set break bit
-                        mov     [esi+KEYBDATA.scan],al                          ;save as final scan code
-                        jmp     irq1.checkchar                                  ;continue
-;
-;       Some num-lock + extended key combinations return a shift or num-lock make code. Here we need to rely on the
-;       previous scan code to determine what key is in break mode.
-;
-irq1.notprntscrn        cmp     al,EKEYBSHIFTLDOWN                              ;left-shift down (2a)? left-shift
-                        je      irq1.uselastscan                                ;yes, use last scan
-                        cmp     al,EKEYBSHIFTLUP                                ;left-shift up (aa)? num-lock
-                        je      irq1.uselastscan                                ;yes, use last scan
-                        cmp     al,EKEYBSHIFTRDOWN                              ;right-shift down (36)? right-shift
-                        je      irq1.uselastscan
-;
-;       All remaining extended codes can be translated. Additionally, some extended scan codes set or reset shift flags
-;       or toggle locks.
-;
-                        movzx   eax,al                                          ;extend scan code to table index
-                        mov     al,[cs:tscan2ext+eax]                           ;translate to alternate scan code
-                        mov     [esi+KEYBDATA.scan],al                          ;save final scan code
-                        mov     ah,EKEYFCTRLRIGHT                               ;right control flag
-                        cmp     al,EKEYBCTRLRUP                                 ;right control up?
-                        je      irq1.shiftclear                                 ;yes, reset flag
-                        cmp     al,EKEYBCTRLRDOWN                               ;right control down?
-                        je      irq1.shiftset                                   ;yes, set flag
-                        mov     ah,EKEYFALTRIGHT                                ;right alt flag
-                        cmp     al,EKEYBALTRUP                                  ;alt key up code?
-                        je      irq1.shiftclear                                 ;yes, reset flag
-                        cmp     al,EKEYBALTRDOWN                                ;alt key down code?
-                        je      irq1.shiftset                                   ;yes, set flag
-                        mov     ah,EKEYFWINLEFT                                 ;left win flag
-                        cmp     al,EKEYBWINLUP                                  ;left win up?
-                        je      irq1.shiftclear                                 ;yes, reset flag
-                        cmp     al,EKEYBWINLDOWN                                ;left win down?
-                        je      irq1.shiftset                                   ;yes, set flag
-                        mov     ah,EKEYFWINRIGHT                                ;right win flag
-                        cmp     al,EKEYBWINRUP                                  ;right win up?
-                        je      irq1.shiftclear                                 ;yes, reset flag
-                        cmp     al,EKEYBWINRDOWN                                ;right win down?
-                        je      irq1.shiftset                                   ;yes, set flag
-                        mov     ah,EKEYFLOCKINSERT                              ;insert flag
-                        cmp     al,EKEYBINSERTDOWN                              ;translated insert scan code?
-                        je      irq1.locktoggle                                 ;yes, branch
-;
-;       Extended scan codes for Delete and num-pad slash generate ASCII character codes.
-;
-irq1.checkchar          and     al,EKEYBMAKECODEMASK                            ;mask out break bit
-                        mov     dl,EASCIIDELETE                                 ;ASCII delete
-                        cmp     al,EKEYBDELETEDOWN                              ;delete down?
-                        je      irq1.savechar                                   ;yes, branch
-                        mov     dl,EASCIISLASH                                  ;ASCII slash
-                        cmp     al,EKEYBPADSLASHDOWN                            ;keypad-slash down?
-                        jne     irq1.putkeydown                                 ;no, put key-down msg and update OIA
-irq1.savechar           mov     [esi+KEYBDATA.char],dl                          ;store ASCII code
-                        jmp     irq1.putmessage                                 ;put char, key-down msg and upate OIA
-;
-;       Flip lock toggles if a toggle key (caps-lock, num-lock, scroll-lock, insert)
-;
-irq1.locktoggle         xor     bh,ah                                           ;toggle lock flag
-                        mov     [esi+KEYBDATA.lock],bh                          ;save lock flags
+                        mov     [wbConsoleScan3],al                             ;read scan code 3
+irq1.20                 jmp     irq1.150                                        ;finish keyboard handling
+irq1.30                 or      bl,al                                           ;set shift flag
+                        jmp     irq1.60                                         ;skip ahead
+irq1.40                 not     al                                              ;convert flag to mask
+                        and     bl,al                                           ;reset shift flag
+                        jmp     irq1.60                                         ;skip ahead
+irq1.50                 xor     bh,al                                           ;toggle lock flag
                         call    SetKeyboardLamps                                ;update keyboard lamps
-                        jmp     irq1.putoia                                     ;update OIA
-;
-;       Set/reset shift flags if a shift key (shift, alt, ctrl, windows)
-;
-irq1.shiftset           or      bl,ah                                           ;set shift flag
-                        jmp     short irq1.shift                                ;skip ahead
-irq1.shiftclear         not     ah                                              ;convert flag to mask
-                        and     bl,ah                                           ;reset shift flag
-irq1.shift              mov     [esi+KEYBDATA.shift],bl                         ;save shift flags
-                        jmp     irq1.putoia                                     ;update OIA
-;
-;       Check for shift and lock keys first. Note: When num-lock is set, holding shift while pressing a num-pad causes
-;       a shift break (aa/b6) to be sent ahead of the num-pad key make code.
-;
-irq1.notext0            mov     [esi+KEYBDATA.scan],al                          ;save final scan code
-                        mov     ah,EKEYFSHIFTLEFT                               ;left shift flag
-                        cmp     al,EKEYBSHIFTLUP                                ;left shift key up code?
-                        je      irq1.shiftclear                                 ;yes, reset flag
-                        cmp     al,EKEYBSHIFTLDOWN                              ;left shift key down code?
-                        je      irq1.shiftset                                   ;yes, set flag
-                        mov     ah,EKEYFSHIFTRIGHT                              ;right shift flag
-                        cmp     al,EKEYBSHIFTRUP                                ;right shift key up code?
-                        je      irq1.shiftclear                                 ;yes, reset flag
-                        cmp     al,EKEYBSHIFTRDOWN                              ;right shift key down code?
-                        je      irq1.shiftset                                   ;yes, set flag
-                        mov     ah,EKEYFCTRLLEFT                                ;left control flag
-                        cmp     al,EKEYBCTRLLUP                                 ;control key up code?
-                        je      irq1.shiftclear                                 ;yes, reset flag
-                        cmp     al,EKEYBCTRLLDOWN                               ;control key down code?
-                        je      irq1.shiftset                                   ;yes, set flag
-                        mov     ah,EKEYFALTLEFT                                 ;left alt flag
-                        cmp     al,EKEYBALTLUP                                  ;alt key up code?
-                        je      irq1.shiftclear                                 ;yes, reset flag
-                        cmp     al,EKEYBALTLDOWN                                ;alt key down code?
-                        je      irq1.shiftset                                   ;yes, set flag
-;
-;       Handle lock keys.
-;
-                        mov     ah,EKEYFLOCKCAPS                                ;caps-lock flag
-                        cmp     al,EKEYBCAPSDOWN                                ;caps-lock key down code?
-                        je      irq1.locktoggle                                 ;yes, toggle lamps and flags
-                        mov     ah,EKEYFLOCKNUM                                 ;num-lock flag
-                        cmp     al,EKEYBNUMDOWN                                 ;num-lock key down code?
-                        je      irq1.locktoggle                                 ;yes, toggle lamps and flags
-                        mov     ah,EKEYFLOCKSCROLL                              ;scroll-lock flag
-                        cmp     al,EKEYBSCROLLDOWN                              ;scroll-lock key down code?
-                        je      irq1.locktoggle                                 ;yes, toggle lamps and flags
-                        test    byte [esi+KEYBDATA.lock],EKEYFLOCKNUM           ;num-lock?
-                        jnz     irq1.translate                                  ;yes, branch
-                        mov     ah,EKEYFLOCKINSERT                              ;insert lock flag
-                        cmp     al,EKEYBPADINSERTDOWN                           ;keypad-insert down?
-                        je      irq1.locktoggle                                 ;yes, toggle lamps and flags
-;
-;       Get base or shifted ASCII char.
-;
-irq1.translate          and     al,EKEYBMAKECODEMASK                            ;make code
-                        movzx   eax,al                                          ;table index
-                        mov     edx,tscan2ascii                                 ;base table
-                        test    byte [esi+KEYBDATA.shift],EKEYFSHIFT            ;left or right shift?
-                        jz      irq1.getchar                                    ;no, branch
-                        mov     edx,tscan2shift                                 ;shift rable
-irq1.getchar            mov     al,[cs:edx+eax]                                 ;ASCII code
-;
-;       Check if caps-lock and alphabetic.
-;
-                        test    byte [esi+KEYBDATA.lock],EKEYFLOCKCAPS          ;caps-lock?
-                        jz      irq1.checknum                                   ;no, branch
-                        cmp     al,EASCIIUPPERA                                 ;caps range (low)
-                        jb      irq1.checknum                                   ;branch if non-alpha
-                        cmp     al,EASCIIUPPERZ                                 ;caps range (high)
-                        jbe     irq1.swapcase                                   ;branch if alpha
-                        cmp     al,EASCIILOWERA                                 ;base range (low)
-                        jb      irq1.checknum                                   ;branch if non-alpha
-                        cmp     al,EASCIILOWERZ                                 ;base range (high)
-                        ja      irq1.checknum                                   ;branch if alpha
-;
-;       If caps-lock is enabled and the ASCII char is alphabetic, swap the ASCII case bit.
-;
-irq1.swapcase           xor     al,020h                                         ;swap case bit
-                        mov     [esi+KEYBDATA.char],al                          ;save ASCII char code
-                        jmp     irq1.putmessage                                 ;put char, key-down msgs; update OIA
-;
-;       Check if num-lock and keypad numeral.
-;
-irq1.checknum           test    byte [esi+KEYBDATA.lock],EKEYFLOCKNUM           ;num-lock?
-                        jz      irq1.notnum                                     ;no, branch
-                        mov     dl,[esi+KEYBDATA.scan]                          ;scan code
-                        and     dl,EKEYBMAKECODEMASK                            ;make code
-                        cmp     dl,EKEYBPAD7DOWN                                ;keypad numeral range (low)
-                        jb      irq1.notnum                                     ;branch if non-numeral
-                        cmp     dl,EKEYBPADDELETEDOWN                           ;keypad numeral range (high)
-                        ja      irq1.notnum                                     ;branch if non-numeral
-                        sub     dl,EKEYBPAD7DOWN                                ;lookup table index
-                        movzx   edx,dl                                          ;extend to register
-                        mov     al,[cs:tscankeypad+edx]                         ;translate to numeral equivalent
-irq1.notnum             mov     [esi+KEYBDATA.char],al                          ;save ASCII character code
-;
-;       Put messages into the message queue.
-;
-irq1.putmessage         mov     al,[esi+KEYBDATA.char]                          ;ASCII code
-                        mov     ah,[esi+KEYBDATA.scan]                          ;final scan code
-                        test    al,al                                           ;printable char?
-                        jz      irq1.putkeydown                                 ;no, skip ahead
+irq1.60                 mov     [wbConsoleShift],bl                             ;save shift flags
+                        mov     [wbConsoleLock],bh                              ;save lock flags
+                        call    PutConsoleOIAShift                              ;update OIA indicators
+                        jmp     irq1.150                                        ;finish keyboard handling
+irq1.70                 cmp     ah,EKEYBCODEEXT1                                ;extended scan code 1?
+                        jne     irq1.80                                         ;no continue
+                        call    WaitForKeyOutBuffer                             ;controller timeout?
+                        jz      irq1.140                                        ;yes, skip ahead
+                        in      al,EKEYBPORTDATA                                ;read scan code 1
+                        mov     [wbConsoleScan1],al                             ;save scan code 1
+                        mov     ah,al                                           ;copy scan code 1
+                        cmp     ah,EKEYBPAUSEDOWN                               ;pause key down code?
+                        jne     irq1.150                                        ;no, finish keyboard handling
+                        call    WaitForKeyOutBuffer                             ;controller timeout?
+                        jz      irq1.140                                        ;yes, skip ahead
+                        in      al,EKEYBPORTDATA                                ;read scan code 2
+                        mov     [wbConsoleScan2],al                             ;save scan code 2
+                        call    WaitForKeyOutBuffer                             ;controller timeout?
+                        jz      irq1.140                                        ;yes, skip ahead
+                        in      al,EKEYBPORTDATA                                ;read scan code 3
+                        mov     [wbConsoleScan3],al                             ;save scan code 3
+                        call    WaitForKeyOutBuffer                             ;controller timeout?
+                        jz      irq1.140                                        ;yes, skip ahead
+                        in      al,EKEYBPORTDATA                                ;read scan code 4
+                        mov     [wbConsoleScan4],al                             ;save scan code 4
+                        call    WaitForKeyOutBuffer                             ;controller timeout?
+                        jz      irq1.140                                        ;yes, skip ahead
+                        in      al,EKEYBPORTDATA                                ;read scan code 5
+                        mov     [wbConsoleScan5],al                             ;save scan code 5
+                        jmp     irq1.150                                        ;continue
+irq1.80                 xor     al,al                                           ;assume no ASCII translation
+                        test    ah,EKEYBUP                                      ;release code?
+                        jnz     irq1.130                                        ;yes, skip ahead
+                        mov     esi,tscan2ascii                                 ;scan-to-ascii table address
+                        test    bl,EKEYFSHIFT                                   ;either shift key down?
+                        jz      irq1.90                                         ;no, skip ahead
+                        mov     esi,tscan2shift                                 ;scan-to-shifted table address
+irq1.90                 movzx   ecx,ah                                          ;scan code offset
+                        mov     al,[cs:ecx+esi]                                 ;al = ASCII code
+                        test    bh,EKEYFLOCKCAPS                                ;caps-lock on?
+                        jz      irq1.100                                        ;no skip ahead
+                        mov     cl,al                                           ;copy ASCII code
+                        and     cl,EASCIICASEMASK                               ;clear case mask of copy
+                        cmp     cl,EASCIIUPPERA                                 ;less than 'A'?
+                        jb      irq1.100                                        ;yes, skip ahead
+                        cmp     cl,EASCIIUPPERZ                                 ;greater than 'Z'?
+                        ja      irq1.100                                        ;yes, skip ahead
+                        xor     al,EASCIICASE                                   ;switch case
+irq1.100                mov     [wbConsoleChar],al                              ;save ASCII code
+irq1.110                mov     edx,EMSGKEYDOWN                                 ;assume key-down event
+                        test    ah,EKEYBUP                                      ;release scan-code?
+                        jz      irq1.120                                        ;no, skip ahead
+                        mov     edx,EMSGKEYUP                                   ;key-up event
+irq1.120                and     eax,0FFFFh                                      ;clear high-order word
+                        or      edx,eax                                         ;msg id and codes
+                        xor     ecx,ecx                                         ;null param
+                        push    eax                                             ;save codes
+                        mov     eax,EGDTKEYBOARDMQ                              ;keyboard focus message queue
+                        call    PutMessage                                      ;put message to console
+                        pop     eax                                             ;restore codes
+                        test    al,al                                           ;ASCII translation?
+                        jz      irq1.130                                        ;no, skip ahead
                         mov     edx,EMSGKEYCHAR                                 ;key-character event
                         and     eax,0FFFFh                                      ;clear high-order word
                         or      edx,eax                                         ;msg id and codes
                         xor     ecx,ecx                                         ;null param
+                        mov     eax,EGDTKEYBOARDMQ                              ;keyboard focus message queue
                         call    PutMessage                                      ;put message to console
-irq1.putkeydown         mov     al,[esi+KEYBDATA.char]                          ;ASCII char
-                        mov     ah,[esi+KEYBDATA.scan]                          ;final scan code
-                        mov     edx,EMSGKEYDOWN                                 ;assume key-down event
-                        test    ah,EKEYBUP                                      ;release scan-code?
-                        jz      irq1.makecode                                   ;no, skip ahead
-                        mov     edx,EMSGKEYUP                                   ;key-up event
-irq1.makecode           and     eax,0FFFFh                                      ;clear high-order word
-                        or      edx,eax                                         ;msg id and codes
-                        xor     ecx,ecx                                         ;null param
-                        call    PutMessage                                      ;put message to console
-;
-;       Update operator information area. Enable maskable ints.
-;
-irq1.putoia             call    PutConsoleOIA                                   ;OIA shift indicators
-irq1.exit               sti                                                     ;enable maskable interrupts
-;
-;       Restore and return.
-;
+irq1.130                jmp     irq1.150                                        ;finish keyboard handling
+irq1.140                mov     al,EKEYFTIMEOUT                                 ;controller timeout flag
+                        or      [wbConsoleStatus],al                            ;set controller timeout flag
+irq1.150                call    PutConsoleOIAChar                               ;update operator info area
+                        call    PutPrimaryEndOfInt                              ;send end-of-interrupt to PIC
                         pop     ds                                              ;restore non-volatile regs
                         pop     esi                                             ;
-                        pop     edx                                             ;
                         pop     ecx                                             ;
                         pop     ebx                                             ;
                         pop     eax                                             ;
@@ -2967,79 +2760,37 @@ irq1.exit               sti                                                     
 ;-----------------------------------------------------------------------------------------------------------------------
 ;       Scan-Code to ASCII Translation Tables
 ;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Keypad directional to numeral
-;
-tscankeypad             db      037h,038h,039h,02Dh,034h,035h,036h,02Bh         ;47-4e  789-456+
-                        db      031h,032h,033h,030h,02Eh                        ;4f-53  1230.
-;
-;       Scan Code to Extended Scan Code
-;
-tscan2ext               db      000h,000h,000h,000h,000h,000h,000h,000h         ;00-07
-                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;08-0f
-                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;10-17
-                        db      000h,000h,000h,000h,07Ch,07Dh,000h,000h         ;18-1f  1c->7c,1d->7d
-                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;20-27
-                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;28-2f
-                        db      000h,000h,000h,000h,000h,075h,000h,077h         ;30-37  35->75,37->77
-                        db      078h,000h,000h,000h,000h,000h,000h,000h         ;38-3f  38->78
-                        db      000h,000h,000h,000h,000h,065h,066h,067h         ;40-47  45->65,46-66,47->67
-                        db      068h,069h,04Ah,06Bh,04Ch,06Dh,04Eh,06Fh         ;48-4f  48->68,49->69,4b->6b,4d->6d,4f->6f
-                        db      070h,071h,072h,073h,000h,000h,000h,000h         ;50-57  50->70,51->71,52->72,53->73
-                        db      000h,000h,000h,05Bh,05Ch,05Dh,000h,000h         ;58-5f  5b->5b,5c->5c,5d->5d
-                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;60-67
-                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;68-6f
-                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;70-77
-                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;78-7f
-                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;80-87
-                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;88-8f
-                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;90-97
-                        db      000h,000h,000h,000h,0FCh,0FDh,000h,000h         ;98-9f  9c->fc,9d->fd
-                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;a0-a7
-                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;a8-af
-                        db      000h,000h,000h,000h,000h,0F5h,000h,0F7h         ;b0-b7  b5->f5,b7->f7
-                        db      0F8h,000h,000h,000h,000h,000h,000h,000h         ;b8-bf  b8->f8
-                        db      000h,000h,000h,000h,000h,0E5h,0E6h,0E7h         ;c0-c7  c5->e5,c6->e6,c7->e7
-                        db      0E8h,0E9h,0CAh,0EBh,0CCh,0EDh,0CEh,0EFh         ;c8-cf  c8->e8,c9->e9,cb->eb,cd->ed,cf->ef
-                        db      0F0h,0F1h,0F2h,0F3h,000h,000h,000h,000h         ;d0-d7  d0->f0,d1->f1,d2->f2,d3->f3
-                        db      000h,000h,000h,0DBh,0DCh,0DDh,0DEh,000h         ;d8-df  db->db,dc->dc,de->de
-                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;e0-e7
-                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;e8-ef
-                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;f0-f7
-                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;f8-ff
-
 tscan2ascii             db      000h,01Bh,031h,032h,033h,034h,035h,036h         ;00-07
                         db      037h,038h,039h,030h,02Dh,03Dh,008h,009h         ;08-0f
                         db      071h,077h,065h,072h,074h,079h,075h,069h         ;10-17
-                        db      06Fh,070h,05Bh,05Dh,000h,000h,061h,073h         ;18-1f
+                        db      06Fh,070h,05Bh,05Dh,00Dh,000h,061h,073h         ;18-1f
                         db      064h,066h,067h,068h,06Ah,06Bh,06Ch,03Bh         ;20-27
                         db      027h,060h,000h,05Ch,07Ah,078h,063h,076h         ;28-2f
                         db      062h,06Eh,06Dh,02Ch,02Eh,02Fh,000h,02Ah         ;30-37
                         db      000h,020h,000h,000h,000h,000h,000h,000h         ;38-3f
-                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;40-47
-                        db      000h,000h,02Dh,000h,000h,000h,02Bh,000h         ;48-4f
-                        db      000h,000h,000h,07Fh,000h,000h,000h,000h         ;50-57
+                        db      000h,000h,000h,000h,000h,000h,000h,037h         ;40-47
+                        db      038h,039h,02Dh,034h,035h,036h,02Bh,031h         ;48-4f
+                        db      032h,033h,030h,02Eh,000h,000h,000h,000h         ;50-57
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;58-5f
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;60-67
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;68-6f
-                        db      000h,000h,000h,07Fh,000h,02Fh,000h,000h         ;70-77
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;70-77
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;78-7f
-
 tscan2shift             db      000h,01Bh,021h,040h,023h,024h,025h,05Eh         ;80-87
-                        db      026h,02Ah,028h,029h,05Fh,02Bh,008h,009h         ;88-8f
+                        db      026h,02Ah,028h,029h,05Fh,02Bh,008h,000h         ;88-8f
                         db      051h,057h,045h,052h,054h,059h,055h,049h         ;90-97
-                        db      04Fh,050h,07Bh,07Dh,000h,000h,041h,053h         ;98-9f
+                        db      04Fh,050h,07Bh,07Dh,00Dh,000h,041h,053h         ;98-9f
                         db      044h,046h,047h,048h,04Ah,04Bh,04Ch,03Ah         ;a0-a7
                         db      022h,07Eh,000h,07Ch,05Ah,058h,043h,056h         ;a8-af
                         db      042h,04Eh,04Dh,03Ch,03Eh,03Fh,000h,02Ah         ;b0-b7
                         db      000h,020h,000h,000h,000h,000h,000h,000h         ;b8-bf
-                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;c0-c7
-                        db      000h,000h,02Dh,000h,000h,000h,02Bh,000h         ;c8-cf
-                        db      000h,000h,000h,07Fh,000h,000h,000h,000h         ;d0-d7
+                        db      000h,000h,000h,000h,000h,000h,000h,037h         ;c0-c7
+                        db      038h,039h,02Dh,034h,035h,036h,02Bh,031h         ;c8-cf
+                        db      032h,033h,030h,02Eh,000h,000h,000h,000h         ;d0-d7
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;d8-df
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;e0-e7
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;e8-ef
-                        db      000h,000h,000h,07Fh,000h,02Fh,000h,000h         ;f0-f7
+                        db      000h,000h,000h,000h,000h,000h,000h,000h         ;f0-f7
                         db      000h,000h,000h,000h,000h,000h,000h,000h         ;f8-ff
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -3081,16 +2832,13 @@ tscan2shift             db      000h,01Bh,021h,040h,023h,024h,025h,05Eh         
                         menter  diskette                                        ;floppy disk interrupt
                         push    eax                                             ;save non-volatile regs
                         push    ds                                              ;
-                        call    PutPrimaryEndOfInt                              ;end the interrupt
                         push    EGDTOSDATA                                      ;load OS data selector ...
                         pop     ds                                              ;... into DS register
                         mov     al,[wbFDCStatus]                                ;AL = FDC calibration status
                         or      al,10000000b                                    ;set IRQ flag
                         mov     [wbFDCStatus],al                                ;update FDC calibration status
-                        sti                                                     ;enable maskable interrupts
                         pop     ds                                              ;restore non-volatile regs
-                        pop     eax                                             ;
-                        iretd                                                   ;return from interrupt
+                        jmp     hwint                                           ;end primary PIC interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       IRQ7    Parallel Port 1 Hardware Interrupt
@@ -3171,8 +2919,7 @@ tscan2shift             db      000h,01Bh,021h,040h,023h,024h,025h,05Eh         
 hwwint                  call    PutSecondaryEndOfInt                            ;send EOI to secondary PIC
                         jmp     hwint90                                         ;skip ahead
 hwint                   call    PutPrimaryEndOfInt                              ;send EOI to primary PIC
-hwint90                 sti                                                     ;enable maskable interrupts
-                        pop     eax                                             ;restore modified regs
+hwint90                 pop     eax                                             ;restore modified regs
                         iretd                                                   ;return from interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -3200,18 +2947,37 @@ svc90                   iretd                                                   
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 tsvc                    tsvce   AllocateMemory                                  ;allocate memory block
+                        tsvce   ClearConsoleScreen                              ;clear console screen
                         tsvce   CompareMemory                                   ;compare memory
+                        tsvce   CopyMemory                                      ;copy memory
                         tsvce   DecimalToUnsigned                               ;convert decimal string to unsigned integer
                         tsvce   FreeMemory                                      ;free memory block
-                        tsvce   GetConsoleMessage                               ;get message
+                        tsvce   GetBaseMemSize                                  ;get base RAM size in bytes
+                        tsvce   GetConsoleString                                ;get string input
+                        tsvce   GetExtendedMemSize                              ;get extended RAM size in bytes
+                        tsvce   GetROMMemSize                                   ;get RAM size as reported by INT 12h
                         tsvce   HexadecimalToUnsigned                           ;convert hexadecimal string to unsigned integer
+                        tsvce   IsLeapYear                                      ;return ecx=1 if leap year
                         tsvce   PlaceCursor                                     ;place the cursor at the current loc
-                        tsvce   PutConsoleOIA                                   ;display the operator information area
+                        tsvce   PutConsoleString                                ;tty output asciiz string
+                        tsvce   PutDateString                                   ;put MM/DD/YYYY string
+                        tsvce   PutDayString                                    ;put DD string
+                        tsvce   PutHourString                                   ;put hh string
+                        tsvce   PutMinuteString                                 ;put mm string
+                        tsvce   PutMonthString                                  ;put MM string
+                        tsvce   PutMonthNameString                              ;put name(MM) string
+                        tsvce   PutSecondString                                 ;put ss string
+                        tsvce   PutTimeString                                   ;put HH:MM:SS string
+                        tsvce   PutWeekdayString                                ;put weekday string
+                        tsvce   PutWeekdayNameString                            ;put name(weekday) string
+                        tsvce   PutYearString                                   ;put YYYY string
+                        tsvce   ReadRealTimeClock                               ;get real-time clock date and time
                         tsvce   ResetSystem                                     ;reset system using 8042 chip
-                        tsvce   SetKeyboardLamps                                ;turn keboard LEDs on or off
+                        tsvce   SetConsoleString                                ;set console string
+                        tsvce   UnsignedToDecimalString                         ;convert unsigned integer to decimal string
                         tsvce   UnsignedToHexadecimal                           ;convert unsigned integer to hexadecimal string
                         tsvce   UpperCaseString                                 ;upper-case string
-                        tsvce   Yield                                           ;yield to system
+                        tsvce   Yield                                           ;halt until interrupt
 maxtsvc                 equ     ($-tsvc)/4                                      ;function out of range
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -3225,6 +2991,10 @@ maxtsvc                 equ     ($-tsvc)/4                                      
                         mov     al,eAllocateMemory                              ;allocate memory fn.
                         int     _svc                                            ;invoke OS service
 %endmacro
+%macro                  clearConsoleScreen 0
+                        mov     al,eClearConsoleScreen                          ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
 %macro                  compareMemory 0
                         mov     al,eCompareMemory                               ;function code
                         int     _svc                                            ;invoke OS service
@@ -3233,33 +3003,156 @@ maxtsvc                 equ     ($-tsvc)/4                                      
                         mov     al,eDecimalToUnsigned                           ;function code
                         int     _svc                                            ;invoke OS servie
 %endmacro
+%macro                  compareMemory 3
+                        mov     edx,%1                                          ;first memory address
+                        mov     ebx,%2                                          ;second memory address
+                        mov     ecx,%3                                          ;length
+                        mov     al,eCompareMemory                               ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  copyMemory 3
+                        mov     edx,%1                                          ;first memory address
+                        mov     ebx,%2                                          ;second memory address
+                        mov     ecx,%3                                          ;length
+                        mov     al,eCopyMemory                                  ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
 %macro                  freeMemory 1
                         mov     edx,%1                                          ;address of memory block
                         mov     al,eFreeMemory                                  ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
-%macro                  getConsoleMessage 0
-                        mov     al,eGetConsoleMessage                           ;function code
+%macro                  getBaseMemSize 0
+                        mov     al,eGetBaseMemSize                              ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  getConsoleString 4
+                        mov     edx,%1                                          ;buffer address
+                        mov     ecx,%2                                          ;max characters
+                        mov     bh,%3                                           ;echo indicator
+                        mov     bl,%4                                           ;terminator
+                        mov     al,eGetConsoleString                            ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  getExtendedMemSize 0
+                        mov     al,eGetExtendedMemSize                          ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  getROMMemSize 0
+                        mov     al,eGetROMMemSize                               ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
 %macro                  hexadecimalToUnsigned 0
                         mov     al,eHexadecimalToUnsigned                       ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
+%macro                  isLeapYear 1
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     al,eIsLeapYear                                  ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
 %macro                  placeCursor 0
                         mov     al,ePlaceCursor                                 ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
-%macro                  putConsoleOIA 0
-                        mov     al,ePutConsoleOIA                               ;function code
+%macro                  putConsoleString 1
+                        mov     edx,%1                                          ;string address
+                        mov     al,ePutConsoleString                            ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putDateString 0
+                        mov     al,ePutDateString                               ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putDateString 2
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     edx,%2                                          ;output buffer addr
+                        mov     al,ePutDateString                               ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putDayString 2
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     edx,%2                                          ;output buffer addr
+                        mov     al,ePutDayString                                ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putHourString 2
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     edx,%2                                          ;output buffer addr
+                        mov     al,ePutHourString                               ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putMinuteString 2
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     edx,%2                                          ;output buffer addr
+                        mov     al,ePutMinuteString                             ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putMonthString 2
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     edx,%2                                          ;output buffer addr
+                        mov     al,ePutMonthString                              ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putMonthNameString 2
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     edx,%2                                          ;output buffer addr
+                        mov     al,ePutMonthNameString                          ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putSecondString 2
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     edx,%2                                          ;output buffer addr
+                        mov     al,ePutSecondString                             ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putTimeString 0
+                        mov     al,ePutTimeString                               ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putTimeString 2
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     edx,%2                                          ;output buffer addr
+                        mov     al,ePutTimeString                               ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putWeekdayString 2
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     edx,%2                                          ;output buffer addr
+                        mov     al,ePutWeekdayString                            ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putWeekdayNameString 2
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     edx,%2                                          ;output buffer addr
+                        mov     al,ePutWeekdayNameString                        ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putYearString 2
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     edx,%2                                          ;output buffer addr
+                        mov     al,ePutYearString                               ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  readRealTimeClock 0
+                        mov     al,eReadRealTimeClock                           ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  readRealTimeClock 1
+                        mov     ebx,%1                                          ;DATETIME addr
+                        mov     al,eReadRealTimeClock                           ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
 %macro                  resetSystem 0
                         mov     al,eResetSystem                                 ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
-%macro                  setKeyboardLamps 0
-                        mov     al,eSetKeyboardLamps                            ;function code
+%macro                  setConsoleString 0
+                        mov     al,eSetConsoleString                            ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  unsignedToDecimalString 0
+                        mov     al,eUnsignedToDecimalString                     ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
 %macro                  unsignedToHexadecimal 0
@@ -3279,6 +3172,408 @@ maxtsvc                 equ     ($-tsvc)/4                                      
 ;       Kernel Function Library
 ;
 ;=======================================================================================================================
+;=======================================================================================================================
+;
+;       Date and Time Helper Routines
+;
+;       GetYear
+;       IsLeapYear
+;       PutDateString
+;       PutDayString
+;       PutHourString
+;       PutMinuteString
+;       PutMonthString
+;       PutMonthNameString
+;       PutSecondString
+;       PutTimeString
+;       PutWeekdayString
+;       PutWeekdayNameString
+;       PutYearString
+;
+;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        GetYear
+;
+;       Description:    Return the four-digit year (century * 100 + year of century)
+;
+;       In:             DS:EBX  DATETIME address
+;
+;       Out:            ECX     year
+;
+;-----------------------------------------------------------------------------------------------------------------------
+GetYear                 movzx   ecx,byte [ebx+DATETIME.century]                 ;century
+                        imul    ecx,100                                         ;century * 100
+                        movzx   eax,byte [ebx+DATETIME.year]                    ;year of century
+                        add     ecx,eax                                         ;year (YYYY)
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        IsLeapYear
+;
+;       Description:    This routine returns an indicator if the current year is a leap year.
+;
+;       In:             DS:EBX  DATETIME ADDRESS
+;
+;       Out:            ECX     0 = not a leap year
+;                               1 = leap year
+;
+;-----------------------------------------------------------------------------------------------------------------------
+IsLeapYear              call    GetYear                                         ;ECX = YYYY
+                        mov     eax,ecx                                         ;EAX = YYYY
+                        xor     ecx,ecx                                         ;assume not leap year
+                        test    al,00000011b                                    ;multiple of four?
+                        jnz     .no                                             ;no, branch
+                        mov     dl,100                                          ;divisor
+                        div     dl                                              ;divide by 100
+                        test    ah,ah                                           ;multiple of 100?
+                        jnz     .yes                                            ;yes, branch
+                        test    al,00000011b                                    ;multiple of 400?
+                        jnz     .no                                             ;no, branch
+.yes                    inc     ecx                                             ;indicate leap
+.no                     ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutDateString
+;
+;       Description:    This routine returns an ASCIIZ mm/dd/yyyy string at ds:edx from the date in the DATETIME
+;                       structure at ds:ebx.
+;
+;       In:             DS:EBX  DATETIME address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutDateString           push    ecx                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    es                                              ;
+                        push    ds                                              ;store data selector ...
+                        pop     es                                              ;... in extra segment reg
+                        mov     edi,edx                                         ;output buffer address
+                        mov     cl,10                                           ;divisor
+                        mov     edx,0002F3030h                                  ;ASCIIZ "00/" (reversed)
+                        movzx   eax,byte [ebx+DATETIME.month]                   ;month
+                        div     cl                                              ;AH = rem; AL = quotient
+                        or      eax,edx                                         ;apply ASCII zones and delimiter
+                        cld                                                     ;forward strings
+                        stosd                                                   ;store "mm/"nul
+                        dec     edi                                             ;address of terminator
+                        movzx   eax,byte [ebx+DATETIME.day]                     ;day
+                        div     cl                                              ;AH = rem; AL = quotient
+                        or      eax,edx                                         ;apply ASCII zones and delimiter
+                        stosd                                                   ;store "dd/"nul
+                        dec     edi                                             ;address of terminator
+                        movzx   eax,byte [ebx+DATETIME.century]                 ;century
+                        div     cl                                              ;AH = rem; AL = quotient
+                        or      eax,edx                                         ;apply ASCII zones and delimiter
+                        stosd                                                   ;store "cc/"null
+                        dec     edi                                             ;address of terminator
+                        dec     edi                                             ;address of delimiter
+                        movzx   eax,byte [ebx+DATETIME.year]                    ;year (yy)
+                        div     cl                                              ;AH = rem; AL = quotient
+                        or      eax,edx                                         ;apply ASCII zones and delimiter
+                        stosb                                                   ;store quotient
+                        mov     al,ah                                           ;remainder
+                        stosb                                                   ;store remainder
+                        xor     al,al                                           ;null terminator
+                        stosb                                                   ;store terminator
+                        pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutDayString
+;
+;       Description:    This routine returns an ASCIIZ dd string at ds:edx from the date in the DATETIME
+;                       structure at ds:ebx.
+;
+;       In:             DS:EBX  DATETIME address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutDayString            push    ecx                                             ;save non-volatile regs
+                        movzx   ecx,byte [ebx+DATETIME.day]                     ;day
+                        mov     bh,1                                            ;trim leading zeros; no commas
+                        call    UnsignedToDecimalString                         ;store ASCII decimal string
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutHourString
+;
+;       Description:    This routine returns an ASCIIZ hh string at ds:edx from the date in the DATETIME
+;                       structure at ds:ebx.
+;
+;       In:             DS:EBX  DATETIME address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutHourString           push    ecx                                             ;save non-volatile regs
+                        movzx   ecx,byte [ebx+DATETIME.hour]                    ;hour
+                        mov     bh,1                                            ;trim leading zeros; no commas
+                        call    UnsignedToDecimalString                         ;store ASCII decimal string
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutMinuteString
+;
+;       Description:    This routine returns an ASCIIZ mm string at ds:edx from the date in the DATETIME
+;                       structure at ds:ebx.
+;
+;       In:             DS:EBX  DATETIME address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutMinuteString         push    ecx                                             ;save non-volatile regs
+                        movzx   ecx,byte [ebx+DATETIME.minute]                  ;minute
+                        mov     bh,1                                            ;trim leading zeros; no commas
+                        call    UnsignedToDecimalString                         ;store ASCII decimal string
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutMonthString
+;
+;       Description:    This routine returns an ASCIIZ mm string at ds:edx from the date in the DATETIME
+;                       structure at ds:ebx.
+;
+;       In:             DS:EBX  DATETIME address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutMonthString          push    ecx                                             ;save non-volatile regs
+                        movzx   ecx,byte [ebx+DATETIME.month]                   ;month
+                        mov     bh,1                                            ;trim leading zeros; no commas
+                        call    UnsignedToDecimalString                         ;store ASCII decimal string
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutMonthNameString
+;
+;       Description:    This routine returns an ASCIIZ name(mm) string at ds:edx from the date in the DATETIME
+;                       structure at ds:ebx.
+;
+;       In:             DS:EBX  DATETIME address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutMonthNameString      push    esi                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    ds                                              ;
+                        push    es                                              ;
+                        push    ds                                              ;load data selector ...
+                        pop     es                                              ;... into extra segment
+                        mov     edi,edx                                         ;output buffer address
+                        movzx   eax,byte [ebx+DATETIME.month]                   ;month (1-12)
+                        dec     eax                                             ;month (0-11)
+                        shl     eax,2                                           ;offset into month name lookup table
+                        push    cs                                              ;load code selector ...
+                        pop     ds                                              ;... into data segment
+                        mov     esi,[tMonthNames+eax]                           ;month name address
+                        cld                                                     ;forward strings
+.10                     lodsb                                                   ;name character
+                        stosb                                                   ;store in output buffer
+                        test    al,al                                           ;end of string?
+                        jnz     .10                                             ;no, continue
+                        pop     es                                              ;restore non-volatile regs
+                        pop     ds                                              ;
+                        pop     edi                                             ;
+                        pop     esi                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutSecondString
+;
+;       Description:    This routine returns an ASCIIZ ss string at ds:edx from the date in the DATETIME
+;                       structure at ds:ebx.
+;
+;       In:             DS:EBX  DATETIME address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutSecondString         push    ecx                                             ;save non-volatile regs
+                        movzx   ecx,byte [ebx+DATETIME.second]                  ;second
+                        mov     bh,1                                            ;trim leading zeros; no commas
+                        call    UnsignedToDecimalString                         ;store ASCII decimal string
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutTimeString
+;
+;       Description:    This routine returns an ASCIIZ hh:mm:ss string at ds:edx from the date in the DATETIME
+;                       structure at ds:ebx.
+;
+;       In:             DS:EBX  DATETIME address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutTimeString           push    ecx                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    es                                              ;
+                        push    ds                                              ;store data selector ...
+                        pop     es                                              ;... in extra segment reg
+                        mov     edi,edx                                         ;output buffer address
+                        mov     cl,10                                           ;divisor
+                        mov     edx,003a3030h                                   ;ASCIIZ "00:" (reversed)
+                        movzx   eax,byte [ebx+DATETIME.hour]                    ;hour
+                        div     cl                                              ;ah = rem; al = quotient
+                        or      eax,edx                                         ;apply ASCII zones and delimiter
+                        cld                                                     ;forward strings
+                        stosd                                                   ;store "mm/"nul
+                        dec     edi                                             ;address of terminator
+                        movzx   eax,byte [ebx+DATETIME.minute]                  ;minute
+                        div     cl                                              ;ah = rem; al = quotient
+                        or      eax,edx                                         ;apply ASCII zones and delimiter
+                        stosd                                                   ;store "dd/"nul
+                        dec     edi                                             ;address of terminator
+                        movzx   eax,byte [ebx+DATETIME.second]                  ;second
+                        div     cl                                              ;ah = rem; al = quotient
+                        or      eax,edx                                         ;apply ASCII zones and delimiter
+                        stosb                                                   ;store quotient
+                        mov     al,ah                                           ;remainder
+                        stosb                                                   ;store remainder
+                        xor     al,al                                           ;null terminator
+                        stosb                                                   ;store terminator
+                        pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutWeekdayString
+;
+;       Description:    This routine returns an ASCIIZ weekday string at ds:edx from the date in the DATETIME
+;                       structure at ds:ebx.
+;
+;       In:             DS:EBX  DATETIME address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutWeekdayString        push    ecx                                             ;save non-volatile regs
+                        movzx   ecx,byte [ebx+DATETIME.weekday]                 ;weekday
+                        mov     bh,1                                            ;trim leading zeros; no commas
+                        call    UnsignedToDecimalString                         ;store ASCII decimal string
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutWeekdayNameString
+;
+;       Description:    This routine returns an ASCIIZ name(weekday) string at ds:edx from the date in the DATETIME
+;                       structure at ds:ebx.
+;
+;       In:             DS:EBX  DATETIME address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutWeekdayNameString    push    esi                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    ds                                              ;
+                        push    es                                              ;
+                        push    ds                                              ;load data selector ...
+                        pop     es                                              ;... into extra segment
+                        mov     edi,edx                                         ;output buffer address
+                        movzx   eax,byte [ebx+DATETIME.weekday]                 ;weekday (0-6)
+                        shl     eax,2                                           ;offset into day name lookup table
+                        push    cs                                              ;load code selector ...
+                        pop     ds                                              ;... into data segment
+                        mov     esi,[tDayNames+eax]                             ;day name address
+                        cld                                                     ;forward strings
+.10                     lodsb                                                   ;name character
+                        stosb                                                   ;store in output buffer
+                        test    al,al                                           ;end of string?
+                        jnz     .10                                             ;no, continue
+                        pop     es                                              ;restore non-volatile regs
+                        pop     ds                                              ;
+                        pop     edi                                             ;
+                        pop     esi                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutYearString
+;
+;       Description:    This routine returns an ASCIIZ yyyy string at ds:edx from the date in the DATETIME
+;                       structure at ds:ebx.
+;
+;       In:             DS:EBX  DATETIME address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutYearString           push    ecx                                             ;save non-volatile regs
+                        call    GetYear                                         ;ECX = YYYY
+                        mov     bh,1                                            ;trim leading zeros; no commas
+                        call    UnsignedToDecimalString                         ;store decimal string at DS:EDX
+                        pop     ecx                                             ;restore non-volatile regs
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Day Names
+;
+;-----------------------------------------------------------------------------------------------------------------------
+czSunday                db      "Sunday",0
+czMonday                db      "Monday",0
+czTuesday               db      "Tuesday",0
+czWednesday             db      "Wednesday",0
+czThursday              db      "Thursday",0
+czFriday                db      "Friday",0
+czSaturday              db      "Saturday",0
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Month Names
+;
+;-----------------------------------------------------------------------------------------------------------------------
+czJanuary               db      "January",0
+czFebruary              db      "February",0
+czMarch                 db      "March",0
+czApril                 db      "April",0
+czMay                   db      "May",0
+czJune                  db      "June",0
+czJuly                  db      "July",0
+czAugust                db      "August",0
+czSeptember             db      "September",0
+czOctober               db      "October",0
+czNovember              db      "November",0
+czDecember              db      "December",0
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Day Names Lookup Table
+;
+;-----------------------------------------------------------------------------------------------------------------------
+                        align   4
+tDayNames               equ     $
+                        dd      czSunday
+                        dd      czMonday
+                        dd      czTuesday
+                        dd      czWednesday
+                        dd      czThursday
+                        dd      czFriday
+                        dd      czSaturday
+EDAYNAMESTBLL           equ     ($-tDayNames)
+EDAYNAMESTBLCNT         equ     EDAYNAMESTBLL/4
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Month Names Lookup Table
+;
+;-----------------------------------------------------------------------------------------------------------------------
+                        align   4
+tMonthNames             equ     $
+                        dd      czJanuary
+                        dd      czFebruary
+                        dd      czMarch
+                        dd      czApril
+                        dd      czMay
+                        dd      czJune
+                        dd      czJuly
+                        dd      czAugust
+                        dd      czSeptember
+                        dd      czOctober
+                        dd      czNovember
+                        dd      czDecember
+EMONTHNAMESTBLL         equ     ($-tMonthNames)
+EMONTHNAMESTBLCNT       equ     EMONTHNAMESTBLL/4
 ;=======================================================================================================================
 ;
 ;       Memory Helper Routines
@@ -3757,6 +4052,7 @@ FreeMemory              push    ebx                                             
 ;       String Helper Routines
 ;
 ;       CompareMemory
+;       CopyMemory
 ;       UpperCaseString
 ;
 ;=======================================================================================================================
@@ -3798,6 +4094,38 @@ CompareMemory           push    esi                                             
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;       Routine:        CopyMemory
+;
+;       Description:    This routine copies a byte array.
+;
+;       In:             DS:EDX  first source address
+;                       DS:EBX  second source address
+;                       ECX     copy length
+;
+;-----------------------------------------------------------------------------------------------------------------------
+CopyMemory              push    ecx                                             ;save non-volatile regs
+                        push    esi                                             ;
+                        push    edi                                             ;
+                        push    es                                              ;
+;
+;       Compare byte array
+;
+                        push    ds                                              ;load data selector
+                        pop     es                                              ;... into ES register
+                        mov     esi,edx                                         ;first source address
+                        mov     edi,ebx                                         ;second source address
+                        cld                                                     ;forward strings
+                        rep     movsb                                           ;copy bytes
+;
+;       Restore and return
+;
+                        pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     esi                                             ;
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;       Routine:        UpperCaseString
 ;
 ;       Description:    This routine places all characters in the given string to upper case.
@@ -3826,27 +4154,196 @@ UpperCaseString         push    esi                                             
 ;
 ;       Console Helper Routines
 ;
-;       GetConsoleMessage
+;       FirstConsoleColumn
+;       GetConsoleChar
+;       GetConsoleString
+;       NextConsoleColumn
+;       NextConsoleRow
+;       PreviousConsoleColumn
+;       PutConsoleChar
 ;       PutConsoleHexByte
 ;       PutConsoleHexDword
 ;       PutConsoleHexWord
-;       PutConsoleOIA
+;       PutConsoleOIAChar
+;       PutConsoleOIAShift
+;       PutConsoleString
 ;       Yield
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Routine:        GetConsoleMessage
+;       Routine:        FirstConsoleColumn
 ;
-;       Description:    This routine waits for the next message to be queued.
+;       Description:    This routine resets the console column to start of the row.
 ;
-;       Out:            EAX     message params
+;       In:             DS      OS data selector
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-GetConsoleMessage.10    call    Yield                                           ;pass control or halt
-GetConsoleMessage       call    GetMessage                                      ;get the next message
-                        test    eax,eax                                         ;do we have a message?
-                        jz      GetConsoleMessage.10                            ;no, continue
+FirstConsoleColumn      xor     al,al                                           ;zero column
+                        mov     [wbConsoleColumn],al                            ;save column
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        GetConsoleChar
+;
+;       Description:    This routine waits for EMSGKEYCHAR message and return character code.
+;
+;       Out:            AL      ASCII character code
+;                       AH      keyboard scan code
+;
+;-----------------------------------------------------------------------------------------------------------------------
+GetConsoleChar.10       call    Yield                                           ;pass control or halt
+GetConsoleChar          call    GetMessage                                      ;get the next message
+                        or      eax,eax                                         ;do we have a message?
+                        jz      GetConsoleChar.10                               ;no, skip ahead
+                        push    eax                                             ;save key codes
+                        and     eax,0FFFF0000h                                  ;mask for message type
+                        cmp     eax,EMSGKEYCHAR                                 ;key-char message?
+                        pop     eax                                             ;restore key codes
+                        jne     GetConsoleChar                                  ;no, try again
+                        and     eax,0000ffffh                                   ;mask for key codes
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        GetConsoleString
+;
+;       Description:    This routine accepts keyboard input into a buffer.
+;
+;       In:             DS:EDX  target buffer address
+;                       ECX     maximum number of characters to accept
+;                       BH      echo to terminal
+;                       BL      terminating character
+;
+;-----------------------------------------------------------------------------------------------------------------------
+GetConsoleString        push    ecx                                             ;save non-volatile regs
+                        push    esi                                             ;
+                        push    edi                                             ;
+                        push    es                                              ;
+                        push    ds                                              ;load data segment selector ...
+                        pop     es                                              ;... into extra segment register
+                        mov     edi,edx                                         ;edi = target buffer
+                        push    ecx                                             ;save maximum characters
+                        xor     al,al                                           ;zero register
+                        cld                                                     ;forward strings
+                        rep     stosb                                           ;zero fill buffer
+                        pop     ecx                                             ;maximum characters
+                        mov     edi,edx                                         ;edi = target buffer
+                        mov     esi,edx                                         ;esi = target buffer
+.10                     jecxz   .50                                             ;exit if max-length is zero
+.20                     call    GetConsoleChar                                  ;al = next input char
+                        cmp     al,bl                                           ;is this the terminator?
+                        je      .50                                             ;yes, exit
+                        cmp     al,EASCIIBACKSPACE                              ;is this a backspace?
+                        jne     .30                                             ;no, skip ahead
+                        cmp     esi,edi                                         ;at start of buffer?
+                        je      .20                                             ;yes, get next character
+                        dec     edi                                             ;backup target pointer
+                        mov     byte [edi],0                                    ;zero previous character
+                        inc     ecx                                             ;increment remaining chars
+                        test    bh,1                                            ;echo to console?
+                        jz      .20                                             ;no, get next character
+                        call    PreviousConsoleColumn                           ;backup console position
+                        mov     al,EASCIISPACE                                  ;ASCII space
+                        call    PutConsoleChar                                  ;write space to console
+                        call    PlaceCursor                                     ;position the cursor
+                        jmp     .20                                             ;get next character
+.30                     cmp     al,EASCIISPACE                                  ;printable? (lower bounds)
+                        jb      .20                                             ;no, get another character
+                        cmp     al,EASCIITILDE                                  ;printable? (upper bounds)
+                        ja      .20                                             ;no, get another character
+                        stosb                                                   ;store character in buffer
+                        test    bh,1                                            ;echo to console?
+                        jz      .40                                             ;no, skip ahead
+                        call    PutConsoleChar                                  ;write character to console
+                        call    NextConsoleColumn                               ;advance console position
+                        call    PlaceCursor                                     ;position the cursor
+.40                     dec     ecx                                             ;decrement remaining chars
+                        jmp     .10                                             ;next
+.50                     xor     al,al                                           ;null
+                        stosb                                                   ;terminate buffer
+                        pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     esi                                             ;
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        NextConsoleColumn
+;
+;       Description:    This routine advances the console position one column. The columnn is reset to zero and the row
+;                       incremented if the end of the current row is reached.
+;
+;       In:             DS      OS data selector
+;
+;-----------------------------------------------------------------------------------------------------------------------
+NextConsoleColumn       mov     al,[wbConsoleColumn]                            ;current column
+                        inc     al                                              ;increment column
+                        mov     [wbConsoleColumn],al                            ;save column
+                        cmp     al,ECONCOLS                                     ;end of row?
+                        jb      .10                                             ;no, skip ahead
+                        call    FirstConsoleColumn                              ;reset column to start of row
+                        call    NextConsoleRow                                  ;line feed to next row
+.10                     ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        NextConsoleRow
+;
+;       Description:    This routine advances the console position one line. Scroll the screen one row if needed.
+;
+;       In:             DS      OS data selector
+;
+;-----------------------------------------------------------------------------------------------------------------------
+NextConsoleRow          mov     al,[wbConsoleRow]                               ;current row
+                        inc     al                                              ;increment row
+                        mov     [wbConsoleRow],al                               ;save row
+                        cmp     al,ECONROWS                                     ;end of screen?
+                        jb      .10                                             ;no, skip ahead
+                        call    ScrollConsoleRow                                ;scroll up one row
+                        mov     al,[wbConsoleRow]                               ;row
+                        dec     al                                              ;decrement row
+                        mov     [wbConsoleRow],al                               ;save row
+.10                     ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PreviousConsoleColumn
+;
+;       Description:    This routine retreats the cursor one logical column. If the cursor was at the start of a row,
+;                       the column is set to the last position in the row and the row is decremented.
+;
+;       In:             DS      OS data selector
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PreviousConsoleColumn   mov     al,[wbConsoleColumn]                            ;current column
+                        or      al,al                                           ;start of row?
+                        jnz     .10                                             ;no, skip ahead
+                        mov     ah,[wbConsoleRow]                               ;current row
+                        or      ah,ah                                           ;top of screen?
+                        jz      .20                                             ;yes, exit with no change
+                        dec     ah                                              ;decrement row
+                        mov     [wbConsoleRow],ah                               ;save row
+                        mov     al,ECONCOLS                                     ;set maximum column
+.10                     dec     al                                              ;decrement column
+                        mov     [wbConsoleColumn],al                            ;save column
+.20                     ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutConsoleChar
+;
+;       Description:    This routine writes one ASCII character to the console screen.
+;
+;       In:             AL      ASCII character
+;                       DS      OS data selector
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutConsoleChar          push    ecx                                             ;save non-volatile regs
+                        push    es                                              ;
+                        push    EGDTCGA                                         ;load CGA selector ...
+                        pop     es                                              ;... into extra segment reg
+                        mov     cl,[wbConsoleColumn]                            ;column
+                        mov     ch,[wbConsoleRow]                               ;row
+                        call    SetConsoleChar                                  ;put character at row, column
+                        pop     es                                              ;restore non-volatile regs
+                        pop     ecx                                             ;
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -3861,16 +4358,22 @@ GetConsoleMessage       call    GetMessage                                      
 ;                       ES      CGA selector
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-PutConsoleHexByte       push    eax                                             ;save non-volatile regs
+PutConsoleHexByte       push    ebx                                             ;save non-volatile regs
+                        mov     bl,al                                           ;save byte value
                         shr     al,4                                            ;hi-order nybble
-                        call    .10                                             ;make ASCII and store
-                        pop     eax                                             ;byte value
-                        and     al,0Fh                                          ;lo-order nybble
-.10                     or      al,EASCIIZERO                                   ;apply ASCII zone
-                        cmp     al,EASCIININE                                   ;numeric?
-                        jbe     .20                                             ;yes, skip ahead
+                        or      al,030h                                         ;apply ASCII zone
+                        cmp     al,03ah                                         ;numeric?
+                        jb      .10                                             ;yes, skip ahead
+                        add     al,7                                            ;add ASCII offset for alpha
+.10                     call    SetConsoleChar                                  ;display ASCII character
+                        mov     al,bl                                           ;byte value
+                        and     al,0fh                                          ;lo-order nybble
+                        or      al,30h                                          ;apply ASCII zone
+                        cmp     al,03ah                                         ;numeric?
+                        jb      .20                                             ;yes, skip ahead
                         add     al,7                                            ;add ASCII offset for alpha
 .20                     call    SetConsoleChar                                  ;display ASCII character
+                        pop     ebx                                             ;restore non-volatile regs
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -3885,12 +4388,12 @@ PutConsoleHexByte       push    eax                                             
 ;                       ES      CGA selector
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-PutConsoleHexDword      push    eax                                             ;save value
-                        shr     eax,16                                          ;high-order word
-                        call    PutConsoleHexWord                               ;display high-order word
-                        pop     eax                                             ;restore value
-                        call    PutConsoleHexWord                               ;display low-order word
-                        ret                                                     ;return
+PutConsoleHexDword      push    eax
+                        shr     eax,16
+                        call    PutConsoleHexWord
+                        pop     eax
+                        call    PutConsoleHexWord
+                        ret
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        PutConsoleHexWord
@@ -3904,47 +4407,38 @@ PutConsoleHexDword      push    eax                                             
 ;                       ES      CGA selector
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-PutConsoleHexWord       push    eax                                             ;save value
-                        shr     eax,8                                           ;high-order byte
-                        call    PutConsoleHexByte                               ;display high-order byte
-                        pop     eax                                             ;restore value
-                        call    PutConsoleHexByte                               ;display low-order byte
-                        ret                                                     ;return
+PutConsoleHexWord       push    eax
+                        shr     eax,8
+                        call    PutConsoleHexByte
+                        pop     eax
+                        call    PutConsoleHexByte
+                        ret
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Routine:        PutConsoleOIA
+;       Routine:        PutConsoleOIAChar
 ;
 ;       Description:    This routine updates the Operator Information Area (OIA).
 ;
 ;       In:             DS      OS data selector
 ;
-;       0         1         2         3         4         5         6         7
-;       01234567890123456789012345678901234567890123456789012345678901234567890123456789
-;       00112233  WSCA  XXAA                    C                         ASCW    ^CNS !
-;
 ;-----------------------------------------------------------------------------------------------------------------------
-PutConsoleOIA           push    ebx                                             ;save non-volatile regs
+PutConsoleOIAChar       push    ebx                                             ;save non-volatile regs
                         push    ecx                                             ;
                         push    esi                                             ;
+                        push    ds                                              ;
                         push    es                                              ;
-;
-;       Address OS data and video memory
-;
+                        push    EGDTOSDATA                                      ;load OS data selector ...
+                        pop     ds                                              ;... into data segment register
                         push    EGDTCGA                                         ;load CGA selector ...
                         pop     es                                              ;... into extra segment register
-;
-;       Display up to six keyboard scan codes
-;
-                        mov     esi,wsKeybData                                  ;keyboard data addr
-                        lea     esi,[esi+KEYBDATA.scan0]                        ;scan code 0
-                        xor     ebx,ebx                                         ;zero register
+                        mov     esi,wbConsoleScan0                              ;scan codes address
                         mov     bh,ECONOIAROW                                   ;OIA row
-                        xor     ecx,ecx                                         ;zero register
-                        mov     cl,4                                            ;maximum scan code count
+                        mov     bl,0                                            ;starting column
+                        mov     ecx,6                                           ;maximum scan codes
 .10                     push    ecx                                             ;save remaining count
                         mov     ecx,ebx                                         ;row, column
                         lodsb                                                   ;read scan code
-                        test    al,al                                           ;scan code present?
+                        or      al,al                                           ;scan code present?
                         jz      .20                                             ;no, skip ahead
                         call    PutConsoleHexByte                               ;display scan code
                         jmp     .30                                             ;continue
@@ -3955,141 +4449,122 @@ PutConsoleOIA           push    ebx                                             
 .30                     add     bl,2                                            ;next column (+2)
                         pop     ecx                                             ;restore remaining
                         loop    .10                                             ;next code
-;
-;       Display left shift, control, alt indicators
-;
-                        mov     esi,wsKeybData                                  ;keyboard data
-                        mov     ch,ECONOIAROW                                   ;OIA row
-                        mov     al,EASCIISPACE                                  ;ASCII space
-                        test    byte [esi+KEYBDATA.shift],EKEYFWINLEFT          ;left-windows?
-                        jz      .35                                             ;no, branch
-                        mov     al,'W'                                          ;yes, indicate with 'W'
-.35                     mov     cl,10                                           ;indicator column
-                        call    SetConsoleChar                                  ;display ASCII indicator
-                        mov     al,EASCIISPACE                                  ;space is default character
-                        test    byte [esi+KEYBDATA.shift],EKEYFSHIFTLEFT        ;left-shift?
-                        jz      .40                                             ;no, skip ahead
-                        mov     al,'S'                                          ;yes, indicate with 'S'
-.40                     mov     cl,11                                           ;indicator column
-                        call    SetConsoleChar                                  ;display ASCII character
-                        mov     al,EASCIISPACE                                  ;ASCII space
-                        test    byte [esi+KEYBDATA.shift],EKEYFCTRLLEFT         ;left-ctrl?
-                        jz      .50                                             ;no, skip ahead
-                        mov     al,'C'                                          ;yes, indicate with 'C'
-.50                     mov     cl,12                                           ;indicator column
-                        call    SetConsoleChar                                  ;display ASCII character
-                        mov     al,EASCIISPACE                                  ;ASCII space
-                        test    byte [esi+KEYBDATA.shift],EKEYFALTLEFT          ;left-alt?
-                        jz      .60                                             ;no, skip ahead
-                        mov     al,'A'                                          ;yes, indicate with 'A'
-.60                     mov     cl,13                                           ;indicator column
-                        call    SetConsoleChar                                  ;display ASCII character
-;
-;       We do not display left or right shift make or break codes even if they are stored as the final
-;       scan code because these are immediately sent after num-pad digits if both num-lock and scroll
-;       are enabled. We don not display the scan code and char code if the scan code is null.
-;
-                        mov     al,[esi+KEYBDATA.scan]                          ;final scan code
-                        test    al,al                                           ;null?
-                        jz      .65                                             ;yes, branch
-                        cmp     al,EKEYBSHIFTLDOWN                              ;left shift make?
-                        je      .65                                             ;yes, branch
-                        cmp     al,EKEYBSHIFTLUP                                ;left shift break?
-                        je      .65                                             ;yes, branch
-                        cmp     al,EKEYBSHIFTRDOWN                              ;right shift make?
-                        je      .65                                             ;yes, branch
-                        cmp     al,EKEYBSHIFTRUP                                ;right shift break?
-                        je      .65                                             ;yes, branch
-;
-;       Display scan code returned in messages.
-;
-                        mov     cl,16                                           ;column
-                        call    PutConsoleHexByte                               ;store hex byte
-                        mov     al,[esi+KEYBDATA.char]                          ;ASCII char
-                        mov     cl,18                                           ;column
-                        call    PutConsoleHexByte                               ;store hex byte
-;
-;       Display ASCII character.
-;
-.65                     mov     al,[esi+KEYBDATA.char]                          ;ASCII char
-                        cmp     al,EASCIISPACE                                  ;printable? (lower-bounds)
-                        jb      .70                                             ;no, skip ahead
-                        cmp     al,EASCIITILDE                                  ;printable? (upper-bounds)
-                        jbe     .80                                             ;yes, branch
-.70                     mov     al,EASCIISPACE                                  ;use space for non-printables
-.80                     mov     ch,bh                                           ;OIA row
+                        mov     al,[wbConsoleChar]                              ;console ASCII character
+                        cmp     al,32                                           ;printable? (lower-bounds)
+                        jb      .40                                             ;no, skip ahead
+                        cmp     al,126                                          ;printable? (upper-bounds)
+                        ja      .40                                             ;no, skip ahead
+                        mov     ch,bh                                           ;OIA row
                         mov     cl,40                                           ;character display column
                         call    SetConsoleChar                                  ;display ASCII character
-;
-;       Display right alt, control, shift indicators
-;
-                        mov     al,EASCIISPACE                                  ;ASCII space
-                        test    byte [esi+KEYBDATA.shift],EKEYFALTRIGHT         ;right-alt?
-                        jz      .90                                             ;no, skip ahead
-                        mov     al,'A'                                          ;yes, indicate with 'A'
-.90                     mov     cl,66                                           ;indicator column
-                        call    SetConsoleChar                                  ;display ASCII character
-                        mov     al,EASCIISPACE                                  ;ASCII space
-                        test    byte [esi+KEYBDATA.shift],EKEYFCTRLRIGHT        ;right-ctrl?
-                        jz      .100                                            ;no, skip ahead
-                        mov     al,'C'                                          ;yes, indicate with 'C'
-.100                    mov     cl,67                                           ;indicator column
-                        call    SetConsoleChar                                  ;display ASCII character
-                        mov     al,EASCIISPACE                                  ;ASCII space
-                        test    byte [esi+KEYBDATA.shift],EKEYFSHIFTRIGHT       ;right-shift
-                        jz      .110                                            ;no, skip ahead
-                        mov     al,'S'                                          ;yes, indicate with 'S'
-.110                    mov     cl,68                                           ;indicator column
-                        call    SetConsoleChar                                  ;display ASCII character
-                        mov     al,EASCIISPACE                                  ;ASCII space
-                        test    byte [esi+KEYBDATA.shift],EKEYFWINRIGHT         ;right-windows?
-                        jz      .115                                            ;no, branch
-                        mov     al,'W'                                          ;yes, indicate wiht 'W'
-.115                    mov     cl,69                                           ;indicator column
-                        call    SetConsoleChar                                  ;display ASCII character
-;
-;       Display Insert, Caps, Scroll and Num-Lock indicators.
-;
-                        mov     al,EASCIISPACE                                  ;ASCII space
-                        test    byte [esi+KEYBDATA.lock],EKEYFLOCKINSERT        ;insert mode?
-                        jz      .120                                            ;no, branch
-                        mov     al,EASCIICARET                                  ;indicate with a caret '^'
-.120                    mov     cl,74                                           ;indicoator column
-                        call    SetConsoleChar                                  ;display ASCII character
-                        mov     al,EASCIISPACE                                  ;ASCII space
-                        test    byte [esi+KEYBDATA.lock],EKEYFLOCKSCROLL        ;scroll-lock?
-                        jz      .130                                            ;no, skip ahead
-                        mov     al,'S'                                          ;yes, indicate with 'S'
-.130                    mov     cl,75                                           ;indicator column
-                        call    SetConsoleChar                                  ;display ASCII character
-                        mov     al,EASCIISPACE                                  ;ASCII space
-                        test    byte [esi+KEYBDATA.lock],EKEYFLOCKNUM           ;num-lock?
-                        jz      .140                                            ;no, skip ahead
-                        mov     al,'N'                                          ;yes, indicate with 'N'
-.140                    mov     cl,76                                           ;indicator column
-                        call    SetConsoleChar                                  ;display ASCII character
-                        mov     al,EASCIISPACE                                  ;ASCII space
-                        test    byte [esi+KEYBDATA.lock],EKEYFLOCKCAPS          ;caps-lock?
-                        jz      .150                                            ;no, skip ahead
-                        mov     al,'C'                                          ;yes, indicate with 'C'
-.150                    mov     cl,77                                           ;indicator column
-                        call    SetConsoleChar                                  ;display ASCII character
-;
-;       Display timeout flag.
-;
-                        mov     al,EASCIISPACE                                  ;ASCII space
-                        test    byte [esi+KEYBDATA.status],EKEYFTIMEOUT         ;keyboard timeout?
-                        jz      .155                                            ;no, branch
-                        mov     al,'!'                                          ;ASCII indicator
-.155                    mov     cl,79                                           ;indicator column
-                        call    SetConsoleChar                                  ;display ASCII character
-;
-;       Restore and return.
-;
-.160                    pop     es                                              ;restore non-volatile regs
+.40                     pop     es                                              ;restore non-volatile regs
+                        pop     ds                                              ;
                         pop     esi                                             ;
                         pop     ecx                                             ;
                         pop     ebx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutConsoleOIAShift
+;
+;       Description:    This routine updates the shift/ctrl/alt/lock indicators in the operator information area (OIA).
+;
+;       In:             BL      shift flags
+;                       BH      lock flags
+;                       DS      OS data selector
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutConsoleOIAShift      push    ecx                                             ;save non-volatile regs
+                        push    es                                              ;
+                        push    EGDTCGA                                         ;load CGA selector ...
+                        pop     es                                              ;... into ES register
+                        mov     ch,ECONOIAROW                                   ;OIA row
+                        mov     al,EASCIISPACE                                  ;space is default character
+                        test    bl,EKEYFSHIFTLEFT                               ;left-shift indicated?
+                        jz      .10                                             ;no, skip ahead
+                        mov     al,'S'                                          ;yes, indicate with 'S'
+.10                     mov     cl,14                                           ;indicator column
+                        call    SetConsoleChar                                  ;display ASCII character
+                        mov     al,EASCIISPACE                                  ;ASCII space
+                        test    bl,EKEYFSHIFTRIGHT                              ;right-shift indicated?
+                        jz      .20                                             ;no, skip ahead
+                        mov     al,'S'                                          ;yes, indicate with 'S'
+.20                     mov     cl,64                                           ;indicator column
+                        call    SetConsoleChar                                  ;display ASCII character
+                        mov     al,EASCIISPACE                                  ;ASCII space
+                        test    bl,EKEYFCTRLLEFT                                ;left-ctrl indicated?
+                        jz      .30                                             ;no, skip ahead
+                        mov     al,'C'                                          ;yes, indicate with 'C'
+.30                     mov     cl,15                                           ;indicator column
+                        call    SetConsoleChar                                  ;display ASCII character
+                        mov     al,EASCIISPACE                                  ;ASCII space
+                        test    bl,EKEYFCTRLRIGHT                               ;right-ctrl indicated?
+                        jz      .40                                             ;no, skip ahead
+                        mov     al,'C'                                          ;yes, indicate with 'C'
+.40                     mov     cl,63                                           ;indicator column
+                        call    SetConsoleChar                                  ;display ASCII character
+                        mov     al,EASCIISPACE                                  ;ASCII space
+                        test    bl,EKEYFALTLEFT                                 ;left-alt indicated?
+                        jz      .50                                             ;no, skip ahead
+                        mov     al,'A'                                          ;yes, indicate with 'A'
+.50                     mov     cl,16                                           ;indicator column
+                        call    SetConsoleChar                                  ;display ASCII character
+                        mov     al,EASCIISPACE                                  ;ASCII space
+                        test    bl,EKEYFALTRIGHT                                ;right-alt indicated?
+                        jz      .60                                             ;no, skip ahead
+                        mov     al,'A'                                          ;yes, indicate with 'A'
+.60                     mov     cl,62                                           ;indicator column
+                        call    SetConsoleChar                                  ;display ASCII character
+                        mov     al,EASCIISPACE                                  ;ASCII space
+                        test    bh,EKEYFLOCKCAPS                                ;caps-lock indicated?
+                        jz      .70                                             ;no, skip ahead
+                        mov     al,'C'                                          ;yes, indicate with 'C'
+.70                     mov     cl,78                                           ;indicator column
+                        call    SetConsoleChar                                  ;display ASCII character
+                        mov     al,EASCIISPACE                                  ;ASCII space
+                        test    bh,EKEYFLOCKNUM                                 ;num-lock indicated?
+                        jz      .80                                             ;no, skip ahead
+                        mov     al,'N'                                          ;yes, indicate with 'N'
+.80                     mov     cl,77                                           ;indicator column
+                        call    SetConsoleChar                                  ;display ASCII character
+                        mov     al,EASCIISPACE                                  ;ASCII space
+                        test    bh,EKEYFLOCKSCROLL                              ;scroll-lock indicated?
+                        jz      .90                                             ;no, skip ahead
+                        mov     al,'S'                                          ;yes, indicate with 'S'
+.90                     mov     cl,76                                           ;indicator column
+                        call    SetConsoleChar                                  ;display ASCII character
+                        pop     es                                              ;restore non-volatile regs
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutConsoleString
+;
+;       Description:    This routine writes a sequence of ASCII characters to the console until null and updates the
+;                       console position as needed.
+;
+;       In:             EDX     source address
+;                       DS      OS data selector
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutConsoleString        push    esi                                             ;save non-volatile regs
+                        mov     esi,edx                                         ;source address
+                        cld                                                     ;forward strings
+.10                     lodsb                                                   ;ASCII character
+                        or      al,al                                           ;end of string?
+                        jz      .40                                             ;yes, skip ahead
+                        cmp     al,EASCIIRETURN                                 ;carriage return?
+                        jne     .20                                             ;no, skip ahead
+                        call    FirstConsoleColumn                              ;move to start of row
+                        jmp     .10                                             ;next character
+.20                     cmp     al,EASCIILINEFEED                               ;line feed?
+                        jne     .30                                             ;no, skip ahead
+                        call    NextConsoleRow                                  ;move to next row
+                        jmp     .10                                             ;next character
+.30                     call    PutConsoleChar                                  ;output character to console
+                        call    NextConsoleColumn                               ;advance to next column
+                        jmp     .10                                             ;next character
+.40                     pop     esi                                             ;restore non-volatile regs
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -4107,6 +4582,7 @@ Yield                   sti                                                     
 ;
 ;       DecimalToUnsigned
 ;       HexadecimalToUnsigned
+;       UnsignedToDecimalString
 ;       UnsignedToHexadecimal
 ;
 ;=======================================================================================================================
@@ -4168,13 +4644,84 @@ HexadecimalToUnsigned   push    esi                                             
                         jz      .30                                             ;yes, branch
                         cmp     al,'9'                                          ;hexadecimal?
                         jna     .20                                             ;no, skip ahead
-                        sub     al,037h                                         ;'A' = 41h, less 37h = 0Ah
-.20                     and     eax,00Fh                                        ;remove ascii zone
+                        sub     al,37h                                          ;'A' = 41h, less 37h = 0Ah
+.20                     and     eax,0fh                                         ;remove ascii zone
                         shl     edx,4                                           ;previous total x 16
                         add     edx,eax                                         ;add prior value x 16
                         jmp     .10                                             ;next
 .30                     mov     eax,edx                                         ;result
                         pop     esi                                             ;restore non-volatile regs
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        UnsignedToDecimalString
+;
+;       Description:    This routine creates an ASCIIZ string representing the decimal value of 32-bit binary input.
+;
+;       Input:          BH      flags           bit 0: 1 = trim leading zeros
+;                                               bit 1: 1 = include comma grouping delimiters
+;                                               bit 4: 1 = non-zero digit found (internal)
+;                       ECX     32-bit binary
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+UnsignedToDecimalString push    ebx                                             ;save non-volatile regs
+                        push    ecx                                             ;
+                        push    edi                                             ;
+                        push    es                                              ;
+                        push    ds                                              ;load data selector
+                        pop     es                                              ;... into extra segment reg
+                        mov     edi,edx                                         ;output buffer address
+                        and     bh,00001111b                                    ;zero internal flags
+                        mov     edx,ecx                                         ;binary
+                        mov     ecx,1000000000                                  ;10^9 divisor
+                        call    .30                                             ;divide and store
+                        mov     ecx,100000000                                   ;10^8 divisor
+                        call    .10                                             ;divide and store
+                        mov     ecx,10000000                                    ;10^7 divisor
+                        call    .30                                             ;divide and store
+                        mov     ecx,1000000                                     ;10^6 divisor
+                        call    .30                                             ;divide and store
+                        mov     ecx,100000                                      ;10^5 divisor
+                        call    .10                                             ;divide and store
+                        mov     ecx,10000                                       ;10^4 divisor
+                        call    .30                                             ;divide and store
+                        mov     ecx,1000                                        ;10^3 divisor
+                        call    .30                                             ;divide and store
+                        mov     ecx,100                                         ;10^2 divisor
+                        call    .10                                             ;divide and store
+                        mov     ecx,10                                          ;10^2 divisor
+                        call    .30                                             ;divide and store
+                        mov     eax,edx                                         ;10^1 remainder
+                        call    .40                                             ;store
+                        xor     al,al                                           ;null terminator
+                        stosb
+                        pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     ecx                                             ;
+                        pop     ebx                                             ;
+                        ret                                                     ;return
+.10                     test    bh,00000010b                                    ;comma group delims?
+                        jz      .30                                             ;no, branch
+                        test    bh,00000001b                                    ;trim leading zeros?
+                        jz      .20                                             ;no, store delim
+                        test    bh,00010000b                                    ;non-zero found?
+                        jz      .30                                             ;no, branch
+.20                     mov     al,','                                          ;delimiter
+                        stosb                                                   ;store delimiter
+.30                     mov     eax,edx                                         ;lo-orer dividend
+                        xor     edx,edx                                         ;zero hi-order
+                        div     ecx                                             ;divide by power of 10
+                        test    al,al                                           ;zero?
+                        jz      .50                                             ;yes, branch
+                        or      bh,00010000b                                    ;non-zero found
+.40                     or      al,30h                                          ;ASCII zone
+                        stosb                                                   ;store digit
+                        ret                                                     ;return
+.50                     test    bh,00000001b                                    ;trim leading zeros?
+                        jz      .40                                             ;no, store and continue
+                        test    bh,00010000b                                    ;non-zero found?
+                        jnz     .40                                             ;yes, store and continue
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -4193,10 +4740,10 @@ UnsignedToHexadecimal   push    edi                                             
                         mov     cl,8                                            ;nybble count
 .10                     rol     edx,4                                           ;next hi-order nybble in bits 0-3
                         mov     al,dl                                           ;????bbbb
-                        and     al,00Fh                                         ;mask out bits 4-7
-                        or      al,EASCIIZERO                                   ;mask in ascii zone
-                        cmp     al,EASCIININE                                   ;A through F?
-                        jbe     .20                                             ;no, skip ahead
+                        and     al,0fh                                          ;mask out bits 4-7
+                        or      al,30h                                          ;mask in ascii zone
+                        cmp     al,3ah                                          ;A through F?
+                        jb      .20                                             ;no, skip ahead
                         add     al,7                                            ;41h through 46h
 .20                     stosb                                                   ;store hexnum
                         loop    .10                                             ;next nybble
@@ -4240,7 +4787,7 @@ GetMessage              push    ebx                                             
                         mov     [ebx],ecx                                       ;... in lo-order dword
                         mov     [ebx+4],ecx                                     ;... in hi-order dword
                         add     ebx,8                                           ;next queue element
-                        and     ebx,03FCh                                       ;at end of queue?
+                        and     ebx,03fch                                       ;at end of queue?
                         jnz     .10                                             ;no, skip ahead
                         mov     bl,8                                            ;reset to 1st entry
 .10                     mov     [MQHead],ebx                                    ;save new head ptr
@@ -4255,7 +4802,8 @@ GetMessage              push    ebx                                             
 ;
 ;       Description:    This routine adda a message to the message queue.
 ;
-;       In:             ECX     hi-order data word
+;       In:             EAX     message queue selector
+;                       ECX     hi-order data word
 ;                       EDX     lo-order data word
 ;
 ;       Out:            CY      0 = success
@@ -4263,7 +4811,7 @@ GetMessage              push    ebx                                             
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 PutMessage              push    ds                                              ;save non-volatile regs
-                        push    ELDTMQ                                          ;load task message queue selector ...
+                        push    eax                                             ;load task message queue selector ...
                         pop     ds                                              ;... into data segment register
                         mov     eax,[MQTail]                                    ;tail ptr
                         cmp     dword [eax],0                                   ;is queue full?
@@ -4272,7 +4820,7 @@ PutMessage              push    ds                                              
                         mov     [eax],edx                                       ;store lo-order data
                         mov     [eax+4],ecx                                     ;store hi-order data
                         add     eax,8                                           ;next queue element adr
-                        and     eax,03FCh                                       ;at end of queue?
+                        and     eax,03fch                                       ;at end of queue?
                         jnz     .10                                             ;no, skip ahead
                         mov     al,8                                            ;reset to top of queue
 .10                     mov     [MQTail],eax                                    ;save new tail ptr
@@ -4285,10 +4833,74 @@ PutMessage              push    ds                                              
 ;
 ;       These routines read and/or write directly to CGA video memory (B800:0)
 ;
+;       ClearConsoleScreen
+;       ScrollConsoleRow
 ;       SetConsoleChar
 ;       SetConsoleString
 ;
 ;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ClearConsoleScreen
+;
+;       Description:    This routine clears the console (CGA) screen.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ClearConsoleScreen      push    ecx                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    ds                                              ;
+                        push    es                                              ;
+                        push    EGDTOSDATA                                      ;load OS Data selector ...
+                        pop     ds                                              ;... into DS register
+                        push    EGDTCGA                                         ;load CGA selector ...
+                        pop     es                                              ;... into ES register
+                        mov     eax,ECONCLEARDWORD                              ;initializtion value
+                        mov     ecx,ECONROWDWORDS*(ECONROWS)                    ;double-words to clear
+                        xor     edi,edi                                         ;target offset
+                        cld                                                     ;forward strings
+                        rep     stosd                                           ;reset screen body
+                        mov     eax,ECONOIADWORD                                ;OIA attribute and space
+                        mov     ecx,ECONROWDWORDS                               ;double-words per row
+                        rep     stosd                                           ;reset OIA line
+                        xor     al,al                                           ;zero register
+                        mov     [wbConsoleRow],al                               ;reset console row
+                        mov     [wbConsoleColumn],al                            ;reset console column
+                        call    PlaceCursor                                     ;place cursor at current position
+                        pop     es                                              ;restore non-volatile regs
+                        pop     ds                                              ;
+                        pop     edi                                             ;
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ScrollConsoleRow
+;
+;       Description:    This routine scrolls the console (text) screen up one row.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ScrollConsoleRow        push    ecx                                             ;save non-volatile regs
+                        push    esi                                             ;
+                        push    edi                                             ;
+                        push    ds                                              ;
+                        push    es                                              ;
+                        push    EGDTCGA                                         ;load CGA video selector ...
+                        pop     ds                                              ;... into DS
+                        push    EGDTCGA                                         ;load CGA video selector ...
+                        pop     es                                              ;... into ES
+                        mov     ecx,ECONROWDWORDS*(ECONROWS-1)                  ;double-words to move
+                        mov     esi,ECONROWBYTES                                ;ESI = source (line 2)
+                        xor     edi,edi                                         ;EDI = target (line 1)
+                        cld                                                     ;forward strings
+                        rep     movsd                                           ;move 24 lines up
+                        mov     eax,ECONCLEARDWORD                              ;attribute and ASCII space
+                        mov     ecx,ECONROWDWORDS                               ;double-words per row
+                        rep     stosd                                           ;clear bottom row
+                        pop     es                                              ;restore non-volatile regs
+                        pop     ds                                              ;
+                        pop     edi                                             ;
+                        pop     esi                                             ;
+                        pop     ecx                                             ;
+                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        SetConsoleChar
@@ -4341,15 +4953,67 @@ SetConsoleString        push    esi                                             
 ;
 ;       These routines read and/or write directly to ports.
 ;
+;       GetBaseMemSize
+;       GetExtendedMemSize
+;       GetROMMemSize
 ;       PlaceCursor
 ;       PutPrimaryEndOfInt
 ;       PutSecondaryEndOfInt
+;       ReadRealTimeClock
 ;       ResetSystem
 ;       SetKeyboardLamps
 ;       WaitForKeyInBuffer
 ;       WaitForKeyOutBuffer
 ;
 ;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        GetBaseMemSize
+;
+;       Description:    Return the amount of base RAM as reported by the CMOS.
+;
+;       Output:         EAX     base RAM size in bytes
+;
+;-----------------------------------------------------------------------------------------------------------------------
+GetBaseMemSize          xor     eax,eax                                         ;zero register
+                        mov     al,ERTCBASERAMHI                                ;base RAM high register
+                        out     ERTCREGPORT,al                                  ;select base RAM high register
+                        in      al,ERTCDATAPORT                                 ;read base RAM high (KB)
+                        mov     ah,al                                           ;save base RAM high
+                        mov     al,ERTCBASERAMLO                                ;base RAM low register
+                        out     ERTCREGPORT,al                                  ;select base RAM low register
+                        in      al,ERTCDATAPORT                                 ;read base RAM low (KB)
+                        ret                                                     ;return to caller
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        GetExtendedMemSize
+;
+;       Description:    Return the amount of extended RAM as reported by the CMOS.
+;
+;       Output:         EAX     extended RAM size in bytes
+;
+;-----------------------------------------------------------------------------------------------------------------------
+GetExtendedMemSize      xor     eax,eax                                         ;zero register
+                        mov     al,ERTCEXTRAMHI                                 ;extended RAM high register
+                        out     ERTCREGPORT,al                                  ;select extended RAM high register
+                        in      al,ERTCDATAPORT                                 ;read extended RAM high (KB)
+                        mov     ah,al                                           ;save extended RAM high
+                        mov     al,ERTCEXTRAMLO                                 ;extended RAM low register
+                        out     ERTCREGPORT,al                                  ;select extended RAM low register
+                        in      al,ERTCDATAPORT                                 ;read extended RAM low (KB)
+                        ret                                                     ;return to caller
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        GetROMMemSize
+;
+;       Description:    Return the amount of RAM as reported by the BIOS during power-up.
+;
+;       Output:         EAX     RAM size in bytes
+;
+;-----------------------------------------------------------------------------------------------------------------------
+GetROMMemSize           xor     eax,eax                                         ;zero register
+                        mov     ax,[wwROMMemSize]                               ;memory size (KB) as returned by INT 12h
+                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        PlaceCursor
@@ -4388,7 +5052,8 @@ PlaceCursor             push    ecx                                             
 ;       Description:    This routine sends a non-specific end-of-interrupt signal to the primary PIC.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-PutPrimaryEndOfInt      mov     al,EPICEOI                                      ;non-specific end-of-interrupt
+PutPrimaryEndOfInt      sti                                                     ;enable maskable interrupts
+                        mov     al,EPICEOI                                      ;non-specific end-of-interrupt
                         out     EPICPORTPRI,al                                  ;send EOI to primary PIC
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -4398,8 +5063,79 @@ PutPrimaryEndOfInt      mov     al,EPICEOI                                      
 ;       Description:    This routine sends a non-specific end-of-interrupt signal to the secondary PIC.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-PutSecondaryEndOfInt    mov     al,EPICEOI                                      ;non-specific end-of-interrupt
+PutSecondaryEndOfInt    sti                                                     ;enable maskable interrupts
+                        mov     al,EPICEOI                                      ;non-specific end-of-interrupt
                         out     EPICPORTSEC,al                                  ;send EOI to secondary PIC
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ReadRealTimeClock
+;
+;       Description:    This routine gets current date time from the real-time clock.
+;
+;       In:             DS:EBX  DATETIME structure
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ReadRealTimeClock       push    esi                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    es                                              ;
+                        push    ds                                              ;store data selector ...
+                        pop     es                                              ;... in es register
+                        mov     edi,ebx                                         ;date-time structure
+                        mov     al,ERTCSECONDREG                                ;second register
+                        out     ERTCREGPORT,al                                  ;select second register
+                        in      al,ERTCDATAPORT                                 ;read second register
+                        cld                                                     ;forward strings
+                        stosb                                                   ;store second value
+                        mov     al,ERTCMINUTEREG                                ;minute register
+                        out     ERTCREGPORT,al                                  ;select minute register
+                        in      al,ERTCDATAPORT                                 ;read minute register
+                        stosb                                                   ;store minute value
+                        mov     al,ERTCHOURREG                                  ;hour register
+                        out     ERTCREGPORT,al                                  ;select hour register
+                        in      al,ERTCDATAPORT                                 ;read hour register
+                        stosb                                                   ;store hour value
+                        mov     al,ERTCWEEKDAYREG                               ;weekday register
+                        out     ERTCREGPORT,al                                  ;select weekday register
+                        in      al,ERTCDATAPORT                                 ;read weekday register
+                        stosb                                                   ;store weekday value
+                        mov     al,ERTCDAYREG                                   ;day register
+                        out     ERTCREGPORT,al                                  ;select day register
+                        in      al,ERTCDATAPORT                                 ;read day register
+                        stosb                                                   ;store day value
+                        mov     al,ERTCMONTHREG                                 ;month register
+                        out     ERTCREGPORT,al                                  ;select month register
+                        in      al,ERTCDATAPORT                                 ;read month register
+                        stosb                                                   ;store month value
+                        mov     al,ERTCYEARREG                                  ;year register
+                        out     ERTCREGPORT,al                                  ;select year register
+                        in      al,ERTCDATAPORT                                 ;read year register
+                        stosb                                                   ;store year value
+                        mov     al,ERTCCENTURYREG                               ;century register
+                        out     ERTCREGPORT,al                                  ;select century register
+                        in      al,ERTCDATAPORT                                 ;read century register
+                        stosb                                                   ;store century value
+                        mov     al,ERTCSTATUSREG                                ;status register
+                        out     ERTCREGPORT,al                                  ;select status register
+                        in      al,ERTCDATAPORT                                 ;read status register
+                        test    al,ERTCBINARYVALS                               ;test if values are binary
+                        jnz     .20                                             ;skip ahead if binary values
+                        mov     esi,ebx                                         ;date-time structure address
+                        mov     edi,ebx                                         ;date-time structure address
+                        mov     ecx,8                                           ;loop counter
+.10                     lodsb                                                   ;BCD value
+                        mov     ah,al                                           ;BCD value
+                        and     al,00001111b                                    ;low-order decimal zone
+                        and     ah,11110000b                                    ;hi-order decimal zone
+                        shr     ah,1                                            ;hi-order decimal * 8
+                        add     al,ah                                           ;low-order + hi-order * 8
+                        shr     ah,2                                            ;hi-order decimal * 2
+                        add     al,ah                                           ;low-order + hi-order * 10
+                        stosb                                                   ;replace BCD with binary
+                        loop    .10                                             ;next value
+.20                     pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     esi                                             ;
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -4426,23 +5162,16 @@ ResetSystem             mov     ecx,001fffffh                                   
 ;       In:             BH      00000CNS (C:Caps Lock,N:Num Lock,S:Scroll Lock)
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-SetKeyboardLamps        push    ebx                                             ;save non-volatile regs
-                        push    esi                                             ;
-                        mov     esi,wsKeybData                                  ;keyboard data addr
-                        mov     bh,[esi+KEYBDATA.lock]                          ;lock flags
-                        call    WaitForKeyInBuffer                              ;wait for input buffer ready
+SetKeyboardLamps        call    WaitForKeyInBuffer                              ;wait for input buffer ready
                         mov     al,EKEYBCMDLAMPS                                ;set/reset lamps command
                         out     EKEYBPORTDATA,al                                ;send command to 8042
                         call    WaitForKeyOutBuffer                             ;wait for 8042 result
                         in      al,EKEYBPORTDATA                                ;read 8042 'ACK' (0fah)
                         call    WaitForKeyInBuffer                              ;wait for input buffer ready
                         mov     al,bh                                           ;set/reset lamps value
-                        and     al,7                                            ;mask for lamp switches
                         out     EKEYBPORTDATA,al                                ;send lamps value
                         call    WaitForKeyOutBuffer                             ;wait for 8042 result
                         in      al,EKEYBPORTDATA                                ;read 8042 'ACK' (0fah)
-                        pop     esi                                             ;restore non-volatile regs
-                        pop     ebx                                             ;
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -4608,464 +5337,119 @@ section                 conmque                                                 
 ;                       006000  +===============================================+
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-;=======================================================================================================================
-;
-;       Console Task Routines
-;
-;       ConCode                 Console task entry point
-;       ConClearPanel           Clear the panel area of video memory to spaces
-;       ConDrawFields           Draw the panel fields to video memory
-;       ConDrawField            Draw a panel field to video memory
-;       ConPutCursor            Place the cursor at the current index into the current field
-;       ConHandlerMain          Handle attention keys on the main panel
-;       ConHandlerMem           Handle attention keys on the memory panel
-;       ConTakeToken            Extract the next token from a buffer
-;       ConDetermineCommand     Determine if a buffer value is a command
-;       ConClearField           Clear a panel field to nulls
-;       ConExit                 Handle the exit command
-;       ConFree
-;       ConInt6                 Handle the Int6 command
-;       ConMain                 Handle the main command
-;       ConMalloc
-;       ConMem                  Handle the mem command
-;
-;=======================================================================================================================
 section                 concode vstart=05000h                                   ;labels relative to 5000h
+ConCode                 call    ConInitializeData                               ;initialize console variables
+
+                        clearConsoleScreen                                      ;clear the console screen
+                        putConsoleString czTitle                                ;display startup message
+                        putConsoleString czROMMem                               ;ROM memory label
+                        putConsoleString wzROMMemSize                           ;ROM memory amount
+                        putConsoleString czKB                                   ;Kilobytes
+                        putConsoleString czNewLine                              ;new line
+                        putConsoleString czBaseMem                              ;base memory label
+                        putConsoleString wzBaseMemSize                          ;base memory size
+                        putConsoleString czKB                                   ;Kilobytes
+                        putConsoleString czNewLine                              ;new line
+                        putConsoleString czExtendedMem                          ;extended memory label
+                        putConsoleString wzExtendedMemSize                      ;extended memory size
+                        putConsoleString czKB                                   ;Kilobytes
+                        putConsoleString czNewLine                              ;new line
+.10                     putConsoleString czPrompt                               ;display input prompt
+                        placeCursor                                             ;set CRT cursor location
+                        getConsoleString wzConsoleInBuffer,79,1,13              ;accept keyboard input
+                        putConsoleString czNewLine                              ;newline
+
+                        mov     edx,wzConsoleInBuffer                           ;console input buffer
+                        mov     ebx,wzConsoleToken                              ;token buffer
+                        call    ConTakeToken                                    ;handle console input
+                        mov     edx,wzConsoleToken                              ;token buffer
+                        call    ConDetermineCommand                             ;determine command number
+                        cmp     eax,ECONJMPTBLCNT                               ;valid command number?
+                        jb      .20                                             ;yes, branch
+
+                        putConsoleString czUnknownCommand                       ;display error message
+
+                        jmp     .10                                             ;next command
+.20                     shl     eax,2                                           ;index into jump table
+                        mov     edx,tConJmpTbl                                  ;jump table base address
+                        mov     eax,[edx+eax]                                   ;command handler routine address
+                        call    eax                                             ;call command handler
+                        jmp     .10                                             ;next command
+;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Initialize console work areas to low values.
+;       Routine:        ConInitializeData
 ;
-ConCode                 mov     edi,ECONDATA                                    ;OS console data address
+;       Description:    This routine initializes console task variables.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConInitializeData       push    ecx                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    es                                              ;
+;
+;       Initialize console work areas.
+;
+                        push    EGDTOSDATA                                      ;load OS data selector ...
+                        pop     es                                              ;... into extra segment register
+                        mov     edi,ECONDATA                                    ;OS console data address
                         xor     al,al                                           ;initialization value
                         mov     ecx,ECONDATALEN                                 ;size of OS console data
                         cld                                                     ;forward strings
                         rep     stosb                                           ;initialize data
 ;
-;       Initialize the Operator Information Area (OIA).
+;       Initialize heap size
 ;
-                        push    es                                              ;save extra segment
-                        push    EGDTCGA                                         ;load CGA video selector...
-                        pop     es                                              ;...into extra segment reg
-                        mov     edi,ECONROWS*ECONROWBYTES                       ;target offset
-                        mov     eax,ECONOIADWORD                                ;OIA attribute and space
-                        mov     ecx,ECONROWDWORDS                               ;double-words per row
-                        rep     stosd                                           ;reset OIA
-                        pop     es                                              ;restore extra segment
+                        mov     eax,EKRNHEAPSIZE                                ;heap size
+                        mov     [wdConsoleHeapSize],eax                         ;set heap size
 ;
-;       Set num-lock and update lamps
-;       Display the initial OIA
+;       Initialize MEMROOT structure
 ;
-                        or      byte [wsKeybData+KEYBDATA.lock],EKEYFLOCKNUM    ;BIOS boots with num-lock on
-                        setKeyboardLamps
-                        putConsoleOIA
+                        mov     edi,wsConsoleMemRoot                            ;memory root structure address
+                        mov     eax,EKRNHEAPBASE                                ;base address of heap storage
+                        xor     ecx,ecx                                         ;zero register
+                        mov     cl,4                                            ;count
+                        rep     stosd                                           ;store first/last contig and free addrs
+                        xor     eax,eax                                         ;zero register
+                        stosd                                                   ;zero first task block
+                        stosd                                                   ;zero last task block
 ;
-;       Set the current panel to Main, clear and redraw all fields.
+;       Initialize MEMBLOCK structure at EMEMBASE
 ;
-                        call    ConMain                                         ;initialize panel
+                        mov     edi,EKRNHEAPBASE                                ;memory block structure address
+                        mov     eax,EMEMFREECODE                                ;free memory signature
+                        stosd                                                   ;store signature
+                        mov     eax,EKRNHEAPSIZE                                ;heap size
+                        stosd                                                   ;store block size
+                        xor     ecx,ecx                                         ;zero register
+                        mov     cl,6                                            ;count
+                        xor     eax,eax                                         ;zero register
+                        rep     stosd                                           ;zero owner, reserved, pointers
 ;
-;       Place the cursor at the current field index.
+;       Read memory sizes from ROM
 ;
-.10                     call    ConPutCursor                                    ;place the cursor
-;
-;       Get the next key-down message.
-;
-.20                     getConsoleMessage                                       ;get a console message
-
-                        mov     edx,eax                                         ;message and params
-                        and     edx,0FFFF0000h                                  ;mask for message
-                        cmp     edx,EMSGKEYDOWN                                 ;keydown message?
-                        jne     .20                                             ;no, next message
-;
-;       Give the message to the panel event-handler first.
-;
-                        mov     ecx,[wdConsoleHandler]                          ;handler addr?
-                        jecxz   .30                                             ;no, branch
-                        call    ecx                                             ;event handled?
-                        jc     .20                                              ;yes, next message
-;
-;       To handle the event here, we need a current field that has a buffer.
-;
-.30                     mov     ebx,[wdConsoleField]                            ;field addr
-                        test    ebx,ebx                                         ;field addr?
-                        jz      .20                                             ;no, next message
-                        mov     ecx,[ebx]                                       ;buffer addr?
-                        jecxz   .20                                             ;no, next message
-                        movzx   edx,byte [ebx+7]                                ;field index
-;
-;       Handle tab down and shift-tab down to navigate panel fields.
-;
-                        cmp     ah,EKEYBTABDOWN                                 ;tab down?
-                        jne     .100                                            ;no, branch
-                        test    byte [wsKeybData+KEYBDATA.shift],EKEYFSHIFT     ;shift?
-                        jz      .80                                             ;no, tab forward
-;
-;       Handle backward-tab.
-;
-.40                     cmp     ebx,[wdConsolePanel]                            ;at first field?
-                        jna     .50                                             ;yes, branch
-                        lea     ebx,[ebx-12]                                    ;previous field
-                        jmp     .70                                             ;branch
-.50                     mov     ebx,[wdConsolePanel]                            ;sanity check
-                        cmp     dword [ebx+12],0                                ;last field?
-                        je      .20                                             ;yes, next message (only 1 field)
-.60                     lea     ebx,[ebx+12]                                    ;next field
-                        cmp     dword [ebx+12],0                                ;last field?
-                        jne     .60                                             ;no, continue
-.70                     cmp     ebx,[wdConsoleField]                            ;back to current field?
-                        je      .20                                             ;yes, next message
-                        test    byte [ebx+11],80h                               ;input field?
-                        jz      .40                                             ;no, next field
-                        mov     [wdConsoleField],ebx                            ;set current field
-                        jmp     .10                                             ;place cursor and get message
-;
-;       Handle forward-tab.
-.80                     lea     ebx,[ebx+12]                                    ;next field addr
-                        cmp     dword [ebx],0                                   ;end of panel?
-                        jne     .90                                             ;no, branch
-                        mov     ebx,[wdConsolePanel]                            ;start of panel
-.90                     cmp     ebx,[wdConsoleField]                            ;back to current field?
-                        je      .20                                             ;yes, next message
-                        test    byte [ebx+11],80h                               ;input field?
-                        jz      .80                                             ;no, next field
-                        mov     [wdConsoleField],ebx                            ;set current field
-                        jmp     .10                                             ;place cursor and get message
-;
-;       Handle left or up arrow.
-;
-.100                    cmp     ah,EKEYBLEFTARROWDOWN                           ;left-arrow down?
-                        je      .110                                            ;yes, branch
-                        cmp     ah,EKEYBUPARROWDOWN                             ;up-arrow down?
-                        jne     .120                                            ;no, branch
-.110                    test    dl,dl                                           ;index is zero?
-                        jz      .20                                             ;yes, next message
-                        dec     byte [ebx+7]                                    ;decrement index
-                        jmp     .10                                             ;put cursor and next message
-;
-;       Handle right or down arrow.
-;
-.120                    cmp     ah,EKEYBRIGHTARROWDOWN                          ;right-arrow down?
-                        je      .130                                            ;yes, branch
-                        cmp     ah,EKEYBDOWNARROWDOWN                           ;down-arrow down?
-                        jne     .140                                            ;no, branch
-.130                    cmp     byte [ecx+edx],0                                ;end of input?
-                        je      .20                                             ;yes, next message
-                        inc     dl                                              ;increment index
-                        cmp     dl,byte [ebx+6]                                 ;end of field?
-                        jnb     .20                                             ;yes, next message
-                        mov     [ebx+7],dl                                      ;save new index
-                        jmp     .10                                             ;put cursor and next message
-;
-;       Handle backspace
-;
-.140                    cmp     ah,EKEYBBACKSPACE                               ;backspace?
-                        jne     .160                                            ;no, branch
-                        test    dl,dl                                           ;index is zero?
-                        jz      .20                                             ;yes, next message
-                        dec     byte [ebx+7]                                    ;decrement index
-                        mov     edi,ecx                                         ;buffer addr
-                        lea     edi,[edi+edx-1]                                 ;end of buffer
-                        mov     esi,edi                                         ;end of buffer
-                        inc     esi                                             ;source address
-                        cld                                                     ;forward strings
-.150                    lodsb                                                   ;character
-                        stosb                                                   ;save over previous
-                        test    al,al                                           ;end of input?
-                        jnz     .150                                            ;no, continue
-                        jmp     .170                                            ;draw field, put cursor, next message
-;
-;       Handle printables
-;
-.160                    cmp     al,EASCIISPACE                                  ;printable range? (low)
-                        jb      .20                                             ;no, next message
-                        cmp     al,EASCIITILDE                                  ;printable range? (high)
-                        ja      .20                                             ;no, next message
-                        mov     [ecx+edx],al                                    ;store char in buffer
-                        inc     dl                                              ;advance index
-                        cmp     dl,[ebx+6]                                      ;end of field?
-                        jnb     .170                                            ;yes, branch
-                        mov     [ebx+7],dl                                      ;save new index
-.170                    call    ConDrawField                                    ;redraw field
-                        jmp     .10                                             ;put cursor and get message
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConClearPanel
-;
-;       Description:    This routine clears the console panel video memory. The panel field buffer values
-;                       are not disturbed.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConClearPanel           push    ecx                                             ;save non-volatile regs
-                        push    edi                                             ;
-                        push    es                                              ;
-;
-;       Clear panel rows.
-;
-                        push    EGDTCGA                                         ;load CGA video selector...
-                        pop     es                                              ;...into extra segment reg
-                        xor     edi,edi                                         ;target offset
-                        mov     eax,ECONCLEARDWORD                              ;initialization value
-                        mov     ecx,ECONROWS*ECONROWDWORDS                      ;double-words to clear
-                        cld                                                     ;forward strings
-                        rep     stosd                                           ;reset screen body
+                        getROMMemSize                                           ;get ROM memory size
+                        mov     [wdROMMemSize],eax                              ;bytes reported by ROM
+                        mov     ecx,eax                                         ;integer param
+                        mov     edx,wzROMMemSize                                ;output buffer param
+                        mov     bh,3                                            ;no leading zeros; thousands grouping
+                        unsignedToDecimalString                                 ;build ASCIIZ decimal string
+                        getBaseMemSize                                          ;get base RAM count from CMOS
+                        mov     [wdBaseMemSize],eax                             ;save base RAM count
+                        mov     ecx,eax                                         ;integer param
+                        mov     edx,wzBaseMemSize                               ;output buffer param
+                        mov     bh,3                                            ;no leading zeros; thousands grouping
+                        unsignedToDecimalString                                 ;build ASCIIZ decimal string
+                        getExtendedMemSize                                      ;get extended RAM count from CMOS
+                        mov     [wdExtendedMemSize],eax                         ;save base RAM count
+                        mov     ecx,eax                                         ;integer param
+                        mov     edx,wzExtendedMemSize                           ;output buffer param
+                        mov     bh,3                                            ;no leading zeros; thousands grouping
+                        unsignedToDecimalString                                 ;build ASCIIZ decimal string
 ;
 ;       Restore and return.
 ;
                         pop     es                                              ;restore non-volatile regs
                         pop     edi                                             ;
                         pop     ecx                                             ;
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConDrawFields
-;
-;       Description:    This routine draws the panel fields. If there is no active input field, the first input
-;                       field of the panel is set as the active field.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConDrawFields           push    ebx                                             ;save non-volatile regs
-;
-;       Exit if no panel
-;
-                        mov     ebx,[wdConsolePanel]                            ;panel definition addr
-                        test    ebx,ebx                                         ;have panel?
-                        jz      .30                                             ;no, branch
-;
-;       Loop until end of panel
-;
-.10                     cmp     dword [ebx],0                                   ;end of panel?
-                        je      .30                                             ;yes, branch
-;
-;       If input field and we have no active field, set as active field
-;
-                        test    byte [ebx+11],80h                               ;input field?
-                        jz      .20                                             ;no, branch
-                        cmp     dword [wdConsoleField],0                        ;have active field?
-                        jne     .20                                             ;yes, branch
-                        mov     [wdConsoleField],ebx                            ;set active field
-;
-;       Draw the field and loop to the next field.
-;
-.20                     call    ConDrawField                                    ;draw field
-                        lea     ebx,[ebx+12]                                    ;next field addr
-                        jmp     .10                                             ;next field
-;
-;       Restore and return.
-;
-.30                     pop     ebx                                             ;restore non-volatile regs
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConDrawField
-;
-;       Description:    This routine draws the contents of a panel field.
-;
-;       In:             DS:EBX  field definition address
-;                               [ebx+0]         field buffer address
-;                               [ebx+4]         row (0-23)
-;                               [ebx+5]         column (0,79)
-;                               [ebx+6]         size (0-255)
-;                               [ebx+7]         cursor index (0-255)
-;                               [ebx+8]         1st selected index (0-255)
-;                               [ebx+9]         last selected index (0-255)
-;                               [ebx+10]        attribute
-;                               [ebx+11]        flags
-;                                               80h = input field
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConDrawField            push    ecx                                             ;save non-volatile regs
-                        push    esi                                             ;
-                        push    edi                                             ;
-                        push    es                                              ;
-;
-;       Exit if no field or zero size.
-;
-                        test    ebx,ebx                                         ;have field?
-                        jz      .30                                             ;no, exit
-                        movzx   ecx,byte [ebx+6]                                ;have size?
-                        jecxz   .30                                             ;no, exit
-;
-;       Address video memory.
-;
-                        push    EGDTCGA                                         ;load CGA video selector...
-                        pop     es                                              ;...into extra segment reg
-;
-;       Compute the target offset.
-;
-                        movzx   eax,byte [ebx+4]                                ;row
-                        mov     ah,ECONCOLS                                     ;columns per row
-                        mul     ah                                              ;row offset
-                        add     al,byte [ebx+5]                                 ;add column
-                        adc     ah,0                                            ;handle overflow
-                        shl     eax,1                                           ;two-bytes per column
-                        mov     edi,eax                                         ;target offset
-;
-;       Display field characters.
-;
-                        mov     ah,[ebx+10]                                     ;attribute
-                        cld                                                     ;forward strings
-                        mov     esi,[ebx]                                       ;field buffer addr
-                        test    esi,esi                                         ;have field buffer?
-                        jz      .20                                             ;no, exit
-.10                     lodsb                                                   ;field character
-                        test    al,al                                           ;end of value?
-                        jz      .20                                             ;yes, branch
-                        stosw                                                   ;store character with attribute
-                        dec     ecx                                             ;decrement remaining size
-                        jecxz   .30                                             ;exit if field full
-                        jmp     .10                                             ;next character
-;
-;       Clear the remaining field.
-;
-.20                     mov     al,EASCIISPACE                                  ;ASCII space
-                        rep     stosw                                           ;store space with attribute
-;
-;       Restore and return.
-;
-.30                     pop     es                                              ;restore non-volatile regs
-                        pop     edi                                             ;
-                        pop     esi                                             ;
-                        pop     ecx                                             ;
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConPutCursor
-;
-;       Description:    This routine places the cursor at the current index into the current field.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConPutCursor            push    ecx                                             ;save non-volatile regs
-                        mov     ecx,[wdConsoleField]                            ;current field?
-                        jecxz   .10                                             ;no, branch
-                        mov     al,[ecx+4]                                      ;field row
-                        mov     [wbConsoleRow],al                               ;set current row
-                        mov     al,[ecx+5]                                      ;field column
-                        add     al,[ecx+7]                                      ;field offset
-                        mov     [wbConsoleColumn],al                            ;set curren tcol
-                        placeCursor                                             ;place the cursor
-.10                     pop     ecx                                             ;restore non-volatile regs
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConHandlerMain
-;
-;       Description:    This routine is called to handle user input in the main console panel when a field is exited.
-;                       The event handler must set the carry flag if the event is not completely handled. In this case
-;                       the event will be forwarded to the current field.
-;
-;       In:             EAX     Message params
-;                       EDX     Message class
-;
-;       Out:            CY      1: Event handling complete
-;                               0: Event handling not complete
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConHandlerMain          push    ebx                                             ;save non-volatile regs
-;
-;       Handle enter and keypad-enter.
-;
-                        cmp     ah,EKEYBENTERDOWN                               ;enter down?
-                        je      .10                                             ;yes, branch
-                        cmp     ah,EKEYBPADENTERDOWN                            ;keypad-enter down?
-                        je      .10                                             ;yes, branch
-                        clc                                                     ;event not handled
-                        jmp     .90                                             ;branch
-;
-;       Take the first token entered.
-;
-.10                     mov     edx,wzConsoleInBuffer                           ;console input buffer addr
-                        mov     ebx,wzConsoleToken                              ;token buffer
-                        call    ConTakeToken                                    ;take first command token
-;
-;       Evaluate token.
-;
-                        mov     edx,wzConsoleToken                              ;token buffer
-                        call    ConDetermineCommand                             ;determine if this is a command
-                        cmp     eax,ECONJMPTBLCNT                               ;command number in range?
-                        jnb     .20                                             ;no, branch
-                        shl     eax,2                                           ;convert number to array offset
-                        mov     edx,tConJmpTbl                                  ;command handler address table base
-                        mov     eax,[edx+eax]                                   ;command handler address
-                        call    eax                                             ;handler command
-;
-;       Clear field.
-;
-.20                     mov     ebx,czPnlConInp                                 ;main panel input field
-                        call    ConClearField                                   ;clear the field contents
-                        call    ConDrawField                                    ;draw the field
-                        call    ConPutCursor                                    ;place the cursor
-                        stc                                                     ;event is handled
-;
-;       Restore and return.
-;
-.90                     pop     ebx                                             ;restore non-volatile regs
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConHandlerMem
-;
-;       Description:    This routine is called to handle user input in the mem console panel when a field is exited.
-;                       The event handler must set the carry flag if the event is not completely handled. In this case
-;                       the event will be forwarded to the current field.
-;
-;       In:             EAX     message params
-;
-;       Out:            CY      1: Event handling complete
-;                               0: Event handling not complete
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConHandlerMem           push    ebx                                             ;save non-volatile regs
-;
-;       Handle panel-specific input:
-;
-;       page-up:                scroll memory address back one page
-;       scroll page-up:         scroll memory address back to XXXX0000
-;       ctrl page-up:           scroll memory address back to XX000000
-;       alt page-up:            scroll memory address back to 00000000
-;
-;       page-down:              scroll memory address forward one page
-;       scroll page-down:       scroll memory address forward to XXXX0000
-;       ctrl page-down:         scroll memory address forward to XX000000
-;       alt page-down:          scroll memory address forward to FFFEFFC0
-;
-;       Handle enter and keypad-enter.
-;
-                        cmp     ah,EKEYBENTERDOWN                               ;enter down?
-                        je      .10                                             ;yes, branch
-                        cmp     ah,EKEYBPADENTERDOWN                            ;keypad-enter down?
-                        je      .10                                             ;yes, branch
-                        clc                                                     ;event not handled
-                        jmp     .90                                             ;branch
-;
-;       Take the first token from the input bufer.
-;
-.10                     mov     edx,wzConsoleInBuffer                           ;console input buffer addr
-                        mov     ebx,wzConsoleToken                              ;token buffer
-                        call    ConTakeToken                                    ;take first command token
-;
-;       Determine which command was entered.
-;
-                        mov     edx,wzConsoleToken                              ;token buffer
-                        call    ConDetermineCommand                             ;determine if this is a command
-                        cmp     eax,ECONJMPTBLCNT                               ;command number in range?
-                        jnb     .20                                             ;no, branch
-;
-;       Call the command handler.
-;
-                        shl     eax,2                                           ;convert number to array offset
-                        mov     edx,tConJmpTbl                                  ;command handler address table base
-                        mov     eax,[edx+eax]                                   ;command handler address
-                        call    eax                                             ;handler command
-;
-;       Clear and redraw the command field; place the cursor.
-;
-.20                     mov     ebx,czPnlMenuInp                                ;panel input field
-                        call    ConClearField                                   ;clear the field
-                        call    ConDrawField                                    ;draw the field
-                        call    ConPutCursor                                    ;place the cursor
-                        stc                                                     ;event is handled
-;
-;       Restore and return.
-;
-.90                     pop     ebx                                             ;restore non-volatile regs
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5085,51 +5469,33 @@ ConHandlerMem           push    ebx                                             
 ConTakeToken            push    esi                                             ;save non-volatile regs
                         push    edi                                             ;
                         push    es                                              ;
-;
-;       Address source and target; null-terminate target buffer.
-;
                         push    ds                                              ;load data segment selector ...
                         pop     es                                              ;... into extra segment reg
                         mov     esi,edx                                         ;source buffer address
                         mov     edi,ebx                                         ;target buffer address
                         mov     byte [edi],0                                    ;null-terminate target buffer
-;
-;       Trim leading space; exit if no token.
-;
                         cld                                                     ;forward strings
 .10                     lodsb                                                   ;load byte
                         cmp     al,EASCIISPACE                                  ;space?
                         je      .10                                             ;yes, continue
                         test    al,al                                           ;end of line?
                         jz      .40                                             ;yes, branch
-;
-;       Store non-spaces into target buffer.
-;
 .20                     stosb                                                   ;store byte
                         lodsb                                                   ;load byte
                         test    al,al                                           ;end of line?
                         jz      .40                                             ;no, continue
                         cmp     al,EASCIISPACE                                  ;space?
                         jne     .20                                             ;no, continue
-;
-;       Walk over spaces trailing the stored token; point to final space.
-;
 .30                     lodsb                                                   ;load byte
                         cmp     al,EASCIISPACE                                  ;space?
                         je      .30                                             ;yes, continue
                         dec     esi                                             ;pre-position
-;
-;       Null-terminate target buffer; advance remaining source bytes.
-;
 .40                     mov     byte [edi],0                                    ;terminate buffer
                         mov     edi,edx                                         ;source buffer address
 .50                     lodsb                                                   ;remaining byte
                         stosb                                                   ;move to front of buffer
                         test    al,al                                           ;end of line?
                         jnz     .50                                             ;no, continue
-;
-;       Restore and return.
-;
                         pop     es                                              ;restore non-volatile regs
                         pop     edi                                             ;
                         pop     esi                                             ;
@@ -5142,46 +5508,32 @@ ConTakeToken            push    esi                                             
 ;
 ;       input:          DS:EDX  command address
 ;
-;       output:         EAX     !ECONJMPTBLCNT = command nbr
-;                               ECONJMPTBLCNT = no match fond
+;       output:         EAX     >=0     = command nbr
+;                               0       = unknown command
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ConDetermineCommand     push    ebx                                             ;save non-volatile regs
                         push    ecx                                             ;
                         push    esi                                             ;
                         push    edi                                             ;
-;
-;       Upper-case the command; prepare to search command table.
-;
+
                         upperCaseString                                         ;upper-case string at EDX
+
                         mov     esi,tConCmdTbl                                  ;commands table
                         xor     edi,edi                                         ;intialize command number
                         cld                                                     ;forward strings
-;
-;       Exit if end of table.
-;
 .10                     lodsb                                                   ;command length
                         movzx   ecx,al                                          ;command length
                         jecxz   .20                                             ;branch if end of table
-;
-;       Compare command to table entry; exit if match.
-;
                         mov     ebx,esi                                         ;table entry address
                         add     esi,ecx                                         ;next table entry address
+
                         compareMemory                                           ;compare byte arrays at EDX, EBX
+
                         jecxz   .20                                             ;branch if equal
-;
-;       Next table element.
-;
                         inc     edi                                             ;increment command nbr
                         jmp     .10                                             ;repeat
-;
-;       Return command number or ECONJMPTBLCNT.
-;
 .20                     mov     eax,edi                                         ;command number
-;
-;       Restore and return.
-;
                         pop     edi                                             ;restore non-volatile regs
                         pop     esi                                             ;
                         pop     ecx                                             ;
@@ -5189,41 +5541,36 @@ ConDetermineCommand     push    ebx                                             
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Routine:        ConClearField
+;       Routine:        ConClear
 ;
-;       Description:    This routine clears a panel field to nulls.
-;
-;       In:             DS:EBX  panel field address
-;                       ES:     OS data segment
+;       Description:    This routine handles the CLEAR command and its CLS alias.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-ConClearField           push    ebx                                             ;save non-volatile regs
-                        push    edi                                             ;
+ConClear                clearConsoleScreen                                      ;clear console screen
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Exit if no field.
+;       Routine:        ConDate
 ;
-                        test    ebx,ebx                                         ;have field?
-                        jz      .10                                             ;no, exit
+;       Description:    This routine handles the DATE command.
 ;
-;       Reset cursor index to zero; exit if no size or no buffer.
+;-----------------------------------------------------------------------------------------------------------------------
+ConDate                 readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
+                        putDateString     wsConsoleDateTime,wzConsoleOutBuffer  ;format date string
+                        putConsoleString  wzConsoleOutBuffer                    ;write string to console
+                        putConsoleString  czNewLine                             ;write newline to console
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
 ;
-                        xor     al,al                                           ;zero register
-                        mov     byte [ebx+7],al                                 ;zero cursor index
-                        movzx   ecx,byte [ebx+6]                                ;field size?
-                        jecxz   .10                                             ;no, exit
-                        mov     edi,[ebx]                                       ;field bufer
-                        test    edi,edi                                         ;field buffer?
-                        jz      .10                                             ;no, exit
+;       Routine:        ConDay
 ;
-;       Reset field to nulls.
+;       Description:    This routine handles the DAY command.
 ;
-                        cld                                                     ;forward strings
-                        rep     stosb                                           ;clear buffer
-;
-;       Restore and return.
-;
-.10                     pop     edi                                             ;restore non-volatile regs
-                        pop     ebx                                             ;
+;-----------------------------------------------------------------------------------------------------------------------
+ConDay                  readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
+                        putDayString      wsConsoleDateTime,wzConsoleOutBuffer  ;format day string
+                        putConsoleString  wzConsoleOutBuffer                    ;write string to console
+                        putConsoleString  czNewLine                             ;write newline to console
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5259,19 +5606,22 @@ ConFree                 push    ebx                                             
                         cmp     byte [wzConsoleToken],0                         ;token found?
                         je      .10                                             ;no, branch
                         mov     edx,wzConsoleToken                              ;first param as token address
+
                         hexadecimalToUnsigned                                   ;convert string token to unsigned
+
                         test    eax,eax                                         ;valid parameter?
                         jz      .10                                             ;no, branch
 ;
 ;       Free memory block
 ;
                         freeMemory eax                                          ;free memory
+
                         cmp     eax,-1                                          ;memory freed?
                         je      .10                                             ;no, branch
 ;
 ;       Indicate memory freed
 ;
-;                        putConsoleString czOK                                   ;indicate success
+                        putConsoleString czOK                                   ;indicate success
 ;
 ;       Restore and return
 ;
@@ -5282,6 +5632,18 @@ ConFree                 push    ebx                                             
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;       Routine:        ConHour
+;
+;       Description:    This routine Handles the HOUR command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConHour                 readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
+                        putHourString     wsConsoleDateTime,wzConsoleOutBuffer  ;format hour string
+                        putConsoleString  wzConsoleOutBuffer                    ;write string to console
+                        putConsoleString  czNewLine                             ;write newline to console
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;       Routine:        ConInt6
 ;
 ;       Description:    This routine issues an interrupt 6 to exercise the interrupt handler.
@@ -5289,47 +5651,6 @@ ConFree                 push    ebx                                             
 ;-----------------------------------------------------------------------------------------------------------------------
 ConInt6                 ud2                                                     ;raise bad opcode exception
                         ret                                                     ;return (not executed)
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConMain
-;
-;       Description:    This routine sets the current panel to the main panel (CON001).
-;
-;       In:             ES:     OS data segment
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConMain                 push    ecx                                             ;save non-volatile regs
-                        push    edi                                             ;
-;
-;       Initialize panel storage areas
-;
-                        mov     edi,wzFldMenuOptn0                              ;first menu option storage
-                        xor     eax,eax                                         ;zero reg
-                        mov     al,EASCIIUNDERSCORE                             ;input placeholder
-                        xor     ecx,ecx                                         ;zero reg
-                        mov     cl,5                                            ;input field count
-                        cld                                                     ;forward strings
-                        rep     stosw                                           ;reset input fields
-;
-;       Initialize current handler, panel, field.
-;
-                        mov     eax,[cdHandlerMain]                             ;main panel handler CS-relative addr
-                        mov     [wdConsoleHandler],eax                          ;set panel handler addr
-                        mov     eax,czPnlCon001                                 ;main panel addr
-                        mov     [wdConsolePanel],eax                            ;set panel addr
-                        mov     eax,czPnlConInp                                 ;main panel command field addr
-                        mov     [wdConsoleField],eax                            ;set active field
-;
-;       Clear panel video memory and draw fields
-;
-                        call    ConClearPanel                                   ;clear panel
-                        call    ConDrawFields                                   ;draw fields
-;
-;       Restore and return.
-;
-                        pop     edi                                             ;restore non-volatile regs
-                        pop     ecx                                             ;
-                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        ConMalloc
@@ -5355,13 +5676,16 @@ ConMalloc               push    ebx                                             
                         cmp     byte [wzConsoleToken],0                         ;token found?
                         je      .10                                             ;no, branch
                         mov     edx,wzConsoleToken                              ;first param as token address
+
                         decimalToUnsigned                                       ;convert string token to unsigned
+
                         test    eax,eax                                         ;valid parameter?
                         jz      .10                                             ;no, branch
 ;
 ;       Allocate memory block
 ;
                         allocateMemory eax                                      ;allocate memory
+
                         test    eax,eax                                         ;memory allocated?
                         jz      .10                                             ;no, branch
 ;
@@ -5369,9 +5693,11 @@ ConMalloc               push    ebx                                             
 ;
                         mov     edx,wzConsoleOutBuffer                          ;output buffer address
                         mov     ecx,eax                                         ;memory address
+
                         unsignedToHexadecimal                                   ;convert memory address to hex
-;                        putConsoleString wzConsoleOutBuffer                     ;display memory address
-;                        call    ConPutNewLine                                   ;display new line
+                        putConsoleString wzConsoleOutBuffer                     ;display memory address
+                        putConsoleString czNewLine                              ;display new line
+
 .10                     pop     edi                                             ;restore non-volatile regs
                         pop     esi                                             ;
                         pop     ecx                                             ;
@@ -5383,17 +5709,14 @@ ConMalloc               push    ebx                                             
 ;
 ;       Description:    This routine handles the MEMORY command and its MEM alias.
 ;
-;       In:             ES:     OS data segment
-;
-;                       wzConsoleInBuffer contains parameter(s)
+;       Input:          wzConsoleInBuffer contains parameter(s)
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ConMem                  push    ebx                                             ;save non-volatile regs
-                        push    ecx                                             ;
                         push    esi                                             ;
                         push    edi                                             ;
 ;
-;       Update the source address if a parameter is given.
+;                       update the source address if a parameter is given
 ;
                         mov     edx,wzConsoleInBuffer                           ;console input buffer address (params)
                         mov     ebx,wzConsoleToken                              ;console command token address
@@ -5401,255 +5724,446 @@ ConMem                  push    ebx                                             
                         cmp     byte [wzConsoleToken],0                         ;token found?
                         je      .10                                             ;no, branch
                         mov     edx,wzConsoleToken                              ;first param as token address
+
                         hexadecimalToUnsigned                                   ;convert string token to unsigned
+
                         mov     [wdConsoleMemBase],eax                          ;save console memory address
 ;
-;       Initialize panel storage areas.
+;                       setup source address and row count
 ;
-.10                     mov     edi,wzFldMenuOptn0                              ;first menu option storage
-                        xor     eax,eax                                         ;zero reg
-                        mov     al,EASCIIUNDERSCORE                             ;input placeholder
-                        xor     ecx,ecx                                         ;zero reg
-                        mov     cl,20                                           ;input field count
-                        cld                                                     ;forward strings
-                        rep     stosw                                           ;reset input fields
-;
-;       Setup source address and row count.
-;
-                        mov     esi,[wdConsoleMemBase]                          ;source memory address
+.10                     mov     esi,[wdConsoleMemBase]                          ;source memory address
                         xor     ecx,ecx                                         ;zero register
-                        mov     cl,20                                           ;row count
-                        mov     ebx,wzConsoleMemBuf0                            ;output buffer address
+                        mov     cl,16                                           ;row count
 ;
-;       Start the row with the source address in hexadecimal.
+;                       start the row with the source address in hexadecimal
 ;
 .20                     push    ecx                                             ;save remaining rows
-                        mov     edi,ebx                                         ;output buffer address
+                        mov     edi,wzConsoleOutBuffer                          ;output buffer address
                         mov     edx,edi                                         ;output buffer address
                         mov     ecx,esi                                         ;console memory address
+
                         unsignedToHexadecimal                                   ;convert unsigned address to hex string
+
                         add     edi,8                                           ;end of memory addr hexnum
-                        mov     al,EASCIISPACE                                  ;ascii space delimiter
+                        mov     al,' '                                          ;ascii space
                         stosb                                                   ;store delimiter
 ;
-;       Output 16 ASCII hexadecimal byte values for the row.
+;                       output 16 ASCII hexadecimal byte values for the row
 ;
                         xor     ecx,ecx                                         ;zero register
                         mov     cl,16                                           ;loop count
 .30                     push    ecx                                             ;save loop count
-                        mov     al,EASCIISPACE                                  ;ascii space
-                        stosb                                                   ;store delimiter
                         lodsb                                                   ;memory byte
                         mov     ah,al                                           ;memory byte
                         shr     al,4                                            ;high-order in bits 3-0
-                        or      al,EASCIIZERO                                   ;apply ascii numeric zone
-                        cmp     al,EASCIININE                                   ;numeric range?
-                        jbe     .40                                             ;yes, skip ahead
+                        or      al,30h                                          ;apply ascii numeric zone
+                        cmp     al,3ah                                          ;numeric range?
+                        jb      .40                                             ;yes, skip ahead
                         add     al,7                                            ;adjust ascii for 'A'-'F'
 .40                     stosb                                                   ;store ascii hexadecimal of high-order
                         mov     al,ah                                           ;low-order in bits 3-0
                         and     al,0fh                                          ;mask out high-order bits
-                        or      al,EASCIIZERO                                   ;apply ascii numeric zone
-                        cmp     al,EASCIININE                                   ;numeric range?
-                        jbe     .50                                             ;yes, skip ahead
+                        or      al,30h                                          ;apply ascii numeric zone
+                        cmp     al,3ah                                          ;numeric range?
+                        jb      .50                                             ;yes, skip ahead
                         add     al,7                                            ;adjust ascii for 'A'-'F'
 .50                     stosb                                                   ;store ascii hexadecimal of low-order
+                        mov     al,' '                                          ;ascii space
+                        stosb                                                   ;store ascii space delimiter
                         pop     ecx                                             ;loop count
                         loop    .30                                             ;next
 ;
-;       Output printable ASCII character section for the row.
+;                       output printable ASCII character section for the row
 ;
-                        mov     al,EASCIISPACE                                  ;ascii space
-                        stosb                                                   ;store delimiter
-                        stosb                                                   ;store delimiter
                         sub     esi,16                                          ;reset source pointer
                         mov     cl,16                                           ;loop count
 .60                     lodsb                                                   ;source byte
-                        cmp     al,EASCIISPACE                                  ;printable? (low-range test)
+                        cmp     al,32                                           ;printable? (low-range test)
                         jb      .70                                             ;no, skip ahead
-                        cmp     al,EASCIITILDE                                  ;printable? (high-range test)
-                        jbe     .80                                             ;yes, skip ahead
-.70                     mov     al,EASCIISPACE                                  ;display space instead of printable
+                        cmp     al,128                                          ;printable? (high-range test)
+                        jb      .80                                             ;yes, skip ahead
+.70                     mov     al,' '                                          ;display space instead of printable
 .80                     stosb                                                   ;store printable ascii byte
                         loop    .60                                             ;next source byte
-                        xor     al,al                                           ;zero reg
-                        stosb                                                   ;null-terminate buffer
+                        xor     al,al                                           ;nul-terminator
+                        stosb                                                   ;terminate output line
 ;
-;       Display constructed output buffer and newline.
+;                       display constructed output buffer and newline
 ;
-                        add     ebx,68                                          ;next contiguous output buffer addr
+                        putConsoleString wzConsoleOutBuffer                     ;display constructed output
+                        putConsoleString czNewLine                              ;display new line
 ;
-;       Repeat until all lines displayed and preserve source address.
+;                       repeat until all lines displayed and preserve source address
 ;
                         pop     ecx                                             ;remaining rows
                         loop    .20                                             ;next row
                         mov     [wdConsoleMemBase],esi                          ;update console memory address
-;
-;       Update the handler, panel and field identifiers.
-;
-                        mov     eax,[cdHandlerMem]                              ;mem panel handler
-                        mov     [wdConsoleHandler],eax                          ;set panel handler addr
-                        mov     eax,czPnlMem001                                 ;initial console panel
-                        mov     [wdConsolePanel],eax                            ;set panel template addr
-                        mov     eax,czPnlMenuInp                                ;menu panel command field addr
-                        mov     [wdConsoleField],eax                            ;set active field
-;
-;       Clear and redraw the panel.
-;
-                        call    ConClearPanel                                   ;clear the panel
-                        call    ConDrawFields                                   ;draw panel fields
-;
-;       Restore and return.
-;
-                        pop     edi                                             ;restore non-volatile regs
+                        pop     edi                                             ;restore regs
                         pop     esi                                             ;
-                        pop     ecx                                             ;
                         pop     ebx                                             ;
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Constants
+;       Routine:        ConMinute
+;
+;       Description:    This routine Handles the MINUTE command.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-cdHandlerMain           dd      ConHandlerMain - ConCode                        ;main panel code segment offset
-cdHandlerMem            dd      ConHandlerMem - ConCode                         ;memory panel code segment offset
+ConMinute               readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
+                        putMinuteString   wsConsoleDateTime,wzConsoleOutBuffer  ;format minute string
+                        putConsoleString  wzConsoleOutBuffer                    ;write string to console
+                        putConsoleString  czNewLine                             ;write newline to console
+                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Panels
+;       Routine:        ConMonth
 ;
-;       Notes:          1.      Each field MUST have an address of a constant or an input field.
-;                       2.      The constant text or input field MUST be at least the length of the field.
-;                       3.      Field constant text or field values MUST be comprised of printable characters.
+;       Description:    This routine Handles the MONTH command.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-                                                                                ;---------------------------------------
-                                                                                ;  Main Panel
-                                                                                ;---------------------------------------
-czPnlCon001             dd      czFldPnlIdCon001                                ;field text
-                        db      0,0,6,0,0,0,7,0                                 ;row col siz ndx 1st nth atr flg
-                        dd      czFldTitleCon001
-                        db      0,33,14,0,0,0,7,0
-                        dd      czFldDatTmCon001
-                        db      0,63,17,0,0,0,7,0
-                        dd      wzFldMenuOptn0
-                        db      2,1,1,0,0,0,2,80h
-                        dd      czFldLblMainDevices
-                        db      2,4,7,0,0,0,7,0
-                        dd      wzFldMenuOptn1
-                        db      3,1,1,0,0,0,2,80h
-                        dd      czFldLblMainMemory
-                        db      3,4,6,0,0,0,7,0
-                        dd      wzFldMenuOptn2
-                        db      4,1,1,0,0,0,2,80h
-                        dd      czFldLblMainNetwork
-                        db      4,4,7,0,0,0,7,0
-                        dd      wzFldMenuOptn3
-                        db      5,1,1,0,0,0,2,80h
-                        dd      czFldLblMainStorage
-                        db      5,4,7,0,0,0,7,0
-                        dd      wzFldMenuOptn4
-                        db      6,1,1,0,0,0,2,80h
-                        dd      czFldLblMainSystem
-                        db      6,4,6,0,0,0,7,0
-                        dd      czFldPrmptCon001
-                        db      23,0,1,0,0,0,7,0
-czPnlConInp             dd      wzConsoleInBuffer
-                        db      23,1,79,0,0,0,7,80h
-                        dd      0                                               ;end of panel
-                                                                                ;---------------------------------------
-                                                                                ;  Memory Display Panel
-                                                                                ;---------------------------------------
-czPnlMem001             dd      czFldPnlIdMem001
-                        db      0,0,6,0,0,0,7,0
-                        dd      czFldTitleMem001
-                        db      0,33,14,0,0,0,7,0
-                        dd      czFldDatTmCon001
-                        db      0,63,17,0,0,0,7,0
-                        dd      wzFldMenuOptn0
-                        db      2,1,1,0,0,0,2,80h
-                        dd      wzConsoleMemBuf0
-                        db      2,4,75,0,0,0,7,0
-                        dd      wzFldMenuOptn1
-                        db      3,1,1,0,0,0,2,80h
-                        dd      wzConsoleMemBuf1
-                        db      3,4,75,0,0,0,7,0
-                        dd      wzFldMenuOptn2
-                        db      4,1,1,0,0,0,2,80h
-                        dd      wzConsoleMemBuf2
-                        db      4,4,75,0,0,0,7,0
-                        dd      wzFldMenuOptn3
-                        db      5,1,1,0,0,0,2,80h
-                        dd      wzConsoleMemBuf3
-                        db      5,4,75,0,0,0,7,0
-                        dd      wzFldMenuOptn4
-                        db      6,1,1,0,0,0,2,80h
-                        dd      wzConsoleMemBuf4
-                        db      6,4,75,0,0,0,7,0
-                        dd      wzFldMenuOptn5
-                        db      7,1,1,0,0,0,2,80h
-                        dd      wzConsoleMemBuf5
-                        db      7,4,75,0,0,0,7,0
-                        dd      wzFldMenuOptn6
-                        db      8,1,1,0,0,0,2,80h
-                        dd      wzConsoleMemBuf6
-                        db      8,4,75,0,0,0,7,0
-                        dd      wzFldMenuOptn7
-                        db      9,1,1,0,0,0,2,80h
-                        dd      wzConsoleMemBuf7
-                        db      9,4,75,0,0,0,7,0
-                        dd      wzFldMenuOptn8
-                        db      10,1,1,0,0,0,2,80h
-                        dd      wzConsoleMemBuf8
-                        db      10,4,75,0,0,0,7,0
-                        dd      wzFldMenuOptn9
-                        db      11,1,1,0,0,0,2,80h
-                        dd      wzConsoleMemBuf9
-                        db      11,4,75,0,0,0,7,0
-                        dd      wzFldMenuOptnA
-                        db      12,1,1,0,0,0,2,80h
-                        dd      wzConsoleMemBufA
-                        db      12,4,75,0,0,0,7,0
-                        dd      wzFldMenuOptnB
-                        db      13,1,1,0,0,0,2,80h
-                        dd      wzConsoleMemBufB
-                        db      13,4,75,0,0,0,7,0
-                        dd      wzFldMenuOptnC
-                        db      14,1,1,0,0,0,2,80h
-                        dd      wzConsoleMemBufC
-                        db      14,4,75,0,0,0,7,0
-                        dd      wzFldMenuOptnD
-                        db      15,1,1,0,0,0,2,80h
-                        dd      wzConsoleMemBufD
-                        db      15,4,75,0,0,0,7,0
-                        dd      wzFldMenuOptnE
-                        db      16,1,1,0,0,0,2,80h
-                        dd      wzConsoleMemBufE
-                        db      16,4,75,0,0,0,7,0
-                        dd      wzFldMenuOptnF
-                        db      17,1,1,0,0,0,2,80h
-                        dd      wzConsoleMemBufF
-                        db      17,4,75,0,0,0,7,0
-                        dd      wzFldMenuOptn10
-                        db      18,1,1,0,0,0,2,80h
-                        dd      wzConsoleMemBuf10
-                        db      18,4,75,0,0,0,7,0
-                        dd      wzFldMenuOptn11
-                        db      19,1,1,0,0,0,2,80h
-                        dd      wzConsoleMemBuf11
-                        db      19,4,75,0,0,0,7,0
-                        dd      wzFldMenuOptn12
-                        db      20,1,1,0,0,0,2,80h
-                        dd      wzConsoleMemBuf12
-                        db      20,4,75,0,0,0,7,0
-                        dd      wzFldMenuOptn13
-                        db      21,1,1,0,0,0,2,80h
-                        dd      wzConsoleMemBuf13
-                        db      21,4,75,0,0,0,7,0
-                        dd      czFldPrmptCon001
-                        db      23,0,1,0,0,0,7,0
-czPnlMenuInp            dd      wzConsoleInBuffer
-                        db      23,1,79,0,0,0,7,80h
-                        dd      0                                               ;end of panel
+ConMonth                readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
+                        putMonthString    wsConsoleDateTime,wzConsoleOutBuffer  ;format month string
+                        putConsoleString  wzConsoleOutBuffer                    ;write string to console
+                        putConsoleString  czNewLine                             ;write newline to console
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConMonthName
+;
+;       Description:    This routine Handles the MONTH.NAME command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConMonthName            readRealTimeClock  wsConsoleDateTime                    ;read RTC data into structure
+                        putMonthNameString wsConsoleDateTime,wzConsoleOutBuffer ;format month name string
+                        putConsoleString   wzConsoleOutBuffer                   ;write string to console
+                        putConsoleString   czNewLine                            ;write newline to console
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConPCIProbe
+;
+;       Description:    This routine handles the PCIProbe command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConPCIProbe             push    ebx                                             ;save non-volatile regs
+;
+;                       initialize variables
+;
+                        xor     al,al                                           ;zero register
+                        mov     [wbConsolePCIBus],al                            ;initialize bus
+                        mov     [wbConsolePCIDevice],al                         ;initialize device
+                        mov     [wbConsolePCIFunction],al                       ;initialize function
+;
+;                       construct PCI selector
+;
+.10                     mov     ah,[wbConsolePCIBus]                            ;AH = bbbb bbbb
+                        mov     dl,[wbConsolePCIDevice]                         ;DL = ???d dddd
+                        shl     dl,3                                            ;DL = dddd d000
+                        mov     al,[wbConsolePCIFunction]                       ;AL = ???? ?fff
+                        and     al,007h                                         ;AL = 0000 0fff
+                        or      al,dl                                           ;AL = dddd dfff
+                        movzx   eax,ax                                          ;0000 0000 0000 0000 bbbb bbbb dddd dfff
+                        shl     eax,8                                           ;0000 0000 bbbb bbbb dddd dfff 0000 0000
+                        or      eax,80000000h                                   ;1000 0000 bbbb bbbb dddd dfff 0000 0000
+                        mov     [wdConsolePCISelector],eax                      ;save selector
+;
+;                       read PCI data register
+;
+                        mov     dx,0cf8h                                        ;register port
+                        out     dx,eax                                          ;select device
+                        mov     dx,0cfch                                        ;data port
+                        in      eax,dx                                          ;read register data
+                        mov     [wdConsolePCIData],eax                          ;save data
+;
+;                       interpret PCI data value and display finding
+;
+                        cmp     eax,0ffffffffh                                  ;not defined?
+                        je      .20                                             ;yes, branch
+                        mov     edx,wzConsoleToken                              ;output buffer
+                        call    ConBuildPCIIdent                                ;build PCI bus, device, function ident
+
+                        putConsoleString wzConsoleToken                         ;display bus as decimal
+
+                        call    ConInterpretPCIData                             ;update flags based on data
+
+                        putConsoleString czSpace
+                        putConsoleString [wdConsolePCIVendorStr]
+                        putConsoleString czSpace
+                        putConsoleString [wdConsolePCIChipStr]
+                        putConsoleString czNewLine                              ;display new line
+;
+;                       step to next function, device, bus
+;
+.20                     inc     byte [wbConsolePCIFunction]                     ;next function
+                        cmp     byte [wbConsolePCIFunction],8                   ;at limit?
+                        jb      .10                                             ;no, continue
+                        mov     byte [wbConsolePCIFunction],0                   ;zero function
+                        inc     byte [wbConsolePCIDevice]                       ;next device
+                        cmp     byte [wbConsolePCIDevice],32                    ;at limit?
+                        jb      .10                                             ;no, continue
+                        mov     byte [wbConsolePCIDevice],0                     ;zero device
+                        inc     byte [wbConsolePCIBus]                          ;next bus
+                        cmp     byte [wbConsolePCIBus],0                        ;at limit?
+                        jb      .10                                             ;no, continue
+
+                        jmp     .30
+
+;
+;                       report if ethernet adapter found
+;
+                        test    byte [wbConsoleHWFlags],EHWETHERNET             ;ethernet h/w switch set?
+                        jz      .30                                             ;branch if no
+
+                        putConsoleString czEthernetAdapterFound                 ;report adapter found
+;
+;                       read base address register 0 at offset 10h
+;
+                        mov     eax,[wdConsoleEthernetDevice]                   ;adapter PCI selector
+                        or      eax,10h                                         ;set function bits
+                        mov     dx,0cf8h                                        ;register port
+                        out     dx,eax                                          ;select register
+                        mov     dx,0cfch                                        ;data port
+                        in      eax,dx                                          ;register data
+                        mov     [wdConsoleEthernetMem],eax                      ;save ethernet memory mapped i/o addr
+;
+;                       report base address register 0 value
+;
+                        mov     ecx,eax                                         ;unsigned integer param
+                        mov     edx,wzConsoleToken                              ;target buffer address
+
+                        unsignedToHexadecimal                                   ;convert unsigned to ASCII hex string
+                        putConsoleString wzConsoleToken                         ;output string to console
+                        putConsoleString czNewLine                              ;output newline to console
+;
+;                       read base address register 2 at offset 18h
+;
+                        mov     eax,[wdConsoleEthernetDevice]                   ;adapter PCI selector
+                        or      eax,18h                                         ;set function bits
+                        mov     dx,0cf8h                                        ;register port
+                        out     dx,eax                                          ;select register
+                        mov     dx,0cfch                                        ;data port
+                        in      eax,dx                                          ;register data
+                        and     al,0feh                                         ;clear bit zero
+                        mov     [wdConsoleEthernetPort],eax                     ;save ethernet i/o port
+;
+;                       report base address register 2 value
+;
+                        mov     ecx,eax                                         ;unsigned integer param
+                        mov     edx,wzConsoleToken                              ;target buffer address
+
+                        unsignedToHexadecimal                                   ;convert unsigned to ASCII hex string
+                        putConsoleString wzConsoleToken                         ;output string to console
+                        putConsoleString czNewLine                              ;output newline to console
+;
+;                       read ethernet control register using port i/o
+;
+                        mov     eax,[wdConsoleEthernetPort]                     ;ethernet i/o port
+                        mov     dx,ax                                           ;ethernet i/o port
+                        xor     eax,eax                                         ;control register (zero)
+                        out     dx,eax                                          ;select register
+                        add     dx,4                                            ;data register
+                        in      eax,dx                                          ;read register data
+                        mov     [wdConsoleEthernetCtrl],eax                     ;save ethernet control register value
+;
+;                       report adapter control register value
+;
+                        mov     ecx,eax                                         ;unsigned integer param
+                        mov     edx,wzConsoleToken                              ;target buffer address
+
+                        unsignedToHexadecimal                                   ;convert unsigned to ASCII hex string
+                        putConsoleString wzConsoleToken                         ;output string to console
+                        putConsoleString czNewLine                              ;output newline to console
+
+.30                     pop     ebx                                             ;restore non-volatile regs
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConBuildPCIIdent
+;
+;       Description:    This routine constructs a PCI identification string from the current PCI Bus, Device, and
+;                       Function code values.
+;
+;       In:             DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConBuildPCIIdent        push    edi                                             ;save non-volatile regs
+                        mov     edi,edx                                         ;output buffer address
+                        mov     al,[wbConsolePCIBus]                            ;current PCI bus (0-255)
+                        xor     ah,ah                                           ;zero high-order dividend
+                        mov     cl,100                                          ;divisor (10^2)
+                        div     cl                                              ;AL=100's, AH=bus MOD 100
+                        or      al,30h                                          ;apply ASCII zone
+                        cld                                                     ;forward strings
+                        stosb                                                   ;store 100's digit
+                        mov     al,ah                                           ;bus MOD 100
+                        xor     ah,ah                                           ;zero high-order dividend
+                        mov     cl,10                                           ;divisor (10^1)
+                        div     cl                                              ;AL=10's, AH=1's
+                        or      ax,3030h                                        ;apply ASCII zone
+                        stosw                                                   ;store 10's and 1's
+                        mov     al,EASCIIPERIOD                                 ;ASCII period delimiter
+                        stosb                                                   ;store delimiter
+                        mov     al,[wbConsolePCIDevice]                         ;current PCI device (0-15)
+                        xor     ah,ah                                           ;zero high order dividend
+                        mov     cl,10                                           ;divisor (10^1)
+                        div     cl                                              ;AL=10's, AH=1's
+                        or      ax,3030h                                        ;apply ASCII zone
+                        stosw                                                   ;store 10's and 1's
+                        mov     al,EASCIIPERIOD                                 ;ASCII period delimiter
+                        stosb                                                   ;store delimiter
+                        mov     al,[wbConsolePCIFunction]                       ;current PCI function (0-7)
+                        or      al,30h                                          ;apply ASCII zone
+                        stosb                                                   ;store 1's
+                        xor     al,al                                           ;null terminator
+                        stosb                                                   ;store terminator
+                        pop     edi                                             ;restore non-volatile regs
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConInterpretPCIData
+;
+;       Description:    This routine interprets the PCI vendor and device IDs.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConInterpretPCIData     mov     eax,czApple
+                        cmp     word [wwConsolePCIVendor],EPCIVENDORAPPLE       ;Apple?
+                        jne     .10                                             ;no, branch
+                        mov     edx,czUSBController
+                        cmp     word [wwConsolePCIChip],EPCIAPPLEUSB            ;USB?
+                        je      .80                                             ;yes, branch
+                        mov     edx,czOther                                     ;other
+                        jmp     .80                                             ;continue
+.10                     mov     eax,czIntel                                     ;Intel
+                        cmp     word [wwConsolePCIVendor],EPCIVENDORINTEL       ;Intel?
+                        jne     .20                                             ;no, branch
+                        mov     edx,czPro1000MT                                 ;Pro/1000 MT
+                        cmp     word [wwConsolePCIChip],EPCIINTELPRO1000MT      ;Pro/1000 MT?
+                        je      .80                                             ;yes, branch
+                        mov     edx,czPCIAndMem                                 ;PCI and Memory
+                        cmp     word [wwConsolePCIChip],EPCIINTELPCIMEM         ;PCI and Memory?
+                        je      .80                                             ;yes, branch
+                        mov     edx,czAurealAD1881                              ;Aureal 1881 SOUNDMAX
+                        cmp     word [wwConsolePCIChip],EPCIINTELAD1881         ;Aureal 1881 SOUNDMAX?
+                        je      .80                                             ;yes, branch
+                        mov     edx,czPIIX3PCItoIDEBridge                       ;PIIX3 PCI-to-IDE Bridge
+                        cmp     word [wwConsolePCIChip],EPCIINTELPIIX3          ;PIIX3 PCI-to-IDE Bridge?
+                        je      .80                                             ;yes, branch
+                        mov     edx,cz82371ABBusMaster                          ;82371AB Bus Master
+                        cmp     word [wwConsolePCIChip],EPCIINTEL82371AB        ;82371AB Bus Master?
+                        je      .80                                             ;yes, branch
+                        mov     edx,czPIIX4PowerMgmt                            ;PIIX4/4E/4M Power Mgmt Controller
+                        cmp     word [wwConsolePCIChip],EPCIINTELPIIX4          ;PIIX4/4E/4M Power Mgmt Controller?
+                        je      .80                                             ;yes, branch
+                        mov     edx,czOther                                     ;other
+                        jmp     .80                                             ;continue
+.20                     mov     eax,czOracle                                    ;Oracle
+                        cmp     word [wwConsolePCIVendor],EPCIVENDORORACLE      ;Oracle?
+                        jne     .30                                             ;no, branch
+                        mov     edx,czVirtualBoxGA                              ;VirtulaBox Graphics Adapter
+                        cmp     word [wwConsolePCIChip],EPCIORACLEVBOXGA        ;VirtualBox Graphics Adapter?
+                        je      .80                                             ;yes, branch
+                        mov     edx,czVirtualBoxDevice                          ;VirtualBox Device
+                        cmp     word [wwConsolePCIChip],EPCIORACLEVBOXDEVICE    ;VirtualBox Device?
+                        je      .80                                             ;yes, branch
+                        mov     edx,czOther                                     ;other
+                        jmp     .80                                             ;continue
+.30                     mov     eax,czOther                                     ;other
+                        mov     edx,czOther                                     ;other
+.80                     mov     [wdConsolePCIVendorStr],eax                     ;save vendor string
+                        mov     [wdConsolePCIChipStr],edx                       ;save chip string
+                        cmp     word [wwConsolePCIChip],EPCIINTELPRO1000MT      ;Pro/1000 MT Ethernet Adapter
+                        jne     .90                                             ;no, branch
+                        or      byte [wbConsoleHWFlags],EHWETHERNET             ;ethernet adapter found
+                        mov     eax,[wdConsolePCISelector]                      ;PCI selector
+                        mov     [wdConsoleEthernetDevice],eax                   ;save as ethernet device selector
+.90                     ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConSecond
+;
+;       Description:    This routine Handles the SECOND command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConSecond               readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
+                        putSecondString   wsConsoleDateTime,wzConsoleOutBuffer  ;format second string
+                        putConsoleString  wzConsoleOutBuffer                    ;write string to console
+                        putConsoleString  czNewLine                             ;write newline to console
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConTime
+;
+;       Description:    This routine Handles the TIME command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConTime                 readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
+                        putTimeString     wsConsoleDateTime,wzConsoleOutBuffer  ;format time string
+                        putConsoleString  wzConsoleOutBuffer                    ;write string to console
+                        putConsoleString  czNewLine                             ;write newline to console
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConVersion
+;
+;       Description:    This routine handles the VERSION command and its alias, VER.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConVersion              putConsoleString czTitle                                ;display version message
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConWeekday
+;
+;       Description:    This routine handles the WEEKDAY command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConWeekday              readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
+                        putWeekdayString  wsConsoleDateTime,wzConsoleOutBuffer  ;format weekday string
+                        putConsoleString  wzConsoleOutBuffer                    ;write string to console
+                        putConsoleString  czNewLine                             ;write newline to console
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConWeekdayName
+;
+;       Description:    This routine Handles the WEEKDAY.NAME command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConWeekdayName          readRealTimeClock    wsConsoleDateTime                          ;read RTC data into structure
+                        putWeekdayNameString wsConsoleDateTime,wzConsoleOutBuffer       ;format day name string
+                        putConsoleString     wzConsoleOutBuffer                         ;write string to console
+                        putConsoleString     czNewLine                                  ;write newline to console
+                        ret                                                             ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConYear
+;
+;       Description:    This routine Handles the YEAR command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConYear                 readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
+                        putYearString     wsConsoleDateTime,wzConsoleOutBuffer  ;format year string
+                        putConsoleString  wzConsoleOutBuffer                    ;write string to console
+                        putConsoleString  czNewLine                             ;write newline to console
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConYearIsLeap
+;
+;       Description:    This routine handles the YEAR.ISLEAP command
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConYearIsLeap           readRealTimeClock wsConsoleDateTime                     ;read RTC data into structure
+                        isLeapYear        wsConsoleDateTime                     ;indicate if year is leap year
+
+                        jecxz   .10                                             ;branch if not leap
+
+                        putConsoleString  czYearIsLeap                          ;display year is leap message
+
+                        jmp     .20                                             ;continue
+
+.10                     putConsoleString  czYearIsNotLeap                       ;display year is not leap mesage
+.20                     ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Tables
@@ -5659,60 +6173,289 @@ czPnlMenuInp            dd      wzConsoleInBuffer
                                                                                 ;  Command Jump Table
                                                                                 ;---------------------------------------
 tConJmpTbl              equ     $                                               ;command jump table
+                        dd      ConWeekdayName  - ConCode                       ;weekday.name command routine offset
+                        dd      ConYearIsLeap   - ConCode                       ;year.isleap command routine offset
+                        dd      ConMonthName    - ConCode                       ;month.name command routine offset
+                        dd      ConPCIProbe     - ConCode                       ;pciprobe command routine offset
                         dd      ConExit         - ConCode                       ;shutdown command routine offset
+                        dd      ConVersion      - ConCode                       ;version command routine offset
+                        dd      ConWeekday      - ConCode                       ;weekday command routine offset
                         dd      ConMalloc       - ConCode                       ;malloc command routine offset
                         dd      ConMem          - ConCode                       ;memory command routine offset
+                        dd      ConMinute       - ConCode                       ;minute command routine offset
+                        dd      ConSecond       - ConCode                       ;second command routine offset
+                        dd      ConClear        - ConCode                       ;clear command routine offset
+                        dd      ConPCIProbe     - ConCode                       ;lspci command routine offset
+                        dd      ConMonth        - ConCode                       ;month command routine offset
+                        dd      ConDate         - ConCode                       ;date command routine offset
                         dd      ConExit         - ConCode                       ;exit command routine offset
                         dd      ConFree         - ConCode                       ;free command routine offset
+                        dd      ConHour         - ConCode                       ;hour command routine offset
                         dd      ConInt6         - ConCode                       ;int6 command routine offset
-                        dd      ConMain         - ConCode                       ;main command routine offset
                         dd      ConExit         - ConCode                       ;quit command routine offset
+                        dd      ConTime         - ConCode                       ;time command routine offset
+                        dd      ConYear         - ConCode                       ;year command routine offset
+                        dd      ConClear        - ConCode                       ;cls command routine offset
+                        dd      ConDay          - ConCode                       ;day command routine offset
                         dd      ConMem          - ConCode                       ;mem command routine offset
+                        dd      ConVersion      - ConCode                       ;ver command routine offset
 ECONJMPTBLL             equ     ($-tConJmpTbl)                                  ;table length
 ECONJMPTBLCNT           equ     ECONJMPTBLL/4                                   ;table entries
                                                                                 ;---------------------------------------
                                                                                 ;  Command Name Table
                                                                                 ;---------------------------------------
 tConCmdTbl              equ     $                                               ;command name table
+                        db      13,"WEEKDAY.NAME",0                             ;weekday.name command
+                        db      12,"YEAR.ISLEAP",0                              ;year.isleap command
+                        db      11,"MONTH.NAME",0                               ;month.name command
+                        db      9,"PCIPROBE",0                                  ;pciprobe command
                         db      9,"SHUTDOWN",0                                  ;shutdown command
+                        db      8,"VERSION",0                                   ;version command
+                        db      8,"WEEKDAY",0                                   ;weekday command
                         db      7,"MALLOC",0                                    ;malloc command
                         db      7,"MEMORY",0                                    ;memory command
+                        db      7,"MINUTE",0                                    ;minute command
+                        db      7,"SECOND",0                                    ;second command
+                        db      6,"CLEAR",0                                     ;clear command
+                        db      6,"LSPCI",0                                     ;lspci command (pciprobe alias)
+                        db      6,"MONTH",0                                     ;month command
+                        db      5,"DATE",0                                      ;date command
                         db      5,"EXIT",0                                      ;exit command
                         db      5,"FREE",0                                      ;free command
+                        db      5,"HOUR",0                                      ;hour command
                         db      5,"INT6",0                                      ;int6 command
-                        db      5,"MAIN",0                                      ;main command
                         db      5,"QUIT",0                                      ;quit command
+                        db      5,"TIME",0                                      ;time command
+                        db      5,"YEAR",0                                      ;year command
+                        db      4,"CLS",0                                       ;cls command
+                        db      4,"DAY",0                                       ;day command
                         db      4,"MEM",0                                       ;mem command
+                        db      4,"VER",0                                       ;ver command
                         db      0                                               ;end of table
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Strings
+;       Constants
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-czFldPnlIdCon001        db      "CON001",0                                      ;main console panel id
-czFldTitleCon001        db      "OS Version 1.0",0                              ;main console panel title
-czFldDatTmCon001        db      "DD-MMM-YYYY HH:MM",0                           ;panel date and time template
-czFldPrmptCon001        db      ":",0                                           ;command prompt
-czFldPnlIdMem001        db      "MEM001",0                                      ;memory panel id
-czFldTitleMem001        db      "Memory Display",0                              ;memory panel title
-czFldMenuOptn001        db      "_",0                                           ;menu option
-czFldLblMainDevices     db      "Devices",0                                     ;main panel devices label
-czFldLblMainMemory      db      "Memory",0                                      ;main panel memory label
-czFldLblMainNetwork     db      "Network",0                                     ;main panel network label
-czFldLblMainStorage     db      "Storage",0                                     ;main panel storage label
-czFldLblMainSystem      db      "System",0                                      ;main panel system label
+czApple                 db      "Apple",0                                       ;vendor name string
+czAurealAD1881          db      "Aureal AD1881 SOUNDMAX",0                      ;soundmax string
+czBaseMem               db      "Base memory: ",0                               ;base memory from BIOS
+czEthernetAdapterFound  db      "Ethernet adapter found",13,10,0                ;adapter found message
+czExtendedMem           db      "Extended memory: ",0                           ;extended memory from BIOS
+czIntel                 db      "Intel",0                                       ;vendor name string
+czKB                    db      "KB",0                                          ;Kilobytes
+czNewLine               db      13,10,0                                         ;new line string
+czOK                    db      "ok",13,10,0                                    ;ok string
+czOracle                db      "Oracle",0                                      ;vendor name string
+czOther                 db      "Other",0                                       ;default name string
+czPCIAndMem             db      "PCI & Memory",0                                ;PCI and Memory string
+czPeriod                db      ".",0                                           ;period delimiter
+czPIIX3PCItoIDEBridge   db      "PIIX3 PCI-to-ISA Bridge",0                     ;pci-to-isa bridge string
+czPIIX4PowerMgmt        db      "PIIX4/4E/4M Power Management Controller",0     ;power management controller string
+czPrompt                db      ":",0                                           ;prompt string
+czPro1000MT             db      "Pro/1000 MT Ethernet Adapter",0                ;Intel Pro/1000 MT Ethernet adapter strg
+czROMMem                db      "Base memory below EBDA (Int 12h): ",0          ;memory reported by ROM
+czSpace                 db      " ",0                                           ;space delimiter
+czTitle                 db      "Custom Operating System 1.0",13,10,0           ;version string
+czUnknownCommand        db      "Unknown command",13,10,0                       ;unknown command response string
+czUSBController         db      "USB Controller",0                              ;USB controller string
+czVirtualBoxDevice      db      "VirtualBox Device",0                           ;Virtual Box device string
+czVirtualBoxGA          db      "VirtualBox Graphics Adapter",0                 ;Virtual Box graphics adapter string
+czYearIsLeap            db      "The year is a leap year.",13,10,0              ;leap year message
+czYearIsNotLeap         db      "The year is not a leap year.",13,10,0          ;not leap year message
+cz82371ABBusMaster      db      "82371AB/EB PCI Bus Master IDE Controller",0    ;bus-master strin
+                        times   4096-($-$$) db 0h                               ;zero fill to end of section
+;=======================================================================================================================
+;
+;       Background Task                                                         @disk: 009600   @mem: 006000
+;
+;       This task executes monitoring and self-correcting functions.
+;
+;                       000000  +-----------------------------------------------+
+;                               |  Real Mode Interrupt Vectors                  |
+;                       000400  +-----------------------------------------------+ DS,ES:0400
+;                               |  Reserved BIOS Memory Area                    |
+;                       000800  +-----------------------------------------------+ DS,ES:0800
+;                               |  Shared Kernel Memory Area                    |
+;                       001000  +-----------------------------------------------+               <-- GDTR
+;                               |  Global Descriptor Table (GDT)                |
+;                       001800  +-----------------------------------------------+               <-- IDTR
+;                               |  Interrupt Descriptor Table (IDT)             |
+;                       002000  +-----------------------------------------------+
+;                               |  Interrupt Handlers                           |
+;                               |  Kernel Function Library                      |
+;                       004000  +===============================================+
+;                               |  Console Task Stack Area                      |
+;                       004700  +-----------------------------------------------+
+;                               |  Console Task Local Descriptor Table (LDT)    |
+;                       004780  +-----------------------------------------------+
+;                               |  Console Task Task State Segment (TSS)        |
+;                       004800  +-----------------------------------------------+
+;                               |  Console Task Message Queue                   |
+;                       005000  +-----------------------------------------------+
+;                               |  Console Task Code                            |
+;                               |  Console Task Constants                       |
+;                       006000  +===============================================+
+;                               |  Background Task Stack Area                   |
+;       SS:SP --------> 006700  +-----------------------------------------------+ SS:0700       <-- LDTR = GDT.SEL 0060h
+;                               |  Background Task Local Descriptor Table (LDT) |
+;                       006780  +-----------------------------------------------+               <-- TR = GDT.SEL 0068h
+;                               |  Background Task Task State Segment (TSS)     |
+;                       006800  +-----------------------------------------------+
+;                               |  Background Task Message Queue                |
+;       CS,CS:IP -----> 007000  +-----------------------------------------------+ CS:0000
+;                               |  Background Task Code                         |
+;                               |  Background Task Constants                    |
+;                       008000  +===============================================+
+;
+;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Background Task Stack                                                   @disk: 009600   @mem:  006000
+;
+;       This is the stack for the background task. It supports 448 nested calls.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+section                 bgstack                                                 ;background task stack
+                        times   1792-($-$$) db 0h                               ;zero fill to end of section
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Background Task Local Descriptor Table                                  @disk: 009D00   @mem:  006700
+;
+;       This is the LDT for the background task. It defines the stack, code, data and queue segments as well as data
+;       aliases for the TSS LDT. Data aliases allow inspection and altering of the TSS and LDT. This LDT can hold up to
+;       16 descriptors. Six are initially defined.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+section                 bgldt                                                   ;background task local descriptors
+                        dq      004093006780007Fh                               ;04 TSS alias           128B  @ 6780
+                        dq      004093006700007Fh                               ;0C LDT alias           128B  @ 6700
+                        dq      00409300600006FFh                               ;14 stack               1792B @ 6600
+                        dq      00CF93000000FFFFh                               ;1C data                4GB   @ 0000
+                        dq      00409B0070000FFFh                               ;24 code                4KB   @ 7000
+                        dq      00409300680007FFh                               ;2C message queue       2KB   @ 6800
+                        times   128-($-$$) db 0h                                ;zero fill to end of section
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Background Task State Segment                                           @disk: 009D80   @mem:  006780
+;
+;       This is the TSS for the console task. All rings share the same stack. DS and ES are set to the console data
+;       segment. CS to console code.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+section                 bgtss                                                   ;background task state segment
+                        dd      0                                               ;00 back-link tss
+                        dd      0700h                                           ;04 esp ring 0
+                        dd      0014h                                           ;08 ss ring 0
+                        dd      0700h                                           ;0C esp ring 1
+                        dd      0014h                                           ;10 es ring 1
+                        dd      0700h                                           ;14 esp ring 2
+                        dd      0014h                                           ;18 ss ring 2
+                        dd      0                                               ;1C cr ring 3
+                        dd      0                                               ;20 eip
+                        dd      0200h                                           ;24 eflags
+                        dd      0                                               ;28 eax
+                        dd      0                                               ;2C ecx
+                        dd      0                                               ;30 edx
+                        dd      0                                               ;34 ebx
+                        dd      0700h                                           ;38 esp ring 3
+                        dd      0                                               ;3C ebp
+                        dd      0                                               ;40 esi
+                        dd      0                                               ;44 edi
+                        dd      001Ch                                           ;48 es
+                        dd      0024h                                           ;4C cs
+                        dd      0014h                                           ;50 ss ring 3
+                        dd      001Ch                                           ;54 ds
+                        dd      0                                               ;58 fs
+                        dd      0                                               ;5c gs
+                        dd      EGDTBACKGROUNDLDT                               ;60 ldt selector in gdt
+                        times   128-($-$$) db 0h                                ;zero fill to end of section
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Background Task Message Queue                                           @disk: 009E00   @mem: 006800
+;
+;       The console message queue is 2048 bytes of memory organized as a queue of 510 double words (4 bytes each) and
+;       two double word values that act as indices. The queue is a FIFO that is fed by the keyboard hardware interrupt
+;       handler and consumed by a service routine called from a task. Each queue entry defines an input (keystroke)
+;       event.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+section                 bgmque                                                  ;console message queue
+                        dd      8                                               ;head pointer
+                        dd      8                                               ;tail pointer
+                        times   510 dd 0                                        ;queue elements
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Background Task Code                                                    @disk: 00A600   @mem: 007000
+;
+;-----------------------------------------------------------------------------------------------------------------------
+section                 bgcode  vstart=07000h                                   ;labels relative to 7000h
+BackgroundCode          call    BgInitializeData                                ;initialize the background variables
+
+.10                     readRealTimeClock wsBgDateTime                          ;read real-time clock data
+                        putTimeString     wsBgDateTime,wzBgTime                 ;create ASCII time string
+                        compareMemory     wzBgTime,wzBgTimeCmpr,EBGTIMELEN      ;compare to previous time string
+
+                        jecxz   .10                                             ;repeat if equal
+                        push    es                                              ;save non-volatile reg
+                        push    EGDTCGA                                         ;load CGA selector ...
+                        pop     es                                              ;... into extra segment reg
+                        mov     esi,wzBgTime                                    ;string address
+                        mov     ch,24                                           ;OIA row
+                        mov     cl,67                                           ;OIA column
+
+                        setConsoleString                                        ;display string
+
+                        pop     es                                              ;restore non-volatile reg
+
+                        copyMemory        wzBgTime,wzBgTimeCmpr,EBGTIMELEN      ;copy to comparison string
+                        yield                                                   ;halt until interrupt
+
+                        jmp     .10                                             ;continue
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        BgInitializeData
+;
+;       Description:    This routine initializes background task variables.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+BgInitializeData        push    ecx                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    es                                              ;
+;
+;       Initialize console work areas
+;
+                        push    EGDTOSDATA                                      ;load OS data selector ...
+                        pop     es                                              ;... into extra segment register
+                        mov     edi,EBGDATA                                     ;OS console data address
+                        xor     al,al                                           ;initialization value
+                        mov     ecx,EBGDATALEN                                  ;size of OS console data
+                        cld                                                     ;forward strings
+                        rep     stosb                                           ;initialize data
+;
+;       Restore and return
+;
+                        pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Background Task Constants
+;
+;-----------------------------------------------------------------------------------------------------------------------
                         times   4096-($-$$) db 0h                               ;zero fill to end of section
 %endif
 %ifdef BUILDDISK
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Free Disk Space                                                         @disk: 009600   @mem:  n/a
+;       Free Disk Space                                                         @disk: 00B600   @mem:  n/a
 ;
 ;       Following the convention introduced by DOS, we use the value 'F6' to indicate unused floppy disk storage.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 unused                                                  ;unused disk space
-                        times   EBOOTDISKBYTES-09600h db 0F6h                   ;fill to end of disk image
+                        times   EBOOTDISKBYTES-0B600h db 0F6h                   ;fill to end of disk image
 %endif
 ;=======================================================================================================================
 ;

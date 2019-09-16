@@ -4,8 +4,8 @@
 ;
 ;       Project:        os.013
 ;
-;       Description:    In this sample, the console task is expanded to add a "pciprobe" command that searches the
-;                       system for PCI expansion BIOS.
+;       Description:    In this sample, the console task is expanded to support reading the real-time clock and new
+;                       "date" and "time" and other related commands.
 ;
 ;       Revised:        July 4, 2018
 ;
@@ -158,7 +158,6 @@
 ;       Standards-Based Values
 ;
 ;       EASCII...       American Standard Code for Information Interchange (ASCII) values
-;       EPCI...         Peripheral Component Interconnect (PCI) values
 ;
 ;       Operating System Values
 ;
@@ -363,7 +362,6 @@ EASCIILINEFEED          equ     00Ah                                            
 EASCIIRETURN            equ     00Dh                                            ;carriage return
 EASCIIESCAPE            equ     01Bh                                            ;escape
 EASCIISPACE             equ     020h                                            ;space
-EASCIIPERIOD            equ     02Eh                                            ;period
 EASCIIUPPERA            equ     041h                                            ;'A'
 EASCIIUPPERZ            equ     05Ah                                            ;'Z'
 EASCIILOWERA            equ     061h                                            ;'a'
@@ -377,27 +375,6 @@ EASCIIBORDSGLLWRRGT     equ     0D9h                                            
 EASCIIBORDSGLUPRLFT     equ     0DAh                                            ;upper-left single border
 EASCIICASE              equ     00100000b                                       ;case bit
 EASCIICASEMASK          equ     11011111b                                       ;case mask
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Peripheral Component Interconnect (PCI)                                 EPCI...
-;
-;-----------------------------------------------------------------------------------------------------------------------
-EPCIPORTCONFIGADDRHI    equ     00Ch                                            ;PCI configuration address port hi-order
-EPCIPORTCONFIGADDRLO    equ     0F8h                                            ;PCI configuration address port lo-order
-EPCIPORTCONFIGDATAHI    equ     00Ch                                            ;PCI configuration data port hi-order
-EPCIPORTCONFIGDATALO    equ     0FCh                                            ;PCI configuration data port lo-order
-EPCIVENDORAPPLE         equ     0106Bh                                          ;Apple
-EPCIVENDORINTEL         equ     08086h                                          ;Intel
-EPCIVENDORORACLE        equ     080EEh                                          ;Oracle
-EPCIAPPLEUSB            equ     0003Fh                                          ;USB Controller
-EPCIINTELPRO1000MT      equ     0100Fh                                          ;Pro/1000 MT Ethernet Adapter
-EPCIINTELPCIMEM         equ     01237h                                          ;PCI & Memory
-EPCIINTELAD1881         equ     02415h                                          ;Aureal AD1881 SOUNDMAX
-EPCIINTELPIIX3          equ     07000h                                          ;PIIX3 PCI-to-ISA Bridge (Triton II)
-EPCIINTEL82371AB        equ     07111h                                          ;82371AB/EB PCI Bus Master IDE Cntrlr
-EPCIINTELPIIX4          equ     07113h                                          ;PIIX4/4E/4M Power Mgmt Cntrlr
-EPCIORACLEVBOXGA        equ     0BEEFh                                          ;VirtualBox Graphics Adapter
-EPCIORACLEVBOXDEVICE    equ     0CAFEh                                          ;VirtualBox Device
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Operating System Values
@@ -551,26 +528,6 @@ MQData                  resd    254                                             
 endstruc
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       PCI
-;
-;       The PCI structure defines a PCI bus, device and function context.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-struc                   PCI
-.bus                    resb    1                                               ;bus identifier (00-FF)
-.device                 resb    1                                               ;device identifier (00-1F)
-.function               resb    1                                               ;function identifer (0-7)
-.register               resb    1                                               ;register identifier (00-FF)
-.selector               resd    1                                               ;1000 0000 bbbb bbbb dddd dfff rrrr rrrr
-.configdata             equ     $                                               ;data read from port 0CFCh
-.configdata_lo          resw    1                                               ;low-order data
-.configdata_hi          resw    1                                               ;high-order data
-.vendorstr              resd    1                                               ;vendor name const string addr
-.chipstr                resd    1                                               ;chip name const string addr
-EPCILEN                 equ     ($-.configdata)
-endstruc
-;-----------------------------------------------------------------------------------------------------------------------
-;
 ;       OSDATA
 ;
 ;       The OSDATA structure maps low-memory addresses used by the BIOS and the OS. Areas that may be in use by DOS or
@@ -710,10 +667,8 @@ wzConsoleOutBuffer      resb    80                                              
 wzBaseMemSize           resb    11                                              ;CMOS base memory bytes     zz,zzz,zz9\0
 wzROMMemSize            resb    11                                              ;ROM base memory bytes      zz,zzz,zz9\0
 wzExtendedMemSize       resb    11                                              ;CMOS extended memory bytes zz,zzz,zz9\0
-wzConsolePCIIdent       resb    9                                               ;PCI ident zzz.zz.z\0
 wsConsoleMemRoot        resb    EMEMROOTLEN                                     ;kernel base memory map
 wsConsoleDateTime       resb    EDATETIMELEN                                    ;date-time buffer
-wsConsolePCI            resb    EPCILEN                                         ;PCI context
 ECONDATALEN             equ     ($-ECONDATA)                                    ;size of console data area
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5311,116 +5266,6 @@ ConPutNewLine           putConsoleString czNewLine                              
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Routine:        ConInitPCIContext
-;
-;       Description:    This routine initializes a PCI structure.
-;
-;       In:             DS:EBX  PCI structure address
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConInitPCIContext       push    ecx                                             ;save non-volatile regs
-                        push    edi                                             ;
-                        push    es                                              ;
-;
-;       Zero context.
-;
-                        push    ds                                              ;load data segment...
-                        pop     es                                              ;...into extra segment
-                        mov     edi,ebx                                         ;PCI structure offset
-                        mov     ecx,EPCILEN                                     ;PCI structure length
-                        xor     al,al                                           ;zero
-                        cld                                                     ;forward strings
-                        rep     stosb                                           ;zero structure members
-;
-;       Restore and return.
-;
-                        pop     es                                              ;restore non-volatile regs
-                        pop     edi                                             ;
-                        pop     ecx                                             ;
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConBuildPCISelector
-;
-;       Description:    This routine sets the selector member of a PCI based on the bus, device and function.
-;
-;       In:             DS:EBX  PCI structure address
-;
-;       Out:            EAX     bus, device, function, register selector
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConBuildPCISelector     mov     ah,[ebx+PCI.bus]                                ;AH = bbbb bbbb
-                        mov     dl,[ebx+PCI.device]                             ;DL = ???d dddd
-                        shl     dl,3                                            ;DL = dddd d000
-                        mov     al,[ebx+PCI.function]                           ;AL = ???? ?fff
-                        and     al,007h                                         ;AL = 0000 0fff
-                        or      al,dl                                           ;AL = dddd dfff
-                        movzx   eax,ax                                          ;0000 0000 0000 0000 bbbb bbbb dddd dfff
-                        shl     eax,8                                           ;0000 0000 bbbb bbbb dddd dfff 0000 0000
-                        mov     al,[ebx+PCI.register]                           ;0000 0000 bbbb bbbb dddd dfff rrrr rrrr
-                        or      eax,080000000h                                  ;1000 0000 bbbb bbbb dddd dfff rrrr rrrr
-                        mov     [ebx+PCI.selector],eax                          ;set selector
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConReadPCIConfigData
-;
-;       Description:    This routine reads PCI configuration data from the register indicated by the selector.
-;
-;       In:             DS:EBX  PCI structure address
-;
-;       Out:            EAX     config data
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConReadPCIConfigData    mov     dh,EPCIPORTCONFIGADDRHI                         ;PCI configuration address port hi-order
-                        mov     dl,EPCIPORTCONFIGADDRLO                         ;PCI configuration address port lo-order
-                        mov     eax,[ebx+PCI.selector]                          ;PCI selector
-                        out     dx,eax                                          ;select bus, device, function, reg
-                        mov     dh,EPCIPORTCONFIGDATAHI                         ;PCI configuraiton data port hi-order
-                        mov     dl,EPCIPORTCONFIGDATALO                         ;PCI configuration data port lo-order
-                        in      eax,dx                                          ;read register
-                        mov     [ebx+PCI.configdata],eax                        ;set configdata
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConNextPCIFunction
-;
-;       Description:    This routine increments the function of the device.
-;
-;       In:             DS:EBX  PCI structure address
-;
-;       Out:            CY      0 = overflow
-;                               1 = no overflow, continue
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConNextPCIFunction      inc     byte [ebx+PCI.function]                         ;next function
-                        cmp     byte [ebx+PCI.function],8                       ;at limit?
-                        jb      .10                                             ;no, continue
-                        mov     byte [ebx+PCI.function],0                       ;zero function
-.10                     ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConNextPCIDevice
-;
-;       Description:    This routine increments the device of the PCI across buses.
-;
-;       In:             DS:EBX  PCI structure address
-;
-;       Out:            CY      0 = overflow
-;                               1 = no overflow, continue
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConNextPCIDevice        inc     byte [ebx+PCI.device]                           ;next device
-                        cmp     byte [ebx+PCI.device],32                        ;at limit?
-                        jb      .10                                             ;no, continue
-                        mov     byte [ebx+PCI.device],0                         ;zero device
-                        inc     byte [ebx+PCI.bus]                              ;next bus
-                        cmp     byte [ebx+PCI.bus],8                            ;at limit?
-                        jb      .10                                             ;no, continue
-                        mov     byte [ebx+PCI.bus],0                            ;zero bus
-.10                     ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
 ;       Routine:        ConTakeToken
 ;
 ;       Description:    This routine extracts the next token from the given source buffer.
@@ -5792,173 +5637,6 @@ ConMonthName            readRealTimeClock  wsConsoleDateTime                    
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Routine:        ConPCIProbe
-;
-;       Description:    This routine handles the PCIProbe command.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConPCIProbe             push    ebx                                             ;save non-volatile regs
-;
-;       Initialize variables.
-;       Construct PCI selector.
-;       Read PCI configuration data.
-;
-                        mov     ebx,wsConsolePCI                                ;PCI structure address
-                        call    ConInitPCIContext                               ;initialize PCI struct
-.10                     call    ConBuildPCISelector                             ;build the PCI selector
-                        call    ConReadPCIConfigData                            ;read the configuration data
-;
-;       Interpret PCI data value and display finding.
-;
-                        cmp     eax,-1                                          ;function defined?
-                        jne     .20                                             ;yes, branch
-                        cmp     byte [ebx+PCI.function],0                       ;function zero?
-                        je      .40                                             ;yes, skip to next device
-                        jmp     short .30                                       ;no, skip to next function
-;
-;       Build PCI identifying string.
-;       Write identifying string to console.
-;       Determine the vendor and chip.
-;       Write vendor and chip to console.
-;
-.20                     mov     edx,wzConsolePCIIdent                           ;output buffer
-                        call    ConBuildPCIIdent                                ;build PCI bus, device, function ident
-                        call    ConInterpretPCIData                             ;update flags based on data
-                        putConsoleString wzConsolePCIIdent                      ;display bus as decimal
-                        putConsoleString czSpace                                ;space delimiter
-                        putConsoleString [ebx+PCI.vendorstr]                    ;display vendor string
-                        putConsoleString czSpace                                ;space delimiter
-                        putConsoleString [ebx+PCI.chipstr]                      ;display chip string
-                        call    ConPutNewLine                                   ;display new line
-;
-;       Next function.
-;
-.30                     call    ConNextPCIFunction                              ;next function
-                        jb      .10                                             ;continue if no overflow
-;
-;       Next device, bus.
-;
-.40                     call    ConNextPCIDevice                                ;next device, bus
-                        jb      .10                                             ;continue if no overflow
-;
-;       Restore and return.
-;
-                        pop     ebx                                             ;restore non-volatile regs
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConBuildPCIIdent
-;
-;       Description:    This routine constructs a PCI identification string from the current PCI Bus, Device, and
-;                       Function code values.
-;
-;       In:             DS:EBX  PCI structure address
-;                       DS:EDX  output buffer address 999.99.9\0
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConBuildPCIIdent        push    edi                                             ;save non-volatile regs
-                        push    es                                              ;
-;
-;       Establish addressability
-;
-                        push    ds                                              ;load data segment...
-                        pop     es                                              ;...into extra segment reg
-;
-;       Build identifier string (bus.device.function)
-;
-                        mov     edi,edx                                         ;output buffer address
-                        mov     al,[ebx+PCI.bus]                                ;current PCI bus (0-255)
-                        xor     ah,ah                                           ;zero high-order dividend
-                        mov     cl,100                                          ;divisor (10^2)
-                        div     cl                                              ;AL=100's, AH=bus MOD 100
-                        or      al,30h                                          ;apply ASCII zone
-                        cld                                                     ;forward strings
-                        stosb                                                   ;store 100's digit
-                        mov     al,ah                                           ;bus MOD 100
-                        xor     ah,ah                                           ;zero high-order dividend
-                        mov     cl,10                                           ;divisor (10^1)
-                        div     cl                                              ;AL=10's, AH=1's
-                        or      ax,3030h                                        ;apply ASCII zone
-                        stosw                                                   ;store 10's and 1's
-                        mov     al,EASCIIPERIOD                                 ;ASCII period delimiter
-                        stosb                                                   ;store delimiter
-                        mov     al,[ebx+PCI.device]                             ;current PCI device (0-15)
-                        xor     ah,ah                                           ;zero high order dividend
-                        mov     cl,10                                           ;divisor (10^1)
-                        div     cl                                              ;AL=10's, AH=1's
-                        or      ax,3030h                                        ;apply ASCII zone
-                        stosw                                                   ;store 10's and 1's
-                        mov     al,EASCIIPERIOD                                 ;ASCII period delimiter
-                        stosb                                                   ;store delimiter
-                        mov     al,[ebx+PCI.function]                           ;current PCI function (0-7)
-                        or      al,30h                                          ;apply ASCII zone
-                        stosb                                                   ;store 1's
-                        xor     al,al                                           ;null terminator
-                        stosb                                                   ;store terminator
-;
-;       Restore and return.
-;
-                        pop     es                                              ;restore non-volatile regs
-                        pop     edi                                             ;
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConInterpretPCIData
-;
-;       Description:    This routine interprets the PCI vendor and device IDs.
-;
-;       In:             DS:EBX  PCI structure address
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConInterpretPCIData     mov     eax,czApple
-                        cmp     word [ebx+PCI.configdata_lo],EPCIVENDORAPPLE    ;Apple?
-                        jne     .10                                             ;no, branch
-                        mov     edx,czUSBController
-                        cmp     word [ebx+PCI.configdata_hi],EPCIAPPLEUSB       ;USB?
-                        je      .40                                             ;yes, branch
-                        mov     edx,czOther                                     ;other
-                        jmp     .40                                             ;continue
-.10                     mov     eax,czIntel                                     ;Intel
-                        cmp     word [ebx+PCI.configdata_lo],EPCIVENDORINTEL    ;Intel?
-                        jne     .20                                             ;no, branch
-                        mov     edx,czPro1000MT                                 ;Pro/1000 MT
-                        cmp     word [ebx+PCI.configdata_hi],EPCIINTELPRO1000MT ;Pro/1000 MT?
-                        je      .40                                             ;yes, branch
-                        mov     edx,czPCIAndMem                                 ;PCI and Memory
-                        cmp     word [ebx+PCI.configdata_hi],EPCIINTELPCIMEM    ;PCI and Memory?
-                        je      .40                                             ;yes, branch
-                        mov     edx,czAurealAD1881                              ;Aureal 1881 SOUNDMAX
-                        cmp     word [ebx+PCI.configdata_hi],EPCIINTELAD1881    ;Aureal 1881 SOUNDMAX?
-                        je      .40                                             ;yes, branch
-                        mov     edx,czPIIX3PCItoIDEBridge                       ;PIIX3 PCI-to-IDE Bridge
-                        cmp     word [ebx+PCI.configdata_hi],EPCIINTELPIIX3     ;PIIX3 PCI-to-IDE Bridge?
-                        je      .40                                             ;yes, branch
-                        mov     edx,cz82371ABBusMaster                          ;82371AB Bus Master
-                        cmp     word [ebx+PCI.configdata_hi],EPCIINTEL82371AB   ;82371AB Bua Master?
-                        je      .40                                             ;yes, branch
-                        mov     edx,czPIIX4PowerMgmt                            ;PIIX4/4E/4M Power Mgmt Controller
-                        cmp     word [ebx+PCI.configdata_hi],EPCIINTELPIIX4     ;PIIX4/4E/4M Power Mgmt Controller?
-                        je      .40                                             ;yes, branch
-                        mov     edx,czOther                                     ;other
-                        jmp     .40                                             ;continue
-.20                     mov     eax,czOracle                                    ;Oracle
-                        cmp     word [ebx+PCI.configdata_lo],EPCIVENDORORACLE   ;Oracle?
-                        jne     .30                                             ;no, branch
-                        mov     edx,czVirtualBoxGA                              ;VirtulaBox Graphics Adapter
-                        cmp     word [ebx+PCI.configdata_hi],EPCIORACLEVBOXGA   ;VirtualBox Graphics Adapter?
-                        je      .40                                             ;yes, branch
-                        mov     edx,czVirtualBoxDevice                          ;VirtualBox Device
-                        cmp     word [ebx+PCI.configdata_hi],EPCIORACLEVBOXDEVICE       ;VirtualBox Device?
-                        je      .40                                             ;yes, branch
-                        mov     edx,czOther                                     ;other
-                        jmp     .40                                             ;continue
-.30                     mov     eax,czOther                                     ;other
-                        mov     edx,czOther                                     ;other
-.40                     mov     [ebx+PCI.vendorstr],eax                         ;save vendor string
-                        mov     [ebx+PCI.chipstr],edx                           ;save chip string
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
 ;       Routine:        ConSecond
 ;
 ;       Description:    This routine Handles the SECOND command.
@@ -6052,7 +5730,6 @@ tConJmpTbl              equ     $                                               
                         dd      ConWeekdayName  - ConCode                       ;weekday.name command routine offset
                         dd      ConYearIsLeap   - ConCode                       ;year.isleap command routine offset
                         dd      ConMonthName    - ConCode                       ;month.name command routine offset
-                        dd      ConPCIProbe     - ConCode                       ;pciprobe command routine offset
                         dd      ConExit         - ConCode                       ;shutdown command routine offset
                         dd      ConVersion      - ConCode                       ;version command routine offset
                         dd      ConWeekday      - ConCode                       ;weekday command routine offset
@@ -6061,7 +5738,6 @@ tConJmpTbl              equ     $                                               
                         dd      ConMinute       - ConCode                       ;minute command routine offset
                         dd      ConSecond       - ConCode                       ;second command routine offset
                         dd      ConClear        - ConCode                       ;clear command routine offset
-                        dd      ConPCIProbe     - ConCode                       ;lspci command routine offset
                         dd      ConMonth        - ConCode                       ;month command routine offset
                         dd      ConDate         - ConCode                       ;date command routine offset
                         dd      ConExit         - ConCode                       ;exit command routine offset
@@ -6084,7 +5760,6 @@ tConCmdTbl              equ     $                                               
                         db      13,"WEEKDAY.NAME",0                             ;weekday.name command
                         db      12,"YEAR.ISLEAP",0                              ;year.isleap command
                         db      11,"MONTH.NAME",0                               ;month.name command
-                        db      9,"PCIPROBE",0                                  ;pciprobe command
                         db      9,"SHUTDOWN",0                                  ;shutdown command
                         db      8,"VERSION",0                                   ;version command
                         db      8,"WEEKDAY",0                                   ;weekday command
@@ -6093,7 +5768,6 @@ tConCmdTbl              equ     $                                               
                         db      7,"MINUTE",0                                    ;minute command
                         db      7,"SECOND",0                                    ;second command
                         db      6,"CLEAR",0                                     ;clear command
-                        db      6,"LSPCI",0                                     ;lspci command (pciprobe alias)
                         db      6,"MONTH",0                                     ;month command
                         db      5,"DATE",0                                      ;date command
                         db      5,"EXIT",0                                      ;exit command
@@ -6113,32 +5787,17 @@ tConCmdTbl              equ     $                                               
 ;       Constants
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-czApple                 db      "Apple",0                                       ;vendor name string
-czAurealAD1881          db      "Aureal AD1881 SOUNDMAX",0                      ;soundmax string
 czBaseMem               db      "Base memory (RTC):     ",0                     ;base memory from BIOS
 czExtendedMem           db      " Extended (RTC):       ",0                     ;extended memory from BIOS
-czIntel                 db      "Intel",0                                       ;vendor name string
 czKB                    db      "KB",0                                          ;Kilobytes
 czNewLine               db      13,10,0                                         ;new line string
 czOK                    db      "ok",13,10,0                                    ;ok string
-czOracle                db      "Oracle",0                                      ;vendor name string
-czOther                 db      "Other",0                                       ;default name string
-czPCIAndMem             db      "PCI & Memory",0                                ;PCI and Memory string
-czPeriod                db      ".",0                                           ;period delimiter
-czPIIX3PCItoIDEBridge   db      "PIIX3 PCI-to-ISA Bridge",0                     ;pci-to-isa bridge string
-czPIIX4PowerMgmt        db      "PIIX4/4E/4M Power Management Controller",0     ;power management controller string
 czPrompt                db      ":",0                                           ;prompt string
-czPro1000MT             db      "Pro/1000 MT Ethernet Adapter",0                ;Intel Pro/1000 MT Ethernet adapter strg
 czROMMem                db      " Below EBDA (Int 12h): ",0                     ;memory reported by ROM
-czSpace                 db      " ",0                                           ;space delimiter
 czTitle                 db      "Custom Operating System 1.0",13,10,0           ;version string
 czUnknownCommand        db      "Unknown command",13,10,0                       ;unknown command response string
-czUSBController         db      "USB Controller",0                              ;USB controller string
-czVirtualBoxDevice      db      "VirtualBox Device",0                           ;Virtual Box device string
-czVirtualBoxGA          db      "VirtualBox Graphics Adapter",0                 ;Virtual Box graphics adapter string
 czYearIsLeap            db      "The year is a leap year.",13,10,0              ;leap year message
 czYearIsNotLeap         db      "The year is not a leap year.",13,10,0          ;not leap year message
-cz82371ABBusMaster      db      "82371AB/EB PCI Bus Master IDE Controller",0    ;bus-master strin
                         times   4096-($-$$) db 0h                               ;zero fill to end of section
 %endif
 %ifdef BUILDDISK

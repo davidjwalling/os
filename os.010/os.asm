@@ -595,7 +595,6 @@ wzConsoleToken          resb    80                                              
                                                                                 ;---------------------------------------
                                                                                 ;  memory panel fields
                                                                                 ;---------------------------------------
-                                                                                ;0123456789012345678901234567890123456789012345678901234567890123456789012345
 wzConsoleMemBuf0        resb    76                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ................\0
 wzConsoleMemBuf1        resb    76                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ................\0
 wzConsoleMemBuf2        resb    76                                              ;aaaaaaaa  xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx xx  ................\0

@@ -4,8 +4,8 @@
 ;
 ;       Project:        os.014
 ;
-;       Description:    In this sample, the console task is expanded to locate and report the ethernet adapter
-;                       at start-up.
+;       Description:    In this sample, the console task is expanded to add a "pciprobe" command that searches the
+;                       system for PCI expansion BIOS.
 ;
 ;       Revised:        July 4, 2018
 ;
@@ -165,7 +165,6 @@
 ;       EBOOT...        Boot sector and loader values
 ;       ECON...         Console values (dimensions and attributes)
 ;       EGDT...         Global Descriptor Table (GDT) selector values
-;       EHWF...         Hardware flags
 ;       EKEYF...        Keyboard status flags
 ;       EKRN...         Kernel values (fixed locations and sizes)
 ;       ELDT...         Local Descriptor Table (LDT) selector values
@@ -364,7 +363,6 @@ EASCIILINEFEED          equ     00Ah                                            
 EASCIIRETURN            equ     00Dh                                            ;carriage return
 EASCIIESCAPE            equ     01Bh                                            ;escape
 EASCIISPACE             equ     020h                                            ;space
-EASCIIDASH              equ     02Dh                                            ;dash or minus
 EASCIIPERIOD            equ     02Eh                                            ;period
 EASCIIUPPERA            equ     041h                                            ;'A'
 EASCIIUPPERZ            equ     05Ah                                            ;'Z'
@@ -443,10 +441,6 @@ EGDTLOADERTSS           equ     058h                                            
 EGDTCONSOLELDT          equ     060h                                            ;console local descriptor table selector
 EGDTCONSOLETSS          equ     068h                                            ;console task state segment selector
 ;-----------------------------------------------------------------------------------------------------------------------
-;       Hardware Flags                                                          EHWF...
-;-----------------------------------------------------------------------------------------------------------------------
-EHWETHERNET             equ     80h                                             ;ethernet adapter found
-;-----------------------------------------------------------------------------------------------------------------------
 ;       Keyboard Flags                                                          EKEYF...
 ;-----------------------------------------------------------------------------------------------------------------------
 EKEYFCTRLLEFT           equ     00000001b                                       ;left control
@@ -508,30 +502,6 @@ struc                   DATETIME
 .year                   resb    1                                               ;year of century
 .century                resb    1                                               ;century
 EDATETIMELEN            equ     ($-.second)
-endstruc
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       ETHER
-;
-;       The ETHER structure defines an Ethernet adapter context.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-struc                   ETHER
-.selector               resd    1                                               ;PCI selector
-.devicevendor           equ     $                                               ;device id | vendor id
-.vendor                 resw    1                                               ;vendor id
-.device                 resw    1                                               ;device id
-.statuscommand          equ     $                                               ;status reg | command reg
-.commandreg             resw    1                                               ;command register
-.statusreg              resw    1                                               ;status register
-.classrev               resd    1                                               ;class code | revision id
-.misc                   resd    1                                               ;BIST | Hdr | latency | cache
-.mmio                   resd    1                                               ;memory mapped i/o address (bar 0)
-.flash                  resd    1                                               ;flash base address (bar 1)
-.port                   resd    1                                               ;i/o port (base 2)
-.mac                    resb    6                                               ;mac address
-.irq                    resb    1                                               ;h/w interrupt request line (IRQ)
-EETHERLEN               equ     ($-.selector)
 endstruc
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -734,7 +704,6 @@ wbConsoleScan3          resb    1                                               
 wbConsoleScan4          resb    1                                               ;scan code
 wbConsoleScan5          resb    1                                               ;scan code
 wbConsoleChar           resb    1                                               ;ASCII code
-wbConsoleHWFlags        resb    1                                               ;Hardware Flags
 wzConsoleInBuffer       resb    80                                              ;command input buffer
 wzConsoleToken          resb    80                                              ;token buffer
 wzConsoleOutBuffer      resb    80                                              ;response output buffer
@@ -745,7 +714,6 @@ wzConsolePCIIdent       resb    9                                               
 wsConsoleMemRoot        resb    EMEMROOTLEN                                     ;kernel base memory map
 wsConsoleDateTime       resb    EDATETIMELEN                                    ;date-time buffer
 wsConsolePCI            resb    EPCILEN                                         ;PCI context
-wsConsoleEther          resb    EETHERLEN                                       ;ethernet context
 ECONDATALEN             equ     ($-ECONDATA)                                    ;size of console data area
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -2912,7 +2880,6 @@ tsvc                    tsvce   AllocateMemory                                  
                         tsvce   PutDateString                                   ;put MM/DD/YYYY string
                         tsvce   PutDayString                                    ;put DD string
                         tsvce   PutHourString                                   ;put hh string
-                        tsvce   PutMACString                                    ;put MAC address string
                         tsvce   PutMinuteString                                 ;put mm string
                         tsvce   PutMonthString                                  ;put MM string
                         tsvce   PutMonthNameString                              ;put name(MM) string
@@ -2989,10 +2956,6 @@ maxtsvc                 equ     ($-tsvc)/4                                      
                         mov     al,ePlaceCursor                                 ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
-%macro                  putConsoleString 0
-                        mov     al,ePutConsoleString                            ;function code
-                        int     _svc                                            ;invoke OS service
-%endmacro
 %macro                  putConsoleString 1
                         mov     edx,%1                                          ;string address
                         mov     al,ePutConsoleString                            ;function code
@@ -3018,11 +2981,6 @@ maxtsvc                 equ     ($-tsvc)/4                                      
                         mov     ebx,%1                                          ;DATETIME addr
                         mov     edx,%2                                          ;output buffer addr
                         mov     al,ePutHourString                               ;function code
-                        int     _svc                                            ;invoke OS service
-%endmacro
-%macro                  putMACString 1
-                        mov     edx,%1                                          ;output buffer address
-                        mov     al,ePutMACString                                ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
 %macro                  putMinuteString 2
@@ -4476,36 +4434,12 @@ Yield                   sti                                                     
 ;
 ;       Data-Type Conversion Helper Routines
 ;
-;       ByteToHex
 ;       DecimalToUnsigned
 ;       HexadecimalToUnsigned
-;       PutMACString
 ;       UnsignedToDecimalString
 ;       UnsignedToHexadecimal
 ;
 ;=======================================================================================================================
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ByteToHex
-;
-;       Description:    This routine creates an ASCIIZ string representing the hexadecimal value of 8-bit binary input.
-;
-;       Input:          DS:ESI  source address of byte
-;                       ES:EDI  target address of ASCIIZ string
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ByteToHex               lodsb                                                   ;input byte
-                        push    eax                                             ;save input byte
-                        shr     al,4                                            ;hi-order nybble
-                        call    .10                                             ;make ASCII and store
-                        pop     eax                                             ;input byte
-                        and     al,00Fh                                         ;lo-order nybble
-.10                     or      al,030h                                         ;ASCII numeral zone
-                        cmp     al,03Ah                                         ;'A' through 'F'?
-                        jb      .20                                             ;no, branch
-                        add     al,7                                            ;ajdust for 'A' through 'F'
-.20                     stosb                                                   ;store to output buffer
-                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        DecimalToUnsigned
@@ -4571,34 +4505,6 @@ HexadecimalToUnsigned   push    esi                                             
                         jmp     .10                                             ;next
 .30                     mov     eax,edx                                         ;result
                         pop     esi                                             ;restore non-volatile regs
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        PutMACString
-;
-;       Description:    This routine creates an ASCIIZ string representing the MAC address at the source address
-;
-;       Input:          ECX     source address of byte
-;                       EDX     target address of ASCIIZ string
-;
-;-----------------------------------------------------------------------------------------------------------------------
-PutMACString            push    ecx                                             ;save non-volatile regs
-                        push    esi                                             ;
-                        push    edi                                             ;
-                        mov     edi,edx                                         ;output buffer address
-                        mov     esi,ecx                                         ;source buffer address
-                        xor     ecx,ecx                                         ;zero ecx
-                        mov     cl,5                                            ;bytes that precede dashes
-.10                     call    ByteToHex                                       ;store hexadecimal ASCII
-                        mov     al,EASCIIDASH                                   ;delimiter
-                        stosb                                                   ;store delimiter
-                        loop    .10                                             ;next
-                        call    ByteToHex                                       ;store hexadecimal ASCII
-                        xor     al,al                                           ;terminator
-                        stosb                                                   ;store terminator
-                        pop     edi                                             ;restore non-volatile regs
-                        pop     esi                                             ;
-                        pop     ecx                                             ;
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5300,7 +5206,6 @@ ConCode                 call    ConInitializeData                               
                         putConsoleString wzExtendedMemSize                      ;extended memory size
                         putConsoleString czKB                                   ;Kilobytes
                         call    ConPutNewLine                                   ;new line
-                        call    ConInitializeNetwork                            ;initialize network
 .10                     putConsoleString czPrompt                               ;display input prompt
                         placeCursor                                             ;set CRT cursor location
                         getConsoleString wzConsoleInBuffer,79,1,13              ;accept keyboard input
@@ -5403,162 +5308,6 @@ ConInitializeData       push    ecx                                             
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ConPutNewLine           putConsoleString czNewLine                              ;write value to console
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConInitializeNetwork
-;
-;       Description:    This routine initializes console network variables.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConInitializeNetwork    push    ebx                                             ;save non-volatile regs
-                        push    ecx                                             ;
-                        push    esi                                             ;
-                        push    edi                                             ;
-;
-;       Initialize ETHER structure.
-;
-                        mov     ebx,wsConsoleEther                              ;ETHER structure address
-                        call    ConInitEtherContext                             ;initialize ETHER struct
-                        mov     esi,ebx                                         ;ETHER structure address
-;
-;       Initialize variables.
-;       Construct PCI selector.
-;       Read PCI configuration data.
-;
-                        mov     ebx,wsConsolePCI                                ;PCI structure address
-                        call    ConInitPCIContext                               ;initialize PCI struct
-.10                     call    ConBuildPCISelector                             ;build the PCI selector
-                        call    ConReadPCIConfigData                            ;read the configuration data
-;
-;       Interpret PCI data value.
-;
-                        cmp     eax,-1		                                ;function defined?
-                        jne     .20                                             ;yes, branch
-                        cmp     byte [ebx+PCI.function],0                       ;function zero?
-                        je      .40                                             ;yes, skip to next device
-                        jmp     short .30                                       ;no, skip to next function
-;
-;       Exit PCI probe if supported adapter found.
-;
-.20                     cmp     eax,EPCIINTELPRO1000MT<<16|EPCIVENDORINTEL      ;Intel Pro/1000 EM (copper)?
-                        je      .50                                             ;yes, found!
-;
-;       Next function.
-;
-.30                     call    ConNextPCIFunction                              ;next function
-                        jb      .10                                             ;continue if no overflow
-;
-;       Next device, bus.
-;
-.40                     call    ConNextPCIDevice                                ;next device, bus.
-                        jb      .10                                             ;continue if no overflow
-                        jmp     .60                                             ;done, ETHER not found
-;
-;       Set hardware flag and save selector.
-;
-.50                     mov     eax,[ebx+PCI.selector]                          ;PCI selector
-                        mov     [esi+ETHER.selector],eax                        ;save as ethernet device selector
-                        or      byte [wbConsoleHWFlags],EHWETHERNET             ;ethernet adapter found
-                        putConsoleString czEthernetAdapterFound                 ;ethernet adapter found message
-;
-;       Save and report PCI data.
-;
-                        mov     eax,[esi+ETHER.selector]                        ;ethernet adapter PCI selector
-                        mov     ecx,eax                                         ;ethernet adapter PCI selector
-                        mov     edx,czEthernetSelector                          ;message label
-                        call    ConPutLabeledHexValue                           ;output labeled message to console
-
-                        mov     eax,[esi+ETHER.selector]                        ;ethernet adapter PCI selector
-                        xor     al,al                                           ;register 0
-                        call    ConReadPCIRegister                              ;EAX = device id | vendor id
-                        mov     [esi+ETHER.devicevendor],eax                    ;save device id | vendor id
-                        mov     ecx,eax                                         ;device id | vendor id
-                        mov     edx,czEthernetDeviceVendor                      ;message label
-                        call    ConPutLabeledHexValue                           ;output labeled message to console
-
-                        mov     eax,[esi+ETHER.selector]                        ;ethernet adapter PCI selector
-                        mov     al,004h                                         ;status and command register
-                        call    ConReadPCIRegister                              ;EAX = status | command
-                        mov     [esi+ETHER.statuscommand],eax                   ;save status | command
-                        mov     ecx,eax                                         ;status | command
-                        mov     edx,czEthernetStatusCommand                     ;message label
-                        call    ConPutLabeledHexLine                            ;output labeled message to console
-
-                        mov     eax,[esi+ETHER.selector]                        ;ethernet adapter PCI selector
-                        mov     al,010h                                         ;mapped memory I/O (BAR0) register
-                        call    ConReadPCIRegister                              ;EAX = MMIO
-                        mov     [esi+ETHER.mmio],eax                            ;save MMIO
-                        mov     ecx,eax                                         ;MMIO
-                        mov     edx,czEthernetMemoryAddr                        ;message label
-                        call    ConPutLabeledHexValue                           ;output labeled message to console
-
-                        mov     eax,[esi+ETHER.selector]                        ;ethernet adapter PCI selector
-                        mov     al,018h                                         ;I/O port (BAR1) register
-                        call    ConReadPCIRegister                              ;EAX = I/O port
-                        and     eax,-8                                          ;mask out bits 2:0
-                        mov     [esi+ETHER.port],eax                            ;save I/O port
-                        mov     ecx,eax                                         ;I/O port
-                        mov     edx,czEthernetPort                              ;message label
-                        call    ConPutLabeledHexValue                           ;output labeled message to console
-
-                        mov     eax,[esi+ETHER.selector]                        ;ethernet device PCI selector
-                        mov     al,03Ch                                         ;interrupt number register
-                        call    ConReadPCIRegister                              ;EAX = interrupt number
-                        mov     [esi+ETHER.irq],al                              ;save interrupt number
-                        movzx   ecx,al                                          ;interrupt number
-                        mov     edx,czEthernetIRQ                               ;message label
-                        call    ConPutLabeledDecLine                            ;output labeled message to console
-;
-;       Read MAC address from MMIO
-;
-                        mov     ecx,[esi+ETHER.mmio]                            ;MMIO address
-                        jecxz   .60                                             ;branch if none
-                        add     ecx,05400h                                      ;MAC address offset
-                        mov     eax,[ecx]                                       ;MAC address lo-order dword
-                        mov     [esi+ETHER.mac],eax                             ;save
-                        mov     ax,[ecx+4]                                      ;MAC address hi-order word
-                        mov     [esi+ETHER.mac+4],ax                            ;save
-                        lea     ecx,[esi+ETHER.mac]                             ;address of MAC bytes
-                        putMACString wzConsoleToken                             ;output MAC ASCIIZ string
-                        mov     edx,czEthernetMAC                               ;label string
-                        call    ConPutLabeledLine                               ;output labeled line to console
-;
-;       Restore and return.
-;
-.60                     pop     edi                                             ;restore non-volatile regs
-                        pop     esi                                             ;
-                        pop     ecx                                             ;
-                        pop     ebx                                             ;
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConInitEtherContext
-;
-;       Description:    This routine zeros an ETHER structure
-;
-;       In:             DS:EBX  ETHER structure address
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConInitEtherContext     push    ecx                                             ;save non-volatile regs
-                        push    edi                                             ;
-                        push    es                                              ;
-;
-;       Zero context.
-;
-                        push    ds                                              ;load data segment...
-                        pop     es                                              ;...into extra segment
-                        mov     edi,ebx                                         ;ETHER structure offset
-                        mov     ecx,EETHERLEN                                   ;ETHER structure length
-                        xor     al,al                                           ;zero
-                        cld                                                     ;forward strings
-                        rep     stosb                                           ;zero structure members
-;
-;       Restore and return.
-;
-                        pop     es                                              ;restore non-volatile regs
-                        pop     edi                                             ;
-                        pop     ecx                                             ;
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5670,107 +5419,6 @@ ConNextPCIDevice        inc     byte [ebx+PCI.device]                           
                         jb      .10                                             ;no, continue
                         mov     byte [ebx+PCI.bus],0                            ;zero bus
 .10                     ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConPutLabeledHexValue
-;
-;       Description:    Write labeled binary value as a hexadecimal string.
-;
-;       In:             ECX     binary value
-;                       EDX     prompt string address
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConPutLabeledHexValue   push    edx                                             ;save prompt string address
-                        mov     edx,wzConsoleToken                              ;output buffer address
-                        unsignedToHexadecimal                                   ;convert binary to ASCII hex
-                        pop     edx                                             ;prompt string address
-                        call    ConPutLabeledString                             ;write labeled string to console
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConPutLabeledString
-;
-;       Description:    Write labeled string to the console.
-;
-;       In:             EDX     prompt string address
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConPutLabeledString     putConsoleString                                        ;write value at DS:EDX to console
-                        putConsoleString wzConsoleToken                         ;write token value to console
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConReadPCIRegister
-;
-;       Description:    This routine reads a PCI register
-;
-;       In:             EAX     PCI register
-;
-;       Out:            EAX     PCI register value
-;-----------------------------------------------------------------------------------------------------------------------
-ConReadPCIRegister      mov     dh,EPCIPORTCONFIGADDRHI                         ;hi-order PCI configuration addr port
-                        mov     dl,EPCIPORTCONFIGADDRLO                         ;lo-order PCI configuration addr port
-                        out     dx,eax                                          ;select PCI register
-                        mov     dl,EPCIPORTCONFIGDATALO                         ;PCI configuration data port (low)
-                        in      eax,dx                                          ;read register
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConPutLabeledHexLine
-;
-;       Description:    Write labeled binary value as a hexadecimal string with new-line.
-;
-;       In:             ECX     binary value
-;                       EDX     prompt string address
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConPutLabeledHexLine    call    ConPutLabeledHexValue                           ;write labeled value to console
-                        call    ConPutNewLine                                   ;write new-line to console
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConPutLabeledDecLine
-;
-;       Description:    Write labeled binary value as a decimal string with new-line.
-;
-;       In:             ECX     binary value
-;                       EDX     prompt string address
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConPutLabeledDecLine    call    ConPutLabeledDecValue                           ;write labeled value to console
-                        call    ConPutNewLine                                   ;write new-line to console
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConPutLabeledDecValue
-;
-;       Description:    Write labeled binary value as a decimal string.
-;
-;       In:             ECX     binary value
-;                       EDX     prompt string address
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConPutLabeledDecValue   push    ebx                                             ;save non-volatile regs
-                        push    edx                                             ;save prompt string address
-                        mov     edx,wzConsoleToken                              ;output bufer address
-                        mov     bh,1                                            ;suppress leading zeros
-                        unsignedToDecimalString                                 ;convert binary to decimal string
-                        pop     edx                                             ;prompt string address
-                        call    ConPutLabeledString                             ;write labeled string to console
-                        pop     ebx                                             ;restore non-volatile regs
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConPutLabeledLine
-;
-;       Description:    Write labeled string value with new-line.
-;
-;       In:             EDX     prompt string address
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConPutLabeledLine       call    ConPutLabeledString                             ;write labeled string to console
-                        call    ConPutNewLine                                   ;write new-line to console
-                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        ConTakeToken
@@ -6468,14 +6116,6 @@ tConCmdTbl              equ     $                                               
 czApple                 db      "Apple",0                                       ;vendor name string
 czAurealAD1881          db      "Aureal AD1881 SOUNDMAX",0                      ;soundmax string
 czBaseMem               db      "Base memory (RTC):     ",0                     ;base memory from BIOS
-czEthernetAdapterFound  db      "Ethernet adapter found",13,10,0                ;adapter found message
-czEthernetDeviceVendor  db      " Device: ",0                                   ;PCI device label
-czEthernetIRQ           db      " IRQ:    ",0                                   ;ethernet IRQ
-czEthernetMAC           db      " MAC Address:  ",0                             ;MAC address
-czEthernetMemoryAddr    db      "     MMIO:     ",0                             ;ethernet I/O memory address
-czEthernetPort          db      " Port:   ",0                                   ;ethernet I/O port address
-czEthernetSelector      db      " PCI Selector: ",0                             ;PCI selector label
-czEthernetStatusCommand db      " Status: ",0                                   ;PCI status label
 czExtendedMem           db      " Extended (RTC):       ",0                     ;extended memory from BIOS
 czIntel                 db      "Intel",0                                       ;vendor name string
 czKB                    db      "KB",0                                          ;Kilobytes

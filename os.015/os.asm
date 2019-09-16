@@ -4,9 +4,10 @@
 ;
 ;       Project:        os.015
 ;
-;       Description:    In this sample, the console task is expanded to add code to initialize the ethernet adapter.
+;       Description:    In this sample, the console task is expanded to locate and report the ethernet adapter
+;                       at start-up.
 ;
-;       Revised:        December 25, 2018
+;       Revised:        July 4, 2018
 ;
 ;       Assembly:       nasm os.asm -f bin -o os.dat     -l os.dat.lst     -DBUILDBOOT
 ;                       nasm os.asm -f bin -o os.dsk     -l os.dsk.lst     -DBUILDDISK
@@ -201,44 +202,6 @@ EFDCPORTLOOUT           equ     0F2h                                            
 EFDCPORTLOSTAT          equ     0F4h                                            ;main status register lo
 EFDCSTATBUSY            equ     010h                                            ;main status is busy
 EFDCMOTOROFF            equ     00Ch                                            ;motor off / enable / DMA
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Intel 8254X PCI/PCI-X Gigibit Ethernet Controller
-;
-;-----------------------------------------------------------------------------------------------------------------------
-EI825REGCTRL            equ     00000h                                          ;control register
-EI825REGICR             equ     000C0h                                          ;interrupt cause read
-EI825REGITR             equ     000C4h                                          ;interrupt throttling register
-EI825REGIMS             equ     000D0h                                          ;interrupt mask set/read
-EI825REGRCTL            equ     00100h                                          ;receive control register
-EI825REGRDBAL           equ     02800h                                          ;receive descriptor base address lo
-EI825REGRDBAH           equ     02804h                                          ;receive descriptor base address hi
-EI825REGRDLEN           equ     02808h                                          ;receive descriptor length register
-EI825REGRDH             equ     02810h                                          ;receive descriptor head register
-EI825REGRDT             equ     02818h                                          ;receive descriptor tail register
-EI825REGTCTL            equ     00400h                                          ;transmit control register
-EI825REGTDBAL           equ     03800h                                          ;transmit descriptor base address lo
-EI825REGTDBAH           equ     03804h                                          ;transmit descriptor base address hi
-EI825REGTDLEN           equ     03808h                                          ;transmit descriptor length register
-EI825REGTDH             equ     03810h                                          ;transmit descriptor head register
-EI825REGTDT             equ     03818h                                          ;transmit descriptor tail register
-EI825REGMTA             equ     05200h                                          ;multicast table array registers
-EI825REGRAL             equ     05400h                                          ;receive address lo
-EI825REGRAH             equ     05404h                                          ;receive address hi
-EI825CTRLSLU            equ     040h                                            ;set link up
-EI825ICRLSC             equ     004h                                            ;link status change
-EI825ICRRXDMT0          equ     010h                                            ;receive descr min threshold reached
-EI825ICRRXO             equ     040h                                            ;receiver overrun
-EI825ICRRXT0            equ     080h                                            ;receiver timer interrupt
-EI825RCTLEN             equ     00002h                                          ;receive enable
-EI825RCTLSBP            equ     00004h                                          ;store bad packets
-EI825RCTLUPE            equ     00008h                                          ;unicast promiscuous enabled
-EI825RCTLMPE            equ     00010h                                          ;multicast promiscuous enabled
-EI825RCTLLPE            equ     00020h                                          ;long package reception enable
-EI825RCTLBAM            equ     08000h                                          ;broadcast accept mode
-EI825RCTLBSZ1024        equ     000010000h                                      ;1024-bit buffer size
-EI825TCTLEN             equ     002h                                            ;transmit enable
-EI825TCTLPSP            equ     008h                                            ;pad short packets
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       8042 Keyboard Controller                                                EKEYB...
@@ -502,12 +465,10 @@ EKEYFTIMEOUT            equ     10000000b                                       
 ;-----------------------------------------------------------------------------------------------------------------------
 EKRNCODEBASE            equ     01000h                                          ;kernel base address (0000:1000)
 EKRNCODESEG             equ     (EKRNCODEBASE >> 4)                             ;kernel code segment (0100:0000)
-EKRNCODELEN             equ     07000h                                          ;kernel code size (1000h to 8000h)
+EKRNCODELEN             equ     05000h                                          ;kernel code size (1000h to 6000h)
 EKRNCODESRCADR          equ     0500h                                           ;kernel code offset to loader DS:
-EKRNHEAPSIZE            equ     020000000h                                      ;kernel heap size max (512MB)
+EKRNHEAPSIZE            equ     080000000h                                      ;kernel heap size
 EKRNHEAPBASE            equ     010000h                                         ;kernel heap base
-EKRNMINRAMKB            equ     ((EKRNCODEBASE+EKRNCODELEN)/1024)               ;kernel minimum RAM KB required
-EKRNMINEXTKB            equ     (31*1024)                                       ;kernel minimum extended RAM KB required
 ;-----------------------------------------------------------------------------------------------------------------------
 ;       Local Descriptor Table (LDT) Selectors                                  ELDT...
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -525,12 +486,6 @@ EMEMWIPEBYTE            equ     000h                                            
 EMSGKEYDOWN             equ     041000000h                                      ;key-down
 EMSGKEYUP               equ     041010000h                                      ;key-up
 EMSGKEYCHAR             equ     041020000h                                      ;character
-;-----------------------------------------------------------------------------------------------------------------------
-;       Networking Identifiers                                                  ENET...
-;-----------------------------------------------------------------------------------------------------------------------
-ENETRXBUFSIZ            equ     1024                                            ;receive buffer size
-ENETRXDESCCT            equ     16                                              ;receive descritor count
-ENETTXDESCCT            equ     16                                              ;transmit descriptor count
 ;=======================================================================================================================
 ;
 ;       Structures
@@ -574,53 +529,9 @@ struc                   ETHER
 .mmio                   resd    1                                               ;memory mapped i/o address (bar 0)
 .flash                  resd    1                                               ;flash base address (bar 1)
 .port                   resd    1                                               ;i/o port (base 2)
-.rxblock                resd    1                                               ;allocated rx memory block
-.rxbase                 resd    1                                               ;16-byte aligned
-.rxtail                 resd    1
-.rxcount                resd    1
-.txblock                resd    1                                               ;allocated tx memory block
-.txbase                 resd    1                                               ;16-byte aligned
-.txtail                 resd    1
 .mac                    resb    6                                               ;mac address
 .irq                    resb    1                                               ;h/w interrupt request line (IRQ)
 EETHERLEN               equ     ($-.selector)
-endstruc
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       I825RXDESC
-;
-;       The Intel 8254X PCI/PCI-X Gigabit Ethernet controller receive descriptor.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-struc                   I825RXDESC
-.address                equ     $                                               ;64-bit address
-.addresslo              resd    1                                               ;address lo
-.addresshi              resd    1                                               ;address hi
-.length                 resw    1                                               ;length
-.checksum               resw    1                                               ;checksum
-.status                 resb    1                                               ;status
-.errors                 resb    1                                               ;errors
-.special                resw    1                                               ;special
-EI825RXDESCLEN          equ     ($-.address)
-endstruc
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       I825TXDESC
-;
-;       The Intel 8254X PCI/PCI-X Gigabit Ethernet controller transmit descriptor.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-struc                   I825TXDESC
-.address                equ     $                                               ;64-bit address
-.addresslo              resd    1                                               ;address lo
-.addresshi              resd    1                                               ;address hi
-.length                 resw    1                                               ;length
-.cso                    resb    1                                               ;cso
-.cmd                    resb    1                                               ;cmd
-.sta                    resb    1                                               ;sta
-.css                    resb    1                                               ;css
-.special                resw    1                                               ;special
-EI825TXDESCLEN          equ     ($-.address)
 endstruc
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -708,7 +619,7 @@ struc                   OSDATA
                         resw    1                                               ;40e LPT4 port address
                         resb    2                                               ;410 equipment list flags
                         resb    1                                               ;412 errors in PCjr infrared keybd link
-wwROMMemSize            resw    1                                               ;413 free memory KB below EBDA
+wwROMMemSize            resw    1                                               ;413 memory size (kb) INT 12h
                         resb    1                                               ;415 mfr error test scratchpad
                         resb    1                                               ;416 PS/2 BIOS control flags
                         resb    1                                               ;417 keyboard flag byte 0
@@ -806,20 +717,13 @@ wbClockDays             resb    1                                               
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ECONDATA                equ     ($)
-wdConsoleHeapSize       resd    1                                               ;kernel heap bytes
-wdConsolePanel          resd    1                                               ;console panel definition address
-wdConsoleInput          resd    1                                               ;console field input address
-
-wdConsoleMemBase        resd    1                                               ;memory display source addr
-wdConsoleField          resd    1                                               ;console field definition address
-wbConsoleFieldColumn    resb    1
-wbConsoleFieldRow       resb    1
-wbConsoleFieldColor     resb    1
-wbConsoleFieldLength    resb    1
-
+wdConsoleMemBase        resd    1                                               ;console memory address
+wdConsoleHeapSize       resd    1                                               ;kernel heap size
+wdBaseMemSize           resd    1                                               ;base memory size (int 12h)
+wdExtendedMemSize       resd    1                                               ;extended memory size (int 12h)
+wdROMMemSize            resd    1                                               ;ROM memory size
 wbConsoleColumn         resb    1                                               ;console column
 wbConsoleRow            resb    1                                               ;console row
-
 wbConsoleShift          resb    1                                               ;console shift flags
 wbConsoleLock           resb    1                                               ;console lock flags
 wbConsoleStatus         resb    1                                               ;controller status
@@ -831,15 +735,14 @@ wbConsoleScan4          resb    1                                               
 wbConsoleScan5          resb    1                                               ;scan code
 wbConsoleChar           resb    1                                               ;ASCII code
 wbConsoleHWFlags        resb    1                                               ;Hardware Flags
-
 wzConsoleInBuffer       resb    80                                              ;command input buffer
-
 wzConsoleToken          resb    80                                              ;token buffer
 wzConsoleOutBuffer      resb    80                                              ;response output buffer
+wzBaseMemSize           resb    11                                              ;CMOS base memory bytes     zz,zzz,zz9\0
+wzROMMemSize            resb    11                                              ;ROM base memory bytes      zz,zzz,zz9\0
+wzExtendedMemSize       resb    11                                              ;CMOS extended memory bytes zz,zzz,zz9\0
 wzConsolePCIIdent       resb    9                                               ;PCI ident zzz.zz.z\0
-
 wsConsoleMemRoot        resb    EMEMROOTLEN                                     ;kernel base memory map
-
 wsConsoleDateTime       resb    EDATETIMELEN                                    ;date-time buffer
 wsConsolePCI            resb    EPCILEN                                         ;PCI context
 wsConsoleEther          resb    EETHERLEN                                       ;ethernet context
@@ -1408,10 +1311,10 @@ wcPrepInBuf             equ     $
 ;
 ;       The disk contains two copies of the File Allocation Table (FAT). On our disk, each FAT copy is 1200h bytes in
 ;       length. Each FAT entry contains the logical number of the next cluster. The first two entries are reserved. Our
-;       OS.COM file here is 7400h bytes in length. The first 400h bytes are the 16-bit loader code. The remaining 7000h
+;       OS.COM file here is 5400h bytes in length. The first 400h bytes are the 16-bit loader code. The remaining 5000h
 ;       bytes are the 32-bit kernel code. Our disk parameter table defines a cluster as containing one sector and each
-;       sector having 200h bytes. Therefore, our FAT table must reserve 58 clusters for OS.COM. The clusters used by
-;       OS.COM, then, will be cluster 2 through 59. The entry for cluster 59 is set to "0fffh" to indicate that it is
+;       sector having 200h bytes. Therefore, our FAT table must reserve 42 clusters for OS.COM. The clusters used by
+;       OS.COM, then, will be cluster 2 through 43. The entry for cluster 43 is set to "0fffh" to indicate that it is
 ;       the last cluster in the chain.
 ;
 ;       Every three bytes encode two FAT entries as follows:
@@ -1425,21 +1328,17 @@ wcPrepInBuf             equ     $
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 fat1                                                    ;first copy of FAT
-                        db      0F0h,0FFh,0FFh, 003h,040h,000h                  ;0-3
-                        db      005h,060h,000h, 007h,080h,000h                  ;4-7
-                        db      009h,0A0h,000h, 00Bh,0C0h,000h                  ;8-11
-                        db      00Dh,0E0h,000h, 00Fh,000h,001h                  ;12-15
-                        db      011h,020h,001h, 013h,040h,001h                  ;16-19
-                        db      015h,060h,001h, 017h,080h,001h                  ;20-23
-                        db      019h,0A0h,001h, 01Bh,0C0h,001h                  ;24-27
-                        db      01Dh,0E0h,001h, 01Fh,000h,002h                  ;28-31
-                        db      021h,020h,002h, 023h,040h,002h                  ;32-35
-                        db      025h,060h,002h, 027h,080h,002h                  ;36-39
-                        db      029h,0A0h,002h, 02Bh,0C0h,002h                  ;40-43
-                        db      02Dh,0E0h,002h, 02Fh,000h,003h                  ;44-47
-                        db      031h,020h,003h, 033h,040h,003h                  ;48-51
-                        db      035h,060h,003h, 037h,080h,003h                  ;52-55
-                        db      039h,0A0h,003h, 03Bh,0F0h,0FFh                  ;56-59
+                        db      0F0h,0FFh,0FFh, 003h,040h,000h
+                        db      005h,060h,000h, 007h,080h,000h
+                        db      009h,0A0h,000h, 00Bh,0C0h,000h
+                        db      00Dh,0E0h,000h, 00Fh,000h,001h
+                        db      011h,020h,001h, 013h,040h,001h
+                        db      015h,060h,001h, 017h,080h,001h
+                        db      019h,0A0h,001h, 01Bh,0C0h,001h
+                        db      01Dh,0E0h,001h, 01Fh,000h,002h
+                        db      021h,020h,002h, 023h,040h,002h
+                        db      025h,060h,002h, 027h,080h,002h
+                        db      029h,0A0h,002h, 02Bh,0F0h,0FFh
                         times   (9*512)-($-$$) db 0                             ;zero fill to end of section
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1447,21 +1346,17 @@ section                 fat1                                                    
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 fat2                                                    ;second copy of FAT
-                        db      0F0h,0FFh,0FFh, 003h,040h,000h                  ;0-3
-                        db      005h,060h,000h, 007h,080h,000h                  ;4-7
-                        db      009h,0A0h,000h, 00Bh,0C0h,000h                  ;8-11
-                        db      00Dh,0E0h,000h, 00Fh,000h,001h                  ;12-15
-                        db      011h,020h,001h, 013h,040h,001h                  ;16-19
-                        db      015h,060h,001h, 017h,080h,001h                  ;20-23
-                        db      019h,0A0h,001h, 01Bh,0C0h,001h                  ;24-27
-                        db      01Dh,0E0h,001h, 01Fh,000h,002h                  ;28-31
-                        db      021h,020h,002h, 023h,040h,002h                  ;32-35
-                        db      025h,060h,002h, 027h,080h,002h                  ;36-39
-                        db      029h,0A0h,002h, 02Bh,0C0h,002h                  ;40-43
-                        db      02Dh,0E0h,002h, 02Fh,000h,003h                  ;44-47
-                        db      031h,020h,003h, 033h,040h,003h                  ;48-51
-                        db      035h,060h,003h, 037h,080h,003h                  ;52-55
-                        db      039h,0A0h,003h, 03Bh,0F0h,0FFh                  ;56-59
+                        db      0F0h,0FFh,0FFh, 003h,040h,000h
+                        db      005h,060h,000h, 007h,080h,000h
+                        db      009h,0A0h,000h, 00Bh,0C0h,000h
+                        db      00Dh,0E0h,000h, 00Fh,000h,001h
+                        db      011h,020h,001h, 013h,040h,001h
+                        db      015h,060h,001h, 017h,080h,001h
+                        db      019h,0A0h,001h, 01Bh,0C0h,001h
+                        db      01Dh,0E0h,001h, 01Fh,000h,002h
+                        db      021h,020h,002h, 023h,040h,002h
+                        db      025h,060h,002h, 027h,080h,002h
+                        db      029h,0A0h,002h, 02Bh,0F0h,0FFh
                         times   (9*512)-($-$$) db 0                             ;zero fill to end of section
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1480,7 +1375,7 @@ section                 dir                                                     
                         db      01000001b                                       ;mmm = 10 MOD 8 = 2; ddddd = 1
                         db      01001001b                                       ;yyyyyyy = 2016-1980 = 36 = 24h; m/8 = 1
                         dw      2                                               ;first cluster
-                        dd      07400h                                          ;file size
+                        dd      05400h                                          ;file size
                         times   (EBOOTDIRENTRIES*32)-($-$$) db 0h               ;zero fill to end of section
 %endif
 %ifdef BUILDCOM
@@ -1552,36 +1447,6 @@ Loader                  push    cs                                              
                         mov     si,czCPUOKMsg                                   ;cpu ok message
                         call    PutTTYString                                    ;display message
 ;
-;       Make sure we have enough available RAM below the EBDA for the kernel
-;
-                        push    ds                                              ;save data segment register
-                        push    0                                               ;load base memory address...
-                        pop     ds                                              ;...into data segment register
-                        mov     ax,[wwROMMemSize]                               ;load available memory below EBDA
-                        pop     ds                                              ;restore data segment register
-                        cmp     ax,EKRNMINRAMKB                                 ;minimum RAM KB available?
-                        jnb     .10                                             ;yes, continue
-                        mov     si,czMemErrorMsg                                ;memory size error message
-                        jmp     LoaderExit.10                                   ;exit with error message
-.10                     mov     si,czMemOKMsg                                   ;memory ok message
-                        call    PutTTYString                                    ;display message
-;
-;       Make sure we have enough extended RAM above 1MB for the heap.
-;
-                        mov     al,ERTCEXTRAMHI                                 ;extended RAM high register
-                        out     ERTCREGPORT,al                                  ;select extended RAM high register
-                        in      al,ERTCDATAPORT                                 ;read extended RAM high (KB)
-                        mov     ah,al                                           ;save extended RAM high
-                        mov     al,ERTCEXTRAMLO                                 ;extended RAM low register
-                        out     ERTCREGPORT,al                                  ;select extended RAM low register
-                        in      al,ERTCDATAPORT                                 ;read extended RAM low (KB)
-                        cmp     ax,EKRNMINEXTKB                                 ;minimum extended RAM KB?
-                        jnb     .20                                             ;yes, continue
-                        mov     si,czExtErrorMsg                                ;extended memory error message
-                        jmp     LoaderExit.10                                   ;display message
-.20                     mov     si,czExtOKMsg                                   ;extended memory ok message
-                        call    PutTTYString                                    ;display message
-;
 ;       Fixup the GDT descriptor for the current (loader) code segment.
 ;
                         mov     si,EKRNCODESRCADR                               ;GDT offset
@@ -1615,10 +1480,10 @@ Loader                  push    cs                                              
                         mov     ah,EBIOSFNINITPROTMODE                          ;initialize protected mode fn.
                         mov     bx,02028h                                       ;BH,BL = IRQ int bases
                         mov     dx,001Fh                                        ;outer delay loop count
-.30                     mov     cx,0FFFFh                                       ;inner delay loop count
+.10                     mov     cx,0FFFFh                                       ;inner delay loop count
                         loop    $                                               ;wait out pending interrupts
                         dec     dx                                              ;restore outer loop count
-                        jnz     .30                                             ;continue outer loop
+                        jnz     .10                                             ;continue outer loop
                         int     EBIOSINTMISC                                    ;call BIOS to set protected mode
 ;
 ;       Enable hardware and maskable interrupts.
@@ -1642,8 +1507,6 @@ Loader                  push    cs                                              
 ;       In:             DS:SI   string address
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-LoaderExit.10           call    PutTTYString                                    ;display error message
-                        mov     si,czRestartMsg                                 ;press key to restart message
 LoaderExit              call    PutTTYString                                    ;display error message
 ;
 ;       Now we want to wait for a keypress. We can use a keyboard interrupt function for this (INT 16h, AH=0).
@@ -1742,12 +1605,8 @@ cwLoaderTSS             dw      EGDTLOADERTSS                                   
 cbLoaderGDT             times   5 db 0                                          ;6-byte GDTR work area
 cbLoaderGDTHiByte       db      0                                               ;hi-order byte
 czCPUErrorMsg           db      "The operating system requires an i386 or later processor.",13,10
-czRestartMsg            db      "Please press any key to restart the computer.",13,10,0
-czMemErrorMsg           db      "The operating system kernel requires at least 32KB of available RAM.",13,10,0
-czExtErrorMsg           db      "The operating system requires at least 31MB of extended RAM.",13,10,0
+                        db      "Please press any key to restart the computer.",13,10,0
 czCPUOKMsg              db      "CPU OK",13,10,0                                ;CPU level ok message
-czMemOKMsg              db      "RAM OK",13,10,0                                ;RAM ok message
-czExtOKMsg              db      "Extended RAM OK",13,10,0                       ;Extended RAM ok message
 czGDTOKMsg              db      "GDT prepared",13,10,0                          ;global descriptor table ok message
 czKernelLoadedMsg       db      "Kernel loaded",13,10,0                         ;kernel loaded message
 czStartingMsg           db      "Starting OS",13,10,0                           ;starting message
@@ -2966,235 +2825,10 @@ tscan2shift             db      000h,01Bh,021h,040h,023h,024h,025h,05Eh         
 ;
 ;       IRQ11   Reserved Hardware Interrupt
 ;
-;       Repurpose for Intel 82545 EM Ethernet adapter hardware interrupt.
-;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  irq11                                           ;reserved
-                        push    eax                                             ;save non-volatile regs
-                        push    ebx                                             ;
-                        push    ecx                                             ;
-                        push    edi                                             ;
-                        push    ds                                              ;
-                        push    es                                              ;
-;
-;       Mask IRQ 11 to prevent reentrance.
-;
-                        in      al,0A1h                                         ;secondary PIC mask
-                        or      al,008h                                         ;set (mask) bit 3 (IRQ 11)
-                        out     0A1h,al                                         ;mask IRQ 11
-;
-;       enable maskable interrupts.
-;
-                        sti                                                     ;enable maskable interrupts
-;
-;       Setup addressability.
-;
-                        push    EGDTOSDATA                                      ;load OS data selector...
-                        pop     ds                                              ;...into DS
-                        push    EGDTCGA                                         ;load CGA video selector...
-                        pop     es                                              ;...into ES
-;
-;       Notify OIA of the interrupt state '0'
-;
-                        mov     edi,24*160+82                                   ;row and column offset
-                        mov     al,'|'
-                        mov     ah,[es:edi]
-                        cmp     ah,al
-                        mov     al,'/'
-                        je      irq11.01
-                        cmp     ah,al
-                        mov     al,'-'
-                        je      irq11.01
-                        cmp     ah,al
-                        mov     al,'\'
-                        je      irq11.01
-                        cmp     ah,al
-                        mov     al,'|'
-                        je      irq11.01
-irq11.01                mov     ah,007h
-                        mov     word [es:edi+0],ax                              ;indicator character and attribute
-;
-;       Read pending interrupt status
-;
-                        mov     ebx,wsConsoleEther                              ;ETHER struct address
-                        mov     ecx,[ebx+ETHER.mmio]                            ;memory mapped I/O address
-                        jecxz   irq11.90                                        ;exit if no MMIO
-                        mov     word [es:edi+2],074Dh                           ;MMIO indicator 'M'
-;
-;       Read the pending interrupt status
-;
-                        mov     edx,[ecx+EI825REGICR]                           ;interrupt cause read register
-                        test    dl,EI825ICRLSC                                  ;link status change?
-                        jz      irq11.10                                        ;no, branch
-                        and     dl,~EI825ICRLSC                                 ;clear link status change bit
-                        mov     eax,[ecx+EI825REGCTRL]                          ;control register
-                        or      al,EI825CTRLSLU                                 ;set link up bit
-                        mov     [ecx+EI825REGCTRL],eax                          ;update control register
-                        mov     word [es:edi+4],074Ch                           ;link status change indicator 'L'
-;
-;       Handle receive underrun / min threshold
-;
-irq11.10                test    dl,EI825ICRRXO|EI825ICRRXDMT0                   ;rx overrun or rx descr min threshold rcd?
-                        jz      irq11.20                                        ;no, branch
-                        and     dl,~(EI825ICRRXO|EI825ICRRXDMT0)                ;clear rx overrun and rx descr min thr rcd
-                        mov     word [es:edi+6],0755h                           ;notify OIA of underrun ('U')
-                        jmp     irq11.30                                        ;continue to rx poll
-;
-;       check if packet is pending
-;
-irq11.20                test    dl,EI825ICRRXT0                                 ;packet pending?
-                        jz      irq11.40                                        ;no, branch
-                        and     dl,~EI825ICRRXT0                                ;clear packet pending
-                        mov     word [es:edi+8],0750h                           ;notify OIA of packet ('P')
-;
-;       do rx poll
-irq11.30                push    edx
-                        call    EtherRxPoll
-                        pop     edx
-
-
-irq11.40                test    edx,edx                                         ;unhandled int?
-                        jz      irq11.50                                        ;no, branch
-                        mov     word [es:edi+10],073Fh                          ;notify OIA of unhandled ('?')
-;
-;       Read the pending interrupt status
-;
-irq11.50                mov     edx,[ecx+EI825REGICR]                           ;clear pending int status
-;
-;       Notify OIA of the interrupt state '2'
-;
-                        mov     word [es:edi+12],0732h
-;
-;       Enable IRQ 11
-;
-irq11.90                in      al,0A1h                                         ;mask settings
-                        and     al,0F7h                                         ;clear (unmask) bit 3 (IRA 11)
-                        out     0A1h,al                                         ;unmask IRQ 11
-;
-;       End the IRQ interrupt
-;
-                        mov     al,EPICEOI                                      ;non-specific end-of-interrupt
-                        out     0A0h,al                                         ;secondary 8259 PIC command port
-                        out     020h,al                                         ;primary 8259 PIC ocmmand port
-;
-;       Notify OIA of the interrupt state '3'
-;
-                        mov     word [es:edi+14],0733h
-;
-;       Restore and return.
-;
-                        pop     es                                              ;restore non-volatile regs
-                        pop     ds                                              ;
-                        pop     edi                                             ;
-                        pop     ecx                                             ;
-                        pop     ebx                                             ;
-                        pop     eax                                             ;
-                        iretd                                                   ;return from interrupt
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       In:             EBX     wsConsoleEther
-;
-;-----------------------------------------------------------------------------------------------------------------------
-EtherRxPoll             push    ebx                                             ;save non-volatile regs
-                        push    ecx                                             ;
-                        push    edi                                             ;
-                        push    ds                                              ;
-                        push    es                                              ;
-;
-;       Setup addressability.
-;
-                        push    EGDTCGA
-                        pop     es
-                        push    EGDTOSDATA
-                        pop     ds
-                        mov     ebx,wsConsoleEther                              ;ETHER base address
-                        mov     edi,24*160+98
-.01                     mov     word [es:edi+0],0740h                           ;indicate in RxPoll
-;
-;       Get the status of the tail descriptor
-;
-                        mov     ecx,[ebx+ETHER.rxtail]                          ;receive tail
-                        cmp     ecx,ENETRXDESCCT                                ;range test
-                        jb      .02                                             ;branch if ok
-                        xor     ecx,ecx                                         ;reset
-                        mov     [ebx+ETHER.rxtail],ecx                          ;update tail
-.02                     shl     ecx,4                                           ;tail * 16
-                        add     ecx,[ebx+ETHER.rxbase]                          ;ECX = tail address
-;
-;       Check status and errors.
-;
-                        xor     eax,eax                                         ;zero register
-                        mov     al,[ecx+I825RXDESC.status]                      ;status
-
-                        mov     ah,al
-                        shr     al,4
-                        or      al,30h
-                        cmp     al,3ah
-                        jb      .04
-                        add     al,7
-.04                     mov     [es:edi+10],al
-                        mov     al,ah
-                        and     al,0fh
-                        or      al,30h
-                        cmp     al,3ah
-                        jb      .06
-                        add     al,7
-.06                     mov     [es:edi+12],al
-
-                        xor     eax,eax
-                        mov     al,[ecx+I825RXDESC.status]
-                        test    al,1                                            ;descriptor done?
-                        jz      .90                                             ;no, branch
-
-                        mov     word [es:edi+0],0741h                           ;descriptor done indicator
-
-                        mov     ax,[ecx+I825RXDESC.length]                      ;packet lenth
-                        cmp     ax,60                                           ;short packet?
-                        jae     .07                                             ;no, branch
-                        mov     word [es:edi+0],0742h
-                        jmp     .10
-
-.07                     test    al,2                                            ;end-of-packet?
-                        jnz     .08                                             ;yes, branch
-                        mov     word [es:edi+0],0743h
-                        jmp     .10
-
-.08                     mov     al,[ecx+I825RXDESC.errors]                      ;packet errors
-                        test    al,al                                           ;errors?
-                        jz      .09                                             ;no, branch
-                        mov     word [es:edi+0],0744h
-                        jmp     .10
-;
-;       Pass packet to network layer
-;
-.09                     mov     eax,[ecx+I825RXDESC.addresslo]
-                        mov     word [es:edi+0],0745h                           ;network layer indicator ('E')
-;
-;       Update counter, status, tail
-;
-.10                     inc     dword [ebx+ETHER.rxcount]
-                        mov     byte [ecx+I825RXDESC.status],0
-                        mov     eax,[ebx+ETHER.rxtail]
-                        inc     eax
-                        cmp     eax,ENETRXDESCCT
-                        jb      .20
-                        xor     eax,eax
-.20                     mov     [ebx+ETHER.rxtail],eax
-;
-;       Update active tail
-;
-                        mov     ecx,[ebx+ETHER.mmio]                            ;mapped memory i/o address
-                        mov     [ecx+EI825REGRDT],eax                           ;update receive tail register
-                        jmp     .01                                             ;next
-;
-;       Restore and return.
-;
-.90                     pop     es                                              ;restore non-volatile regs
-                        pop     ds                                              ;
-                        pop     edi                                             ;
-                        pop     ecx                                             ;
-                        pop     ebx                                             ;
-                        ret                                                     ;return
+                        push    eax                                             ;save modified regs
+                        jmp     hwwint                                          ;end interrupt and return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       IRQ12   PS/2 Mouse Hardware Interrupt
@@ -3301,11 +2935,9 @@ maxtsvc                 equ     ($-tsvc)/4                                      
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 %macro                  allocateMemory 1
-                        push    ecx                                             ;save non-volatile registers
                         mov     ecx,%1                                          ;bytes to allocate
                         mov     al,eAllocateMemory                              ;allocate memory fn.
                         int     _svc                                            ;invoke OS service
-                        pop     ecx                                             ;restore non-volatile registers
 %endmacro
 %macro                  clearConsoleScreen 0
                         mov     al,eClearConsoleScreen                          ;function code
@@ -4481,8 +4113,7 @@ GetConsoleChar          call    GetMessage                                      
 ;
 ;       In:             DS:EDX  target buffer address
 ;                       ECX     maximum number of characters to accept
-;                       BH      Bit 0:  1 = echo to terminal
-;                               Bit 1:  1 = break on attention identifier key (F)
+;                       BH      echo to terminal
 ;                       BL      terminating character
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -4748,55 +4379,55 @@ PutConsoleOIAShift      push    ecx                                             
                         test    bl,EKEYFSHIFTLEFT                               ;left-shift indicated?
                         jz      .10                                             ;no, skip ahead
                         mov     al,'S'                                          ;yes, indicate with 'S'
-.10                     mov     cl,13                                           ;indicator column
+.10                     mov     cl,14                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    bl,EKEYFSHIFTRIGHT                              ;right-shift indicated?
                         jz      .20                                             ;no, skip ahead
                         mov     al,'S'                                          ;yes, indicate with 'S'
-.20                     mov     cl,70                                           ;indicator column
+.20                     mov     cl,64                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    bl,EKEYFCTRLLEFT                                ;left-ctrl indicated?
                         jz      .30                                             ;no, skip ahead
                         mov     al,'C'                                          ;yes, indicate with 'C'
-.30                     mov     cl,14                                           ;indicator column
+.30                     mov     cl,15                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    bl,EKEYFCTRLRIGHT                               ;right-ctrl indicated?
                         jz      .40                                             ;no, skip ahead
                         mov     al,'C'                                          ;yes, indicate with 'C'
-.40                     mov     cl,69                                           ;indicator column
+.40                     mov     cl,63                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    bl,EKEYFALTLEFT                                 ;left-alt indicated?
                         jz      .50                                             ;no, skip ahead
                         mov     al,'A'                                          ;yes, indicate with 'A'
-.50                     mov     cl,15                                           ;indicator column
+.50                     mov     cl,16                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    bl,EKEYFALTRIGHT                                ;right-alt indicated?
                         jz      .60                                             ;no, skip ahead
                         mov     al,'A'                                          ;yes, indicate with 'A'
-.60                     mov     cl,68                                           ;indicator column
+.60                     mov     cl,62                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    bh,EKEYFLOCKCAPS                                ;caps-lock indicated?
                         jz      .70                                             ;no, skip ahead
                         mov     al,'C'                                          ;yes, indicate with 'C'
-.70                     mov     cl,73                                           ;indicator column
+.70                     mov     cl,78                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    bh,EKEYFLOCKNUM                                 ;num-lock indicated?
                         jz      .80                                             ;no, skip ahead
                         mov     al,'N'                                          ;yes, indicate with 'N'
-.80                     mov     cl,72                                           ;indicator column
+.80                     mov     cl,77                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    bh,EKEYFLOCKSCROLL                              ;scroll-lock indicated?
                         jz      .90                                             ;no, skip ahead
                         mov     al,'S'                                          ;yes, indicate with 'S'
-.90                     mov     cl,74                                           ;indicator column
+.90                     mov     cl,76                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         pop     es                                              ;restore non-volatile regs
                         pop     ecx                                             ;
@@ -5117,7 +4748,7 @@ GetMessage              push    ebx                                             
 ;
 ;       Routine:        PutMessage
 ;
-;       Description:    This routine adds a message to the message queue.
+;       Description:    This routine adda a message to the message queue.
 ;
 ;       In:             ECX     hi-order data word
 ;                       EDX     lo-order data word
@@ -5288,7 +4919,7 @@ SetConsoleString        push    esi                                             
 ;
 ;       Description:    Return the amount of base RAM as reported by the CMOS.
 ;
-;       Output:         EAX     base RAM size in kilobytes
+;       Output:         EAX     base RAM size in bytes
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 GetBaseMemSize          xor     eax,eax                                         ;zero register
@@ -5306,7 +4937,7 @@ GetBaseMemSize          xor     eax,eax                                         
 ;
 ;       Description:    Return the amount of extended RAM as reported by the CMOS.
 ;
-;       Output:         EAX     extended RAM size in kilobytes
+;       Output:         EAX     extended RAM size in bytes
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 GetExtendedMemSize      xor     eax,eax                                         ;zero register
@@ -5324,7 +4955,7 @@ GetExtendedMemSize      xor     eax,eax                                         
 ;
 ;       Description:    Return the amount of RAM as reported by the BIOS during power-up.
 ;
-;       Output:         EAX     RAM size in kilobytes
+;       Output:         EAX     RAM size in bytes
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 GetROMMemSize           xor     eax,eax                                         ;zero register
@@ -5540,67 +5171,6 @@ WaitForKeyOutBuffer     push    ecx                                             
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Console Panel - Common Fields
-;
-;               0         1         2         3         4         5         6         7
-;               01234567890123456789012345678901234567890123456789012345678901234567890123456789
-;
-;       00      PPPPPPPP                TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT       DD-MMM-YYYY HH:MM
-;       22      RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
-;       23      :
-;       24      KKKKKKKKKKKK SCA                        C                        /F ACS NCS CCCC
-;
-;       PPPPPPPP        Panel Identifier
-;       TTTT....TTTT    Panel Title
-;       DD-MM-YYYY      Current Date
-;       HH:MM           Current Local Time (24-Hour)
-;       RRRR....RRRR    Last Command Response
-;       :               Command Prompt
-;       KKKKKKKKKKKK    Keyboard Scan Codes
-;       SCA             Left Shift, Control, Alt Condition
-;       C               Keyboard ASCII character
-;       /(-\|)          Network Adapter Interrupt Indicator
-;       F               Floppy Disk Motor On
-;       ACS             Right Alt, Control, Shift Condition
-;       NCS             Num, Caps, Scroll-Lock Condition
-;       SSSS            System Status
-;
-;       Console Panel - Home Status Panel
-;
-;               0         1         2         3         4         5         6         7
-;               01234567890123456789012345678901234567890123456789012345678901234567890123456789
-;
-;       01      PCI/PCI-X Gigabit Ethernet Adapter
-;       02      ETH0 bbb.dd.f vvvv:dddd mmmmmmmm pppp mm-mm-mm-mm-mm-mm qq
-;       03      CTRL FD LRST ASDE SLU ILOS 1000 FRCSPD
-;       04      STAT FD LU TXOFF TBI/PHY 1000 ASDV 66 64 X 
-;       05      ICR  TXDW TXQE LSC RXSEQ RXDMT0 RXO RXT0 MDAC RXCFG PHYINT TXDLOW SRPD
-;       06      ITR  XXXX RDTR XXXX RADV XXXX TIDV XXXX TADV XXXX
-;       07      RCTL EN SBP UPE MPE LPE LBM RDMTS MO BAM 1024 VFE PMCF BSEX SECRC
-;       08      RDBA hhhhhhhh llllllll RDLEN LLLLL RDH XXXX RDT XXXX RSRPD XXX
-;       09      TCTL EN PSP CT COLD SWXOFF RTLC NRTU
-;       10      TDBA hhhhhhhh llllllll TDLEN LLLLL TDH XXXX TDT XXXX 
-;       11
-;       12
-;       13
-;       14
-;       15
-;       16
-;       17
-;       18
-;       19
-;       20
-;       21
-;
-;       bbb.dd.f        Ethernet Adapter PCI Bus, Device, Function
-;       vvvv:dddd       Ethernet Adapter PCI Vendor and Device IDs
-;       mmmmmmmm        Mapped Memory Address (--none-- if no MMIO)
-;       pppp            I/O Port Number (n/a if no port access)
-;       qq              IRQ number (11, 12, etc.)
-;
-;=======================================================================================================================
-;-----------------------------------------------------------------------------------------------------------------------
-;
 ;       Console Stack                                                           @disk: 007600   @mem:  004000
 ;
 ;       This is the stack for the console task. It supports 448 nested calls.
@@ -5622,7 +5192,7 @@ section                 conldt                                                  
                         dq      004093004700007Fh                               ;0c LDT alias
                         dq      00409300400006FFh                               ;14 stack
                         dq      00CF93000000FFFFh                               ;1c data
-                        dq      00409B0050002FFFh                               ;24 code
+                        dq      00409B0050000FFFh                               ;24 code
                         dq      00409300480007FFh                               ;2c message queue
                         times   128-($-$$) db 0h                                ;zero fill to end of section
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -5711,30 +5281,71 @@ section                 conmque                                                 
 ;       CS,CS:IP -----> 005000  +-----------------------------------------------+ CS:0000
 ;                               |  Console Task Code                            |
 ;                               |  Console Task Constants                       |
-;                       008000  +===============================================+
+;                       006000  +===============================================+
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 concode vstart=05000h                                   ;labels relative to 5000h
+ConCode                 call    ConInitializeData                               ;initialize console variables
+                        clearConsoleScreen                                      ;clear the console screen
+                        putConsoleString czTitle                                ;display startup message
+                        putConsoleString czBaseMem                              ;base memory label
+                        putConsoleString wzBaseMemSize                          ;base memory size
+                        putConsoleString czKB                                   ;Kilobytes
+                        call    ConPutNewLine                                   ;new line
+                        putConsoleString czROMMem                               ;ROM memory label
+                        putConsoleString wzROMMemSize                           ;ROM memory amount
+                        putConsoleString czKB                                   ;Kilobytes
+                        call    ConPutNewLine                                   ;new line
+                        putConsoleString czExtendedMem                          ;extended memory label
+                        putConsoleString wzExtendedMemSize                      ;extended memory size
+                        putConsoleString czKB                                   ;Kilobytes
+                        call    ConPutNewLine                                   ;new line
+                        call    ConInitializeNetwork                            ;initialize network
+.10                     putConsoleString czPrompt                               ;display input prompt
+                        placeCursor                                             ;set CRT cursor location
+                        getConsoleString wzConsoleInBuffer,79,1,13              ;accept keyboard input
+                        call    ConPutNewLine                                   ;newline
+                        mov     edx,wzConsoleInBuffer                           ;console input buffer
+                        mov     ebx,wzConsoleToken                              ;token buffer
+                        call    ConTakeToken                                    ;handle console input
+                        mov     edx,wzConsoleToken                              ;token buffer
+                        call    ConDetermineCommand                             ;determine command number
+                        cmp     eax,ECONJMPTBLCNT                               ;valid command number?
+                        jb      .20                                             ;yes, branch
+                        putConsoleString czUnknownCommand                       ;display error message
+                        jmp     .10                                             ;next command
+.20                     shl     eax,2                                           ;index into jump table
+                        mov     edx,tConJmpTbl                                  ;jump table base address
+                        mov     eax,[edx+eax]                                   ;command handler routine address
+                        call    eax                                             ;call command handler
+                        jmp     .10                                             ;next command
+;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Initialize console work areas to low values.
+;       Routine:        ConInitializeData
 ;
-ConCode                 mov     edi,ECONDATA                                    ;OS console data address
+;       Description:    This routine initializes console task variables.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConInitializeData       push    ecx                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    es                                              ;
+;
+;       Initialize console work areas.
+;
+                        push    EGDTOSDATA                                      ;load OS data selector ...
+                        pop     es                                              ;... into extra segment register
+                        mov     edi,ECONDATA                                    ;OS console data address
                         xor     al,al                                           ;initialization value
                         mov     ecx,ECONDATALEN                                 ;size of OS console data
                         cld                                                     ;forward strings
                         rep     stosb                                           ;initialize data
 ;
-;       Read extended RAM KB (above 1MB) from CMOS ROM (might be determined by VM settings).
-;       Set available heap to the lesser of the reported extended memory and max-supported heap.
-;       We reserve base RAM (below 1MB) for the kernel.
+;       Initialize heap size
 ;
-                        getExtendedMemSize                                      ;get extended RAM count from CMOS
-                        cmp     eax,EKRNHEAPSIZE                                ;more than the OS can support?
-                        jna     .10                                             ;no, continue
-                        mov     eax,EKRNHEAPSIZE                                ;set to max supported RAM
-.10                     mov     [wdConsoleHeapSize],eax                         ;set heap size
+                        mov     eax,EKRNHEAPSIZE                                ;heap size
+                        mov     [wdConsoleHeapSize],eax                         ;set heap size
 ;
-;       Initialize the single MEMROOT structure.
+;       Initialize MEMROOT structure
 ;
                         mov     edi,wsConsoleMemRoot                            ;memory root structure address
                         mov     eax,EKRNHEAPBASE                                ;base address of heap storage
@@ -5745,168 +5356,45 @@ ConCode                 mov     edi,ECONDATA                                    
                         stosd                                                   ;zero first task block
                         stosd                                                   ;zero last task block
 ;
-;       Initialize a single MEMBLOCK structure in heap memory at EMEMBASE.
+;       Initialize MEMBLOCK structure at EMEMBASE
 ;
                         mov     edi,EKRNHEAPBASE                                ;memory block structure address
                         mov     eax,EMEMFREECODE                                ;free memory signature
                         stosd                                                   ;store signature
-                        mov     eax,[wdConsoleHeapSize]                         ;heap size KB
-                        shl     eax,10                                          ;heap size bytes
+                        mov     eax,EKRNHEAPSIZE                                ;heap size
                         stosd                                                   ;store block size
                         xor     ecx,ecx                                         ;zero register
                         mov     cl,6                                            ;count
                         xor     eax,eax                                         ;zero register
                         rep     stosd                                           ;zero owner, reserved, pointers
 ;
-;       Initialize the active panel variables.
+;       Read memory sizes from ROM
 ;
-                        mov     eax,czPnlMain                                   ;initial console panel
-                        mov     [wdConsolePanel],eax                            ;save panel template address
-;                        mov     [wdConsoleField],eax                            ;save current field address
-;                        mov     al,007h                                         ;default screen color attribute
-;                        mov     [wbConsoleFieldColor],al                        ;save field color attribute
+                        getROMMemSize                                           ;get ROM memory size
+                        mov     [wdROMMemSize],eax                              ;bytes reported by ROM
+                        mov     ecx,eax                                         ;integer param
+                        mov     edx,wzROMMemSize                                ;output buffer param
+                        mov     bh,3                                            ;no leading zeros; thousands grouping
+                        unsignedToDecimalString                                 ;build ASCIIZ decimal string
+                        getBaseMemSize                                          ;get base RAM count from CMOS
+                        mov     [wdBaseMemSize],eax                             ;save base RAM count
+                        mov     ecx,eax                                         ;integer param
+                        mov     edx,wzBaseMemSize                               ;output buffer param
+                        mov     bh,3                                            ;no leading zeros; thousands grouping
+                        unsignedToDecimalString                                 ;build ASCIIZ decimal string
+                        getExtendedMemSize                                      ;get extended RAM count from CMOS
+                        mov     [wdExtendedMemSize],eax                         ;save base RAM count
+                        mov     ecx,eax                                         ;integer param
+                        mov     edx,wzExtendedMemSize                           ;output buffer param
+                        mov     bh,3                                            ;no leading zeros; thousands grouping
+                        unsignedToDecimalString                                 ;build ASCIIZ decimal string
 ;
-;       Address the console screen memory.
+;       Restore and return.
 ;
-                        push    EGDTCGA                                         ;load CGA video selector...
-                        pop     es                                              ;...into extra segment reg
-;
-;       Initialize the Operator Information Area (OIA) (This is done once).
-;
-                        mov     edi,ECONROWS*ECONROWBYTES                       ;target offset
-                        mov     ecx,ECONROWDWORDS                               ;double-words per row
-                        mov     eax,ECONOIADWORD                                ;OIA attribute and space
-                        rep     stosd                                           ;reset OIA
-;
-;       Clear the console rows. (This is done after every attention key).
-;
-.20                     xor     edi,edi                                         ;target offset
-                        mov     ecx,ECONROWS*ECONROWDWORDS                      ;double-words to clear
-                        mov     eax,ECONCLEARDWORD                              ;initialization value
-                        rep     stosd                                           ;reset screen body
-;
-;       Reset the input field row and column. Address the panel template.
-;
-                        xor     eax,eax                                         ;zero register
-                        mov     [wdConsoleInput],eax                            ;zero input addr
-                        mov     [wbConsoleRow],al                               ;zero console row
-                        mov     [wbConsoleColumn],al                            ;zero console column
-;
-;       Load the field address. Exit loop if address is null.
-;
-                        mov     esi,[wdConsolePanel]                            ;panel template
-.30                     lodsd                                                   ;field value addr
-                        test    eax,eax                                         ;end of panel?
-                        jz      .70                                             ;yes, exit loop
-                        mov     ebx,eax                                         ;field value addr
-;
-;       Load the field row, column, color and length.
-;
-                        lodsb                                                   ;attributes
-                        mov     ch,al                                           ;row
-                        lodsb                                                   ;column
-                        mov     cl,al                                           ;column
-                        lodsb                                                   ;color
-                        mov     dh,al                                           ;color
-                        lodsb                                                   ;length
-                        mov     dl,al                                           ;length
-;
-;       Test the row high-bit for input field indication
-;
-                        test    ch,080h                                         ;input field?
-                        jz      .40                                             ;no, branch
-                        and     ch,07Fh                                         ;clear input field indicator
-;
-;       Save the row and column if this is the first input field
-;
-                        mov     al,[wbConsoleRow]                               ;console row
-                        or      al,[wbConsoleColumn]                            ;already have an input field?
-                        jnz     .40                                             ;yes, branch
-                        mov     [wbConsoleRow],ch                               ;update console row
-                        mov     [wbConsoleColumn],cl                            ;update console column
-;
-;       Compute the target offset.
-;
-.40                     movzx   eax,ch                                          ;row
-                        mov     ah,ECONCOLS                                     ;columns per row
-                        mul     ah                                              ;row offset
-                        add     al,cl                                           ;add column
-                        adc     ah,0                                            ;handle overflow
-                        shl     eax,1                                           ;two-bytes per column
-                        mov     edi,eax                                         ;target offset
-;
-;       Display the field contents
-;
-                        xchg    ebx,esi                                         ;swap panel and field addr
-                        movzx   ecx,dl                                          ;length
-                        mov     ah,dh                                           ;color
-.50                     lodsb                                                   ;character
-                        test    al,al                                           ;end of value?
-                        jz      .60                                             ;yes, branch
-                        stosw                                                   ;store character and color
-                        loop    .50                                             ;next character
-.60                     xchg    ebx,esi                                         ;swap panel and field addr
-                        jmp     short .30                                       ;next field
-;
-;       Place the cursor if we have an input field
-;
-.70                     mov     ah,[wbConsoleRow]                               ;field row
-                        mov     al,[wbConsoleColumn]                            ;field column
-                        or      al,ah                                           ;input field?
-                        jz      .80                                             ;no, branch
-                        placeCursor                                             ;position the cursor
-;
-;       Address the message queue.
-;       Yield until the next message arrives in the message queue.
-;       Repeat until the message is a character input.
-;
-.80                     push    ds                                              ;save non-volatile regs
-                        push    ELDTMQ                                          ;load message queue selector...
-                        pop     ds                                              ;...into data segment register
-.81                     sti                                                     ;enable maskable ints
-                        hlt                                                     ;halt until external interrupt
-.82                     mov     ebx,[MQHead]                                    ;head ptr
-                        mov     eax,[ebx]                                       ;lo-order 32-bits
-                        mov     edx,[ebx+4]                                     ;hi-order 32-bits
-                        mov     ecx,eax                                         ;lo-order 32-bits
-                        or      ecx,edx                                         ;queue empty?
-                        jz      .81                                             ;yes, continue
-                        xor     ecx,ecx                                         ;zero register
-                        mov     [ebx],ecx                                       ;zero lo-order dword
-                        mov     [ebx+4],ecx                                     ;zero hi-order dword
-                        add     ebx,8                                           ;next queue element
-                        and     ebx,03FCh                                       ;at end of queue?
-                        jnz     .90                                             ;no, branch
-                        mov     bl,8                                            ;reset to 1st entry
-.90                     mov     [MQHead],ebx                                    ;save new head ptr
-                        mov     ecx,eax
-                        and     ecx,0FFFF0000h
-                        cmp     ecx,EMSGKEYCHAR
-                        jne     .82
-                        and     eax,00000FFFFh
-                        pop     ds                                              ;restore non-volatile regs
-;
-;       Reset the system
-;
-                        resetSystem
-
-.180                    sti
-                        hlt
-                        jmp     .180
-
-
-                        mov     edx,wzConsoleInBuffer                           ;console input buffer
-                        mov     ebx,wzConsoleToken                              ;token buffer
-                        call    ConTakeToken                                    ;handle console input
-                        mov     edx,wzConsoleToken                              ;token buffer
-                        call    ConDetermineCommand                             ;determine command number
-                        cmp     eax,ECONJMPTBLCNT                               ;valid command number?
-                        jae     .20                                             ;yes, branch
-                        shl     eax,2                                          ;index into jump table
-                        mov     edx,tConJmpTbl                                  ;jump table base address
-                        mov     eax,[edx+eax]                                   ;command handler routine address
-                        call    eax                                             ;call command handler
-                        jmp     .20
+                        pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     ecx                                             ;
+                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        ConPutNewLine
@@ -5965,7 +5453,7 @@ ConInitializeNetwork    push    ebx                                             
 ;
 .40                     call    ConNextPCIDevice                                ;next device, bus.
                         jb      .10                                             ;continue if no overflow
-                        jmp     .90                                             ;done, ETHER not found
+                        jmp     .60                                             ;done, ETHER not found
 ;
 ;       Set hardware flag and save selector.
 ;
@@ -6025,11 +5513,8 @@ ConInitializeNetwork    push    ebx                                             
 ;       Read MAC address from MMIO
 ;
                         mov     ecx,[esi+ETHER.mmio]                            ;MMIO address
-                        test    ecx,ecx
-                        jnz     .60
-                        jmp     .90
-
-.60                     add     ecx,05400h                                      ;MAC address offset
+                        jecxz   .60                                             ;branch if none
+                        add     ecx,05400h                                      ;MAC address offset
                         mov     eax,[ecx]                                       ;MAC address lo-order dword
                         mov     [esi+ETHER.mac],eax                             ;save
                         mov     ax,[ecx+4]                                      ;MAC address hi-order word
@@ -6039,218 +5524,11 @@ ConInitializeNetwork    push    ebx                                             
                         mov     edx,czEthernetMAC                               ;label string
                         call    ConPutLabeledLine                               ;output labeled line to console
 ;
-;       Set the link up
-;
-                        mov     ecx,[esi+ETHER.mmio]                            ;MMIO address
-                        mov     eax,[ecx+EI825REGCTRL]                          ;control register
-                        or      al,EI825CTRLSLU                                 ;set link up
-                        mov     [ecx+EI825REGCTRL],eax                          ;update control register
-                        putConsoleString czLinkUp
-;
-;       Initialize the Multicast Table Array
-;
-                        xor     ecx,ecx                                         ;zero register
-                        mov     cl,128                                          ;element count
-                        mov     edi,[esi+ETHER.mmio]                            ;MMIO address
-                        add     edi,EI825REGMTA                                 ;MTA base address
-                        xor     eax,eax                                         ;zero register
-                        cld                                                     ;forward strings
-                        rep     stosd                                           ;store dword
-                        putConsoleString czMTAInit
-;
-;       Enable interrupts
-;
-                        mov     ecx,[esi+ETHER.mmio]                            ;MMIO address
-                        mov     eax,01F6DCh                                     ;SRPD|TXD_LOW|GPI|PHYINT|RXCFG|MDAC|RXT0|RXO|RXDMT0|RXSEQ|LSC
-                        mov     [ecx+EI825REGIMS],eax                           ;enable
-                        mov     eax,[ecx+EI825REGICR]                           ;clear pending ints
-                        putConsoleString czIntsEnabled
-;
-;       Set interrupt throttling register
-;
-                        mov     ecx,[esi+ETHER.mmio]
-                        mov     eax,1000h
-                        mov     [ecx+EI825REGITR],eax
-;
-;       Start the receive process.
-;
-                        call    ConInitEtherReceive
-                        jc      .90
-                        putConsoleString czReceiveStarted
-;
-;       Start the transmit process.
-;
-;                        call    ConInitEtherTransmit
-;                        jc      .90
-;                        putConsoleString czTransmitStarted
-;
 ;       Restore and return.
 ;
-.90                     pop     edi                                             ;restore non-volatile regs
+.60                     pop     edi                                             ;restore non-volatile regs
                         pop     esi                                             ;
                         pop     ecx                                             ;
-                        pop     ebx                                             ;
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConInitEtherReceive
-;
-;       Description:    This routine initializes the ethernet adapter for receiving.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConInitEtherReceive     push    ebx                                             ;save non-volatile regs
-                        push    ecx                                             ;
-;
-;       Setup addressability
-;
-                        mov     ebx,wsConsoleEther                              ;ETHER struct address
-;
-;       Allocate receive descriptors
-;
-                        mov     eax,EI825RXDESCLEN * ENETRXDESCCT + 16          ;memory size to allocate
-                        allocateMemory eax                                      ;allocate memory
-                        test    eax,eax                                         ;test result
-                        jz      .20                                             ;branch if error
-                        mov     [ebx+ETHER.rxblock],eax                         ;save allocated storage address
-                        add     eax,EMEMBLOCKLEN + 16                           ;usable memory start + 16
-                        and     al,0F0h                                         ;align on 16-byte boundary
-                        mov     [ebx+ETHER.rxbase],eax                          ;save descriptor base
-;
-;       Initialize receive descriptors
-;
-                        mov     edx,[ebx+ETHER.rxbase]                          ;descriptor base address
-                        xor     ecx,ecx                                         ;zero register
-                        mov     cl,ENETRXDESCCT                                 ;descriptor count
-.10                     push    edx                                             ;save descriptor addr
-                        mov     eax,ENETRXBUFSIZ+16                             ;receive buffer size
-                        allocateMemory eax                                      ;allocate memory
-                        pop     edx                                             ;descriptor memory
-                        test    eax,eax                                         ;test for error
-                        jz      .20                                             ;branch if error
-                        add     eax,EMEMBLOCKLEN+16                             ;usable memory start + 16
-                        and     al,0F0h                                         ;align on 16-byte boundary
-                        mov     [edx+I825RXDESC.addresslo],eax                  ;zero address low
-                        xor     eax,eax                                         ;zero register
-                        mov     [edx+I825RXDESC.addresshi],eax                  ;zero address hi
-                        mov     [edx+I825RXDESC.status],al                      ;zero status
-                        add     edx,EI825RXDESCLEN                              ;next descr address
-                        loop    .10                                             ;continue
-;
-;       Setup receive descriptor ring buffer
-;
-                        mov     ecx,[ebx+ETHER.mmio]                            ;memory i/o address
-                        xor     eax,eax                                         ;zero register
-                        mov     [ecx+EI825REGRDBAH],eax                         ;set receive descr base address hi
-                        mov     eax,[ebx+ETHER.rxbase]                          ;receive descr base address lo
-                        mov     [ecx+EI825REGRDBAL],eax                         ;set receive descr base address lo
-;
-;       Setup receive descriptor ring length
-;
-                        mov     eax,EI825RXDESCLEN * ENETRXDESCCT               ;descriptors size
-                        mov     [ecx+EI825REGRDLEN],eax                         ;set receive descr size
-;
-;       Setup receive head and tail pointers.
-;
-                        xor     eax,eax                                         ;zero register
-                        mov     [ecx+EI825REGRDH],eax                           ;initialize receive descriptor head
-                        mov     eax,ENETRXDESCCT                                ;descriptor count
-                        mov     [ecx+EI825REGRDT],eax                           ;initialize receive descriptor tail
-                        xor     eax,eax                                         ;zero register
-                        mov     [ebx+ETHER.rxtail],eax                          ;initialize tail
-;
-;       Set the receive control register
-;
-;                        mov     eax,EI825RCTLBSZ1024|EI825RCTLBAM|EI825RCTLLPE|EI825RCTLMPE|EI825RCTLUPE|EI825RCTLSBP|EI825RCTLEN
-;                        mov     eax,EI825RCTLBSZ1024|EI825RCTLSBP|EI825RCTLEN
-;                        mov     eax,EI825RCTLBSZ1024|EI825RCTLBAM|EI825RCTLLPE|EI825RCTLMPE|EI825RCTLUPE|EI825RCTLSBP|EI825RCTLEN      ;add BAM|MPE
-                        mov     eax,048180FEh                        
-                        mov     [ecx+EI825REGRCTL],eax
-                        clc
-                        jmp     .30
-;
-;       Exit with error indicated.
-;
-.20                     stc                                                     ;set carry
-;
-;       Restore and return.
-;
-.30                     pop     ecx                                             ;restore non-volatile regs
-                        pop     ebx                                             ;
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConInitEtherTransmit
-;
-;       Description:    This routine initializes the ethernet adapter for transmitting.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConInitEtherTransmit    push    ebx                                             ;save non-volatile regs
-                        push    ecx                                             ;
-;
-;       Setup addressability
-;
-                        mov     ebx,wsConsoleEther                              ;ETHER struct address
-;
-;       Allocate transmit descriptors
-;
-                        mov     eax,EI825TXDESCLEN * ENETTXDESCCT + 16          ;memory required for transmit descrs
-                        allocateMemory eax                                      ;allocate memory
-                        test    eax,eax                                         ;test result
-                        jz      .20                                             ;branch if error
-                        mov     [ebx+ETHER.txblock],eax                         ;save allocated storage address
-                        add     eax,EMEMBLOCKLEN + 16                           ;usable memory start + 16
-                        and     al,0F0h                                         ;align on 16-byte boundary
-                        mov     [ebx+ETHER.txbase],eax                          ;save descriptor base
-;
-;       Initialize transmit descriptors
-;
-                        xor     ecx,ecx                                         ;zero register
-                        mov     cl,ENETTXDESCCT                                 ;descriptor count
-                        xor     eax,eax                                         ;zero register
-                        mov     edx,[ebx+ETHER.txbase]                          ;descriptor base address
-.10                     mov     [edx+I825TXDESC.addresslo],eax                  ;zero address low
-                        mov     [edx+I825TXDESC.addresshi],eax                  ;zero address hi
-                        mov     [edx+I825TXDESC.cmd],al                         ;zero command
-                        add     edx,EI825TXDESCLEN                              ;next descr address
-                        loop    .10                                             ;continue
-;
-;       Setup transmit descriptor ring buffer
-;
-                        mov     ecx,[ebx+ETHER.mmio]                            ;memory i/o address
-                        xor     eax,eax                                         ;zero register
-                        mov     [ecx+EI825REGTDBAH],eax                         ;set transmit descr base address hi
-                        mov     eax,[ebx+ETHER.txbase]                          ;transmit descr base address lo
-                        mov     [ecx+EI825REGTDBAL],eax                         ;set transmit descr base address lo
-;
-;       Setup transmit descriptor ring length
-;
-                        mov     eax,EI825TXDESCLEN * ENETTXDESCCT               ;descriptors size
-                        mov     [ecx+EI825REGTDLEN],eax                         ;set transmit descr size
-;
-;       Setup transmit head and tail pointers.
-;
-                        xor     eax,eax                                         ;zero register
-                        mov     [ecx+EI825REGTDH],eax                           ;initialize transmit descriptor head
-                        mov     eax,ENETTXDESCCT                                ;descriptor count
-                        mov     [ecx+EI825REGTDT],eax                           ;initialize transmit descriptor tail
-                        xor     eax,eax                                         ;zero register
-                        mov     [ebx+ETHER.txtail],eax                          ;initialize transmit tail
-;
-;       Enable transmit and pad short packets.
-;
-                        xor     eax,eax                                         ;zero register
-                        mov     al,EI825TCTLEN|EI825TCTLPSP                     ;enable|pad-short-packets
-                        mov     [ecx+EI825REGTCTL],eax                          ;enable and pad short packets
-                        clc
-                        jmp     .30                                             ;branch to exit
-;
-;       Indicate error on return.
-;
-.20                      stc                                                     ;set carry
-;
-;       Restore and return.
-;
-.30                     pop     ecx                                             ;restore non-volatile registers
                         pop     ebx                                             ;
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -6610,93 +5888,6 @@ ConDay                  readRealTimeClock wsConsoleDateTime                     
                         putConsoleString  wzConsoleOutBuffer                    ;write string to console
                         call    ConPutNewLine                                   ;write newline to console
                         ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConDev
-;
-;       Description:    This routine handles the DEV command.
-;
-;       Input:          wzConsoleInBuffer contains parameters(s)
-;
-;-----------------------------------------------------------------------------------------------------------------------
-;ConDev                  push    ebx                                             ;save non-volatile regs
-;                        push    esi                                             ;
-;
-;                        mov     esi,wsConsoleEther                              ;ETHER struct addr
-;                        lea     ebx,[esi+ETHER.pci]                             ;PCI address
-;                        call    ConFindPCIEther                                 ;find Intel Pro/1000 MT
-;                        jc      .10                                             ;branch if not found
-;
-;                        putConsoleString czEthernetAdapterFound
-;
-;                        mov     al,010h                                         ;Base Address Register (BAR) 0
-;                        call    ConSetPCIRegister                               ;set PCI register
-;                        call    ConBuildPCISelector                             ;build PCI selector
-;                        call    ConReadPCIConfigData                            ;read BAR 0
-;                        mov     [esi+ETHER.mmio],eax                            ;store MMIO address
-;
-;                        mov     al,018h                                         ;Base Address Register (BAR) 2
-;                        call    ConSetPCIRegister                               ;set PCI register
-;                        call    ConBuildPCISelector                             ;build PCI selector
-;                        call    ConReadPCIConfigData                            ;read BAR 2
-;                        mov     [esi+ETHER.port],eax                            ;store i/o port
-;
-;.10                     pop     esi                                             ;restore non-volatile regs
-;                        pop     ebx                                             ;
-;                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConFindPCIEther
-;
-;       Description:    This routine attempts to locate the first PCI ethernet adapter.
-;
-;       In:             DS:EBX  PCI structure address
-;
-;-----------------------------------------------------------------------------------------------------------------------
-;ConFindPCIEther         call    ConInitPCIContext                               ;initialize PCI
-;.10                     call    ConGetPCIDeviceVendor                           ;EAX = vendor id
-;                        cmp     eax,EPCIINTELPRO1000MT<<16|EPCIVENDORINTEL      ;Pro/1000 MT?
- ;                       je      .30                                             ;no, branch
-;.20                     call    ConNextPCIFunction                              ;step to next bus, device, function
-;                        jb      .10                                             ;next
-;                        stc                                                     ;indicate not found
-;.30                     ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConGetPCIDeviceVendor
-;
-;       Description:    This routine returns the PCI device and vendor IDs
-;
-;       In:             DS:EBX  PCI structure address
-;
-;       Out:            EAX     devivce/vendor ID
-;
-;-----------------------------------------------------------------------------------------------------------------------
-;ConGetPCIDeviceVendor   mov     al,EPCIREGVENDORDEVICE                          ;PCI vendor/device register
-;                        call    ConSetPCIRegister                               ;set the PCICONTEXT register
-;                        call    ConBuildPCISelector                             ;build selector from bus, dev, fn, reg
-;                        call    ConReadPCIConfigData                            ;read config data from register
-
-;                        cmp     eax,-1
-;                        je      .10
-;                        mov     ecx,eax                                         ;unsigned integer param
-;                        mov     edx,wzConsoleToken                              ;target buffer address
-;                        unsignedToHexadecimal                                   ;convert unsigned to ASCII hex string
-;                        putConsoleString wzConsoleToken                         ;output string to console
-;                        putConsoleString czNewLine                              ;output newline to console
-
-;.10                     ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConSetPCIRegister
-;
-;       Description:    This routine sets the register member of the PCI structure
-;
-;       In:             AL      register value (00-FF)
-;
-;-----------------------------------------------------------------------------------------------------------------------
-;ConSetPCIRegister       mov     [ebx+PCI.register],al                           ;set register
-;                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        ConExit
@@ -7234,7 +6425,6 @@ tConJmpTbl              equ     $                                               
                         dd      ConYear         - ConCode                       ;year command routine offset
                         dd      ConClear        - ConCode                       ;cls command routine offset
                         dd      ConDay          - ConCode                       ;day command routine offset
-;                        dd      ConDev          - ConCode                       ;dev command routine offset
                         dd      ConMem          - ConCode                       ;mem command routine offset
                         dd      ConVersion      - ConCode                       ;ver command routine offset
 ECONJMPTBLL             equ     ($-tConJmpTbl)                                  ;table length
@@ -7267,7 +6457,6 @@ tConCmdTbl              equ     $                                               
                         db      5,"YEAR",0                                      ;year command
                         db      4,"CLS",0                                       ;cls command
                         db      4,"DAY",0                                       ;day command
-;                        db      4,"DEV",0                                       ;dev command
                         db      4,"MEM",0                                       ;mem command
                         db      4,"VER",0                                       ;ver command
                         db      0                                               ;end of table
@@ -7276,36 +6465,6 @@ tConCmdTbl              equ     $                                               
 ;       Constants
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Panels
-;
-;       Notes:          1.      Each field MUST have an address of a constant or an input field.
-;                       2.      The constant text or input field MUST be at least the length of the field.
-;                       3.      Field constant text or field values MUST be comprised of printable characters.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-czPnlMain               dd      czFldPnlIdCon001
-                        db      00,00,02h,06
-                        dd      czFldTitleCon001
-                        db      00,29,07h,21
-                        dd      czFldDatTmCon001
-                        db      00,63,02h,17
-                        dd      czFldPrmptCon001
-                        db      23,00,07h,01
-                        dd      wzConsoleInBuffer
-                        db      128+23,01,0Fh,79
-                        dd      0
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Strings
-;
-;-----------------------------------------------------------------------------------------------------------------------
-czFldPnlIdCon001        db      "CON001"
-czFldTitleCon001        db      "CustomOS Version 0.15"
-czFldDatTmCon001        db      "DD-MMM-YYYY HH:MM"
-czFldPrmptCon001        db      ":"
-
 czApple                 db      "Apple",0                                       ;vendor name string
 czAurealAD1881          db      "Aureal AD1881 SOUNDMAX",0                      ;soundmax string
 czBaseMem               db      "Base memory (RTC):     ",0                     ;base memory from BIOS
@@ -7319,10 +6478,7 @@ czEthernetSelector      db      " PCI Selector: ",0                             
 czEthernetStatusCommand db      " Status: ",0                                   ;PCI status label
 czExtendedMem           db      " Extended (RTC):       ",0                     ;extended memory from BIOS
 czIntel                 db      "Intel",0                                       ;vendor name string
-czIntsEnabled           db      "Interrupts enabled",13,10,0
 czKB                    db      "KB",0                                          ;Kilobytes
-czLinkUp                db      "Link up",13,10,0
-czMTAInit               db      "MTA Initialized",13,10,0
 czNewLine               db      13,10,0                                         ;new line string
 czOK                    db      "ok",13,10,0                                    ;ok string
 czOracle                db      "Oracle",0                                      ;vendor name string
@@ -7333,11 +6489,9 @@ czPIIX3PCItoIDEBridge   db      "PIIX3 PCI-to-ISA Bridge",0                     
 czPIIX4PowerMgmt        db      "PIIX4/4E/4M Power Management Controller",0     ;power management controller string
 czPrompt                db      ":",0                                           ;prompt string
 czPro1000MT             db      "Pro/1000 MT Ethernet Adapter",0                ;Intel Pro/1000 MT Ethernet adapter strg
-czReceiveStarted        db      "Receive started",13,10,0
 czROMMem                db      " Below EBDA (Int 12h): ",0                     ;memory reported by ROM
 czSpace                 db      " ",0                                           ;space delimiter
 czTitle                 db      "Custom Operating System 1.0",13,10,0           ;version string
-czTransmitStarted       db      "Transmit started",13,10,0
 czUnknownCommand        db      "Unknown command",13,10,0                       ;unknown command response string
 czUSBController         db      "USB Controller",0                              ;USB controller string
 czVirtualBoxDevice      db      "VirtualBox Device",0                           ;Virtual Box device string
@@ -7345,18 +6499,18 @@ czVirtualBoxGA          db      "VirtualBox Graphics Adapter",0                 
 czYearIsLeap            db      "The year is a leap year.",13,10,0              ;leap year message
 czYearIsNotLeap         db      "The year is not a leap year.",13,10,0          ;not leap year message
 cz82371ABBusMaster      db      "82371AB/EB PCI Bus Master IDE Controller",0    ;bus-master strin
-                        times   03000h-($-$$) db 0h                             ;zero fill to end of section
+                        times   4096-($-$$) db 0h                               ;zero fill to end of section
 %endif
 %ifdef BUILDDISK
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Free Disk Space                                                         @disk: 00b600   @mem:  n/a
+;       Free Disk Space                                                         @disk: 009600   @mem:  n/a
 ;
 ;       Following the convention introduced by DOS, we use the value 'F6' to indicate unused floppy disk storage.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 unused                                                  ;unused disk space
-                        times   EBOOTDISKBYTES-0B600h db 0F6h                   ;fill to end of disk image
+                        times   EBOOTDISKBYTES-09600h db 0F6h                   ;fill to end of disk image
 %endif
 ;=======================================================================================================================
 ;
