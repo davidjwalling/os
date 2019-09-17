@@ -4030,6 +4030,9 @@ section                 conmque                                                 
 ;       Console Task Routines
 ;
 ;       ConCode                 Console task entry point
+;       ConHome                 Prepare the home panel
+
+
 ;       ConClearPanel           Clear the panel area of video memory to spaces
 ;       ConDrawFields           Draw the panel fields to video memory
 ;       ConDrawField            Draw a panel field to video memory
@@ -4043,7 +4046,6 @@ section                 conmque                                                 
 ;       ConReset                Handle the reset command
 ;       ConView                 Handle the view command
 ;       ConClearField           Clear a panel field to nulls
-;       ConMain                 Handle the main command
 ;
 ;=======================================================================================================================
 section                 concode vstart=05000h                                   ;labels relative to 5000h
@@ -4074,9 +4076,9 @@ ConCode                 mov     edi,ECONDATA                                    
                         setKeyboardLamps
                         putConsoleOIA
 ;
-;       Set the current panel to Main, clear and redraw all fields.
+;       Set the current panel to the home panel, clear and redraw all fields.
 ;
-                        call    ConMain                                         ;initialize panel
+                        call    ConHome                                         ;initialize home panel
 ;
 ;       Place the cursor at the current field index.
 ;
@@ -4661,14 +4663,14 @@ ConClearField           push    ebx                                             
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Routine:        ConMain
+;       Routine:        ConHome
 ;
-;       Description:    This routine sets the current panel to the main panel (CON001).
+;       Description:    This routine sets the current panel to the home panel
 ;
 ;       In:             ES:     OS data segment
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-ConMain                 push    ecx                                             ;save non-volatile regs
+ConHome                 push    ecx                                             ;save non-volatile regs
                         push    edi                                             ;
 ;
 ;       Initialize panel storage areas
@@ -4699,6 +4701,23 @@ ConMain                 push    ecx                                             
 ;
                         pop     edi                                             ;restore non-volatile regs
                         pop     ecx                                             ;
+                        ret                                                     ;return
+
+ConGo                   push    ebx                                             ;save non-volatile regs
+
+                        mov     edx,wzConsoleInBuffer                           ;console input buffer address (params)
+                        mov     ebx,wzConsoleToken                              ;console command token address
+                        call    ConTakeToken                                    ;take first param as token
+                        cmp     byte [ebx],0                                    ;token?
+                        je      .10                                             ;no, branch
+;
+;       Go to the given panel.
+;
+;       ...
+;
+.10                     call    ConHome                                         ;set panel to the home panel
+
+                        pop     ebx                                             ;
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -4864,14 +4883,14 @@ cdHandlerView           dd      ConHandlerView - ConCode                        
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                                                                                 ;---------------------------------------
-                                                                                ;  Main Panel
+                                                                                ;  Home Panel
                                                                                 ;---------------------------------------
 czPnlCon001             dd      czFldPnlIdCon001                                ;field text
-                        db      0,0,6,0,0,0,7,0                                 ;row col siz ndx 1st nth atr flg
-                        dd      czFldTitleCon001
-                        db      0,33,14,0,0,0,7,0
-                        dd      czFldDatTmCon001
-                        db      0,63,17,0,0,0,7,0
+                        db      0,0,4,0,0,0,7,0                                 ;row col siz ndx 1st nth atr flg
+                        ;dd      czFldTitleCon001
+                        ;db      0,33,14,0,0,0,7,0
+                        ;dd      czFldDatTmCon001
+                        ;db      0,63,17,0,0,0,7,0
                         dd      wzFldMenuOptn0
                         db      2,1,1,0,0,0,2,80h
                         dd      czFldLblMainDevices
@@ -4901,11 +4920,11 @@ czPnlConInp             dd      wzConsoleInBuffer
                                                                                 ;  Memory Display Panel
                                                                                 ;---------------------------------------
 czPnlMem001             dd      czFldPnlIdMem001
-                        db      0,0,6,0,0,0,7,0
-                        dd      czFldTitleMem001
-                        db      0,33,14,0,0,0,7,0
-                        dd      czFldDatTmCon001
-                        db      0,63,17,0,0,0,7,0
+                        db      0,0,4,0,0,0,7,0
+                        ;dd      czFldTitleMem001
+                        ;db      0,33,14,0,0,0,7,0
+                        ;dd      czFldDatTmCon001
+                        ;db      0,63,17,0,0,0,7,0
                         dd      wzFldMenuOptn0
                         db      2,1,1,0,0,0,2,80h
                         dd      wzConsoleMemBuf0
@@ -5000,8 +5019,7 @@ czPnlMenuInp            dd      wzConsoleInBuffer
                                                                                 ;  Command Jump Table
                                                                                 ;---------------------------------------
 tConJmpTbl              equ     $                                               ;command jump table
-                        dd      ConInt6         - ConCode                       ;int6 command
-                        dd      ConMain         - ConCode                       ;go command
+                        dd      ConGo           - ConCode                       ;go command
                         dd      ConReset        - ConCode                       ;reset command
                         dd      ConView         - ConCode                       ;view command
 ECONJMPTBLL             equ     ($-tConJmpTbl)                                  ;table length
@@ -5010,7 +5028,6 @@ ECONJMPTBLCNT           equ     ECONJMPTBLL/4                                   
                                                                                 ;  Command Name Table
                                                                                 ;---------------------------------------
 tConCmdTbl              equ     $                                               ;command name table
-                        db      5,"INT6",0                                      ;int6 command
                         db      2,"G",0                                         ;go command
                         db      2,"R",0                                         ;reset command
                         db      2,"V",0                                         ;view command
@@ -5020,12 +5037,12 @@ tConCmdTbl              equ     $                                               
 ;       Strings
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-czFldPnlIdCon001        db      "CON001",0                                      ;main console panel id
-czFldTitleCon001        db      "OS Version 1.0",0                              ;main console panel title
-czFldDatTmCon001        db      "DD-MMM-YYYY HH:MM",0                           ;panel date and time template
+czFldPnlIdCon001        db      "Home",0                                        ;home console panel id
+;czFldTitleCon001        db      "OS Version 1.0",0                              ;home console panel title
+;czFldDatTmCon001        db      "DD-MMM-YYYY HH:MM",0                           ;panel date and time template
 czFldPrmptCon001        db      ":",0                                           ;command prompt
-czFldPnlIdMem001        db      "MEM001",0                                      ;memory panel id
-czFldTitleMem001        db      "Memory Display",0                              ;memory panel title
+czFldPnlIdMem001        db      "View",0                                        ;memory panel id
+;czFldTitleMem001        db      "Memory Display",0                              ;memory panel title
 czFldMenuOptn001        db      "_",0                                           ;menu option
 czFldLblMainDevices     db      "Devices",0                                     ;main panel devices label
 czFldLblMainMemory      db      "Memory",0                                      ;main panel memory label
