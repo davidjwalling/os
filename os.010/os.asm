@@ -4031,16 +4031,16 @@ section                 conmque                                                 
 ;
 ;       ConCode                 Console task entry point
 ;       ConHome                 Prepare the home panel
-
-
 ;       ConClearPanel           Clear the panel area of video memory to spaces
 ;       ConDrawFields           Draw the panel fields to video memory
 ;       ConDrawField            Draw a panel field to video memory
 ;       ConPutCursor            Place the cursor at the current index into the current field
+;
 ;       ConHandlerMain          Handle attention keys on the main panel
 ;       ConHandlerView          Handle attention keys on the memory panel
 ;       ConTakeToken            Extract the next token from a buffer
 ;       ConDetermineCommand     Determine if a buffer value is a command
+;
 ;       ConGo                   Handle the go command
 ;       ConInt6                 Handle the Int6 command
 ;       ConReset                Handle the reset command
@@ -4069,16 +4069,15 @@ ConCode                 mov     edi,ECONDATA                                    
                         rep     stosd                                           ;reset OIA
                         pop     es                                              ;restore extra segment
 ;
-;       Set num-lock and update lamps
-;       Display the initial OIA
+;       Set num-lock and update lamps. Display the initial OIA.
 ;
                         or      byte [wsKeybData+KEYBDATA.lock],EKEYFLOCKNUM    ;BIOS boots with num-lock on
-                        setKeyboardLamps
-                        putConsoleOIA
+                        setKeyboardLamps                                        ;set keyboard lamps
+                        putConsoleOIA                                           ;write OIA
 ;
 ;       Set the current panel to the home panel, clear and redraw all fields.
 ;
-                        call    ConHome                                         ;initialize home panel
+                        call    ConHome                                         ;initialize and draw home panel
 ;
 ;       Place the cursor at the current field index.
 ;
@@ -4093,14 +4092,14 @@ ConCode                 mov     edi,ECONDATA                                    
                         cmp     edx,EMSGKEYDOWN                                 ;keydown message?
                         jne     .20                                             ;no, next message
 ;
-;       Give the message to the panel event-handler first.
+;       Give the message to the panel event-handler first. Handler sets carry if message is handled.
 ;
                         mov     ecx,[wdConsoleHandler]                          ;handler addr?
                         jecxz   .30                                             ;no, branch
                         call    ecx                                             ;event handled?
                         jc     .20                                              ;yes, next message
 ;
-;       To handle the event here, we need a current field that has a buffer.
+;       Key-down messages not handled by the panel are handled below if there is a current field.
 ;
 .30                     mov     ebx,[wdConsoleField]                            ;field addr
                         test    ebx,ebx                                         ;field addr?
@@ -4172,7 +4171,8 @@ ConCode                 mov     edi,ECONDATA                                    
                         mov     [ebx+7],dl                                      ;save new index
                         jmp     .10                                             ;put cursor and next message
 ;
-;       Handle backspace
+;       If a backspace is pressed and the field index is non-zero, decrement the index and move each character
+;       starting from the one at the cursor to the preceding adjacent index position. Draw, place cursor, repeat.
 ;
 .140                    cmp     ah,EKEYBBACKSPACE                               ;backspace?
                         jne     .160                                            ;no, branch
@@ -4180,29 +4180,115 @@ ConCode                 mov     edi,ECONDATA                                    
                         jz      .20                                             ;yes, next message
                         dec     byte [ebx+7]                                    ;decrement index
                         mov     edi,ecx                                         ;buffer addr
-                        lea     edi,[edi+edx-1]                                 ;end of buffer
-                        mov     esi,edi                                         ;end of buffer
-                        inc     esi                                             ;source address
+                        lea     edi,[edi+edx-1]                                 ;addr of char to remove
+                        mov     esi,edi                                         ;addr of char to remove
+                        inc     esi                                             ;addr of first char to move
                         cld                                                     ;forward strings
-.150                    lodsb                                                   ;character
-                        stosb                                                   ;save over previous
-                        test    al,al                                           ;end of input?
-                        jnz     .150                                            ;no, continue
-                        jmp     .170                                            ;draw field, put cursor, next message
+.150                    lodsb                                                   ;character to move
+                        stosb                                                   ;store one position preceding
+                        test    al,al                                           ;did we store a nul?
+                        jnz     .150                                            ;no, next printable
+                        jmp     .190                                            ;draw field, put cursor, next message
 ;
-;       Handle printables
+;       If a delete is pressed and a character is at the index offset, move each character starting from the one at
+;       the next adjacent position to its preceding adjacent index position. Draw, place cursor, repeat.
 ;
-.160                    cmp     al,EASCIISPACE                                  ;printable range? (low)
+.160                    cmp     al,EASCIIDELETE                                 ;delete?
+                        jne     .180                                            ;no, branch
+                        lea     edi,[ecx+edx]                                   ;addr at current index
+                        cmp     byte [edi],0                                    ;printable at current index?
+                        je      .20                                             ;no, get message
+                        lea     esi,[edi+1]                                     ;addr of first char to move
+                        cld                                                     ;forward strings
+.170                    lodsb                                                   ;character to move
+                        stosb                                                   ;store on position preceding
+                        test    al,al                                           ;did we move a nul?
+                        jnz     .170                                            ;no, next printable
+                        call    ConDrawField                                    ;redraw field
+                        jmp     .20                                             ;get message
+;
+;       If the home key is pressed in a field context, reset the field index to zero.
+;
+
+
+;
+;       If the end key is pressed in the field context, move the field index the end of input or the end of the
+;       field, which ever is less.
+;
+
+
+;
+;       If a printable ASCII is typed, place the character in the field at the current index. If the insert lock
+;       is on, precede placing the character by moving field characters at or after the current field index to
+;       their respective next adjacent positions, beginning with the last character in the field.
+;
+.180                    cmp     al,EASCIISPACE                                  ;printable range? (low)
                         jb      .20                                             ;no, next message
                         cmp     al,EASCIITILDE                                  ;printable range? (high)
                         ja      .20                                             ;no, next message
+
+                        test    byte [wsKeyData+KEYBDATA.lock],EKEYFLOCKINSERT
+                        jz      .186
+
+
+
+
+
+
+
                         mov     [ecx+edx],al                                    ;store char in buffer
                         inc     dl                                              ;advance index
                         cmp     dl,[ebx+6]                                      ;end of field?
-                        jnb     .170                                            ;yes, branch
+                        jnb     .190                                            ;yes, branch
                         mov     [ebx+7],dl                                      ;save new index
-.170                    call    ConDrawField                                    ;redraw field
+;
+;       Redraw the field, resume to place the cursor and get the next key-down message.
+;
+.190                    call    ConDrawField                                    ;redraw field
                         jmp     .10                                             ;put cursor and get message
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConHome
+;
+;       Description:    This routine initializes working storage for the main panel, sets the panel-level handler
+;                       routine, the panel definition address and the active field, clears the panel and draws the
+;                       panel fields.
+;
+;       In:             ES:     OS data segment
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConHome                 push    ecx                                             ;save non-volatile regs
+                        push    edi                                             ;
+;
+;       Initialize panel storage areas.
+;
+                        mov     edi,wzFldMenuOptn0                              ;first menu option storage
+                        xor     eax,eax                                         ;zero reg
+                        mov     al,EASCIIUNDERSCORE                             ;input placeholder
+                        xor     ecx,ecx                                         ;zero reg
+                        mov     cl,5                                            ;input field count
+                        cld                                                     ;forward strings
+                        rep     stosw                                           ;initialize input fields
+;
+;       Set the panel handler, panel template and field addresses.
+;
+                        mov     eax,[cdHandlerMain]                             ;main panel handler CS-relative addr
+                        mov     [wdConsoleHandler],eax                          ;set panel handler addr
+                        mov     eax,czPnlCon001                                 ;main panel addr
+                        mov     [wdConsolePanel],eax                            ;set panel addr
+                        mov     eax,czPnlConInp                                 ;main panel command field addr
+                        mov     [wdConsoleField],eax                            ;set active field
+;
+;       Clear panel video memory and draw fields
+;
+                        call    ConClearPanel                                   ;clear panel video memory
+                        call    ConDrawFields                                   ;draw panel fields
+;
+;       Restore and return.
+;
+                        pop     edi                                             ;restore non-volatile regs
+                        pop     ecx                                             ;
+                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        ConClearPanel
@@ -4241,13 +4327,13 @@ ConClearPanel           push    ecx                                             
 ;-----------------------------------------------------------------------------------------------------------------------
 ConDrawFields           push    ebx                                             ;save non-volatile regs
 ;
-;       Exit if no panel
+;       Exit if there is no current panel.
 ;
                         mov     ebx,[wdConsolePanel]                            ;panel definition addr
                         test    ebx,ebx                                         ;have panel?
                         jz      .30                                             ;no, branch
 ;
-;       Loop until end of panel
+;       Loop until end of panel.
 ;
 .10                     cmp     dword [ebx],0                                   ;end of panel?
                         je      .30                                             ;yes, branch
@@ -4285,8 +4371,7 @@ ConDrawFields           push    ebx                                             
 ;                               [ebx+8]         1st selected index (0-255)
 ;                               [ebx+9]         last selected index (0-255)
 ;                               [ebx+10]        attribute
-;                               [ebx+11]        flags
-;                                               80h = input field
+;                               [ebx+11]        flags                           80h = input field
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ConDrawField            push    ecx                                             ;save non-volatile regs
@@ -4296,9 +4381,9 @@ ConDrawField            push    ecx                                             
 ;
 ;       Exit if no field or zero size.
 ;
-                        test    ebx,ebx                                         ;have field?
+                        test    ebx,ebx                                         ;do we have a field?
                         jz      .30                                             ;no, exit
-                        movzx   ecx,byte [ebx+6]                                ;have size?
+                        movzx   ecx,byte [ebx+6]                                ;does the field have a size?
                         jecxz   .30                                             ;no, exit
 ;
 ;       Address video memory.
@@ -4322,10 +4407,10 @@ ConDrawField            push    ecx                                             
                         cld                                                     ;forward strings
                         mov     esi,[ebx]                                       ;field buffer addr
                         test    esi,esi                                         ;have field buffer?
-                        jz      .20                                             ;no, exit
+                        jz      .20                                             ;no, branch to pad with spaces
 .10                     lodsb                                                   ;field character
                         test    al,al                                           ;end of value?
-                        jz      .20                                             ;yes, branch
+                        jz      .20                                             ;yes, branch to pad with spaces
                         stosw                                                   ;store character with attribute
                         dec     ecx                                             ;decrement remaining size
                         jecxz   .30                                             ;exit if field full
@@ -4351,8 +4436,8 @@ ConDrawField            push    ecx                                             
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ConPutCursor            push    ecx                                             ;save non-volatile regs
-                        mov     ecx,[wdConsoleField]                            ;current field?
-                        jecxz   .10                                             ;no, branch
+                        mov     ecx,[wdConsoleField]                            ;is there a current field?
+                        jecxz   .10                                             ;no, exit
                         mov     al,[ecx+4]                                      ;field row
                         mov     [wbConsoleRow],al                               ;set current row
                         mov     al,[ecx+5]                                      ;field column
@@ -4360,6 +4445,35 @@ ConPutCursor            push    ecx                                             
                         mov     [wbConsoleColumn],al                            ;set curren tcol
                         placeCursor                                             ;place the cursor
 .10                     pop     ecx                                             ;restore non-volatile regs
+                        ret                                                     ;return
+
+
+
+
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConGo
+;
+;       Description:    This routine handles the GO command ("g").
+;
+;       In:             DS:     OS data segment
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConGo                   push    ebx                                             ;save non-volatile regs
+
+                        mov     edx,wzConsoleInBuffer                           ;console input buffer address (params)
+                        mov     ebx,wzConsoleToken                              ;console command token address
+                        call    ConTakeToken                                    ;take first param as token
+                        cmp     byte [ebx],0                                    ;token?
+                        je      .10                                             ;no, branch
+;
+;       Go to the given panel.
+;
+;       ...
+;
+.10                     call    ConHome                                         ;set panel to the home panel
+
+                        pop     ebx                                             ;
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -4659,64 +4773,6 @@ ConClearField           push    ebx                                             
 ;       Restore and return.
 ;
 .10                     pop     edi                                             ;restore non-volatile regs
-                        pop     ebx                                             ;
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        ConHome
-;
-;       Description:    This routine sets the current panel to the home panel
-;
-;       In:             ES:     OS data segment
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConHome                 push    ecx                                             ;save non-volatile regs
-                        push    edi                                             ;
-;
-;       Initialize panel storage areas
-;
-                        mov     edi,wzFldMenuOptn0                              ;first menu option storage
-                        xor     eax,eax                                         ;zero reg
-                        mov     al,EASCIIUNDERSCORE                             ;input placeholder
-                        xor     ecx,ecx                                         ;zero reg
-                        mov     cl,5                                            ;input field count
-                        cld                                                     ;forward strings
-                        rep     stosw                                           ;reset input fields
-;
-;       Initialize current handler, panel, field.
-;
-                        mov     eax,[cdHandlerMain]                             ;main panel handler CS-relative addr
-                        mov     [wdConsoleHandler],eax                          ;set panel handler addr
-                        mov     eax,czPnlCon001                                 ;main panel addr
-                        mov     [wdConsolePanel],eax                            ;set panel addr
-                        mov     eax,czPnlConInp                                 ;main panel command field addr
-                        mov     [wdConsoleField],eax                            ;set active field
-;
-;       Clear panel video memory and draw fields
-;
-                        call    ConClearPanel                                   ;clear panel
-                        call    ConDrawFields                                   ;draw fields
-;
-;       Restore and return.
-;
-                        pop     edi                                             ;restore non-volatile regs
-                        pop     ecx                                             ;
-                        ret                                                     ;return
-
-ConGo                   push    ebx                                             ;save non-volatile regs
-
-                        mov     edx,wzConsoleInBuffer                           ;console input buffer address (params)
-                        mov     ebx,wzConsoleToken                              ;console command token address
-                        call    ConTakeToken                                    ;take first param as token
-                        cmp     byte [ebx],0                                    ;token?
-                        je      .10                                             ;no, branch
-;
-;       Go to the given panel.
-;
-;       ...
-;
-.10                     call    ConHome                                         ;set panel to the home panel
-
                         pop     ebx                                             ;
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
