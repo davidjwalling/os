@@ -6,6 +6,7 @@ The program samples presented here were tested using the following physical comp
 - 64MB EDO DRAM
 - 2 x Mitsumi D359M3 Internal 3.5" 1.44 MB Floppy Drive
 - Number Nine #9FX Motion 771 SVGA
+- Intel Pro/1000 MT Desktop Adapter
 - Dell:registered: U2412M 24 inch LCD monitor
 - Dell:registered: RT7D20 104-Key Standard US Layout Windows Keyboard via PS/2 to 5-pin DIN adapter.
 ### Intel:registered: Pentium:registered: MMX 233 MHz Processor Part# BP80503233 (SL293) 2.8V
@@ -28,8 +29,16 @@ The program samples presented here were tested using the following physical comp
 ### Dell:registered: U2412M 24 inch LCD monitor  Dell:registered: RT7D20 104-Key Standard US Layout Windows Keyboard  via PS/2 to 5-pin DIN adapter
 <img src="../images/os001_DellMonitor_U2412M_001.jpg"/>
 
-### BIOS Boot with no Media
+### BIOS Boot with no Media - No Network Adapter
 <img src="../images/os001_BIOS_002.jpg"/>
+
+### Intel Pro/1000 MT Desktop Adapter
+<img src="../images/intel_82540_001.jpg"/>
+
+### BIOS Boot with no Media - With Network Adapter
+- Note Intel:registered: Boot Agent searches for LAN boot.
+
+<img src="../images/boot_pci_devices_001.jpg"/>
 
 ### Sabrent N533 External Floppy Disk Drive
 <img src="../images/os001_SabrentN533_001.jpg"/>
