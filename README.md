@@ -1,6 +1,6 @@
 ### OS
 
-Copyright :copyright: 2010-2019 David J. Walling. MIT License.
+Copyright :copyright: 2010-2020 David J. Walling. MIT License.
 
 - A simple operating system for x86-based PC-compatible systems.
 - Operates on 32-bit Intel:registered: or AMD:registered: x86 from the 80386 up through present-day processors.
