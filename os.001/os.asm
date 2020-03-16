@@ -342,9 +342,9 @@ PutTTYString            cld                                                     
 ;
 ;       Loader Data
 ;
-;       Our only "data" is the string displayed when system starts. It ends with ASCII carriage-return (13) and line-
-;       feed (10) values. The remainder of the boot sector is filled with NUL. The boot sector finally ends with the
-;       required two-byte signature checked by the BIOS. Note that recent versions of NASM will issue a warning if
+;       Our only "data" is the string displayed when the system starts. It ends with ASCII carriage-return (13) and
+;       line-feed (10) values. The remainder of the boot sector is filled with NUL. The boot sector finally ends with
+;       the required two-byte signature checked by the BIOS. Note that recent versions of NASM will issue a warning if
 ;       the calculated address for the end-of-sector signature produces a negative value for "510-($-$$)". This will
 ;       indicate if we have added too much data and exceeded the length of the sector.
 ;
