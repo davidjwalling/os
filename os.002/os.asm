@@ -5,8 +5,8 @@
 ;       Project:        os.002
 ;
 ;       Description:    This sample program adds code to load the operating system kernel program from the disk image.
-;                       The boot sector searches the disk for the loader program, loads it into memory and runs it. The
-;                       loader program in this sample simply displays a greeting.
+;                       The boot sector searches the disk for the loader program, loads it into memory and runs it.
+;                       The loader program in this sample simply displays a greeting.
 ;
 ;       Revised:        25 December 2019
 ;
