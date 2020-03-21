@@ -7,7 +7,7 @@
 ;       Description:    In this sample, the keyboard interrupt handler is expanded to add messages to the current
 ;                       task message queue when keyboard events occur.
 ;
-;       Revised:        2 September 2019
+;       Revised:        1 January 2020
 ;
 ;       Assembly:       nasm os.asm -f bin -o os.dat     -l os.dat.lst     -DBUILDBOOT
 ;                       nasm os.asm -f bin -o os.dsk     -l os.dsk.lst     -DBUILDDISK
@@ -16,7 +16,7 @@
 ;
 ;       Assembler:      Netwide Assembler (NASM) 2.14.02, 26 Dec 2018
 ;
-;       Notice:         Copyright (C) 2010-2019 David J. Walling
+;       Notice:         Copyright (C) 2010-2020 David J. Walling
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -680,7 +680,7 @@ Boot.10                 call    word .20                                        
 ;                               |  9x512-byte sectors = 4,608 = 1200h bytes     |
 ;                       009000  +-----------------------------------------------+ DS:1500  08f0:0100
 ;                               |  Directory Sector Buffer & Kernel Load Area   |
-;                               |  2 sectors = 1024 = 400h bytes
+;                               |  2 sectors = 1024 = 400h bytes                |
 ;                       009400  +-----------------------------------------------+ DS:1900
 ;
 ;       On entry, DL indicates the drive being booted from.
@@ -1075,7 +1075,7 @@ Prep                    mov     si,czPrepMsg10                                  
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 czPrepMsg10             db      13,10,"OS Boot-Diskette Preparation Program"
-                        db      13,10,"Copyright (C) 2010-2019 David J. Walling"
+                        db      13,10,"Copyright (C) 2010-2020 David J. Walling"
                         db      13,10
                         db      13,10,"This program overwrites the boot sector of a diskette with startup code that"
                         db      13,10,"will load the operating system into memory when the computer is restarted."
