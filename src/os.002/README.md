@@ -15,7 +15,7 @@ Source: [os.002/os.asm](os.asm)
 - The <span>os.com</span> program displays a message, "Starting OS".
 - Upon a key press, the system restarts.
 
-<img src="../images/os002_VirtualBox_001.PNG" width="640"/>
+<img src="/images/os002_VirtualBox_001.PNG" width="640"/>
 
 ### [Physical](/docs/PHYSICAL.md) Machine Operation
 - Prepare a physical 3.5" 1.44 MB diskette with os.002/os.dat as the boot sector following steps similar to [these](/docs/PHYSICAL.md).
@@ -24,12 +24,12 @@ Source: [os.002/os.asm](os.asm)
 - Insert the prepared diskette into a 3.5" floppy disk drive configured as Drive A:.
 - Start the system.
 
-<img src="../images/os002_Boot_001.jpg"/>
+<img src="/images/os002_Boot_001.jpg"/>
 
 ### Notes
 The boot sector ```os.dat``` is now sufficient to load and run the OS loader program ```os.com``` regardless of its size, within reason. From this point on, then, after this project, we do not need to update the physical boot disk sector.
 
-<img src="../images/os002_bootsector_001.PNG" width="640"/>
+<img src="/images/os002_bootsector_001.PNG" width="640"/>
 
 The program introduces the BUILDCOM directive to create the OS kernel program, ```os.com```. BUILDCOM is enabled automatically if the directive BUILDDISK is defined.
 

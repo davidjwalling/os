@@ -20,14 +20,14 @@ Source: [os.001/os.asm](os.asm)
 - The boot sector displays a message, "Starting OS", and waits for a keypress.
 - Upon a key press, the system restarts.
 
-<img src="../images/os001_VirtualBox_001.PNG" width="640"/>
+<img src="/images/os001_VirtualBox_001.PNG" width="640"/>
 
 ### [Physical](/docs/PHYSICAL.md) Machine Operation
 - Prepare a physical 3.5" 1.44MB diskette with os.dat as the boot sector following these [steps](/docs/PHYSICAL.md).
 - Insert the prepared diskette into a 3.5" floppy disk drive configured as Drive A:.
 - Start the system.
 
-<img src="../images/os001_Boot_001.jpg"/>
+<img src="/images/os001_Boot_001.jpg"/>
 
 ### Notes
 The sample programs begin with a "flowerbox". That is, a sequence of commented lines with a visible border on, at least, the top and bottom rows and the leftmost column. Omitting a vertical right border avoids excessive padding characters to enforce alignment. In these samples, flowerboxes are "major" or "minor". Major flowerboxes use double dashes (or equals signs) for upper and lower borders. Minor flowerboxes uses dashes for upper and lower borders. Major flowerboxes begin the program and major code parts. Minor flowerboxes describe code or data immediately following. The program flowerbox is a major flowerbox that includes the file name, project name, a description of the program, the date of revision, instructions to assemble the program, the version of the assembler used and a copyright notice. Flowerbox contents are column-aligned to improve readability and quick location of information.
