@@ -6,7 +6,7 @@ Source: [os.003/os.asm](os.asm)
 - Writing disk sectors using the BIOS.
 
 ### [Virtual](../docs/VIRTUAL.md) Machine Operation
-- The ```osprep.com```` program is created by make.bat or make with Makefile.
+- The ```osprep.com``` program is created by make.bat or make with Makefile.
 - ```osprep.com``` will not operate on 64-bit operating systems.
 - See the Physical Machine Operation below for instructions using ```osprep.com```.
 
