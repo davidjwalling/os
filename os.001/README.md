@@ -1,5 +1,5 @@
 ### Project os.001
-Source: [os.001/os.asm](../os.001/os.asm)
+Source: [os.001/os.asm](os.asm)
 
 ### Features and Topics
 - Documentation Standards

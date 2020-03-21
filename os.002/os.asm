@@ -8,7 +8,7 @@
 ;                       The boot sector searches the disk for the loader program, loads it into memory and runs it.
 ;                       The loader program in this sample simply displays a greeting.
 ;
-;       Revised:        25 December 2019
+;       Revised:        1 January 2020
 ;
 ;       Assembly:       nasm os.asm -f bin -o os.dat -l os.dat.lst -DBUILDBOOT
 ;                       nasm os.asm -f bin -o os.dsk -l os.dsk.lst -DBUILDDISK
@@ -286,7 +286,7 @@ Boot.10                 call    word .20                                        
 ;                               |  9x512-byte sectors = 4,608 = 1200h bytes     |
 ;                       009000  +-----------------------------------------------+ DS:1500  08f0:0100
 ;                               |  Directory Sector Buffer & Kernel Load Area   |
-;                               |  2 sectors = 1024 = 400h bytes
+;                               |  2 sectors = 1024 = 400h bytes                |
 ;                       009400  +-----------------------------------------------+ DS:1900
 ;
 ;       On entry, DL indicates the drive being booted from.

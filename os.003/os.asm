@@ -8,7 +8,7 @@
 ;                       floppy disk. This utility can be useful in creating floppy boot diskettes from native DOS or
 ;                       within a DOS VM.
 ;
-;       Revised:        17 June 2019
+;       Revised:        1 January 2020
 ;
 ;       Assembly:       nasm os.asm -f bin -o os.dat     -l os.dat.lst     -DBUILDBOOT
 ;                       nasm os.asm -f bin -o os.dsk     -l os.dsk.lst     -DBUILDDISK
@@ -17,7 +17,7 @@
 ;
 ;       Assembler:      Netwide Assembler (NASM) 2.14.02, 26 Dec 2018
 ;
-;       Notice:         Copyright (C) 2010-2019 David J. Walling
+;       Notice:         Copyright (C) 2010-2020 David J. Walling
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -312,7 +312,7 @@ Boot.10                 call    word .20                                        
 ;                               |  9x512-byte sectors = 4,608 = 1200h bytes     |
 ;                       009000  +-----------------------------------------------+ DS:1500  08f0:0100
 ;                               |  Directory Sector Buffer & Kernel Load Area   |
-;                               |  2 sectors = 1024 = 400h bytes
+;                               |  2 sectors = 1024 = 400h bytes                |
 ;                       009400  +-----------------------------------------------+ DS:1900
 ;
 ;       On entry, DL indicates the drive being booted from.
@@ -707,7 +707,7 @@ Prep                    mov     si,czPrepMsg10                                  
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 czPrepMsg10             db      13,10,"OS Boot-Diskette Preparation Program"
-                        db      13,10,"Copyright (C) 2010-2019 David J. Walling"
+                        db      13,10,"Copyright (C) 2010-2020 David J. Walling"
                         db      13,10
                         db      13,10,"This program overwrites the boot sector of a diskette with startup code that"
                         db      13,10,"will load the operating system into memory when the computer is restarted."
@@ -920,9 +920,9 @@ PutTTYString            cld                                                     
 ;
 ;       Loader Data
 ;
-;       Our only "data" is the string displayed when system starts. It ends with ASCII carriage-return (13) and line-
-;       feed (10) values. The remainder of the boot sector is filled with NUL. The boot sector finally ends with the
-;       required two-byte signature checked by the BIOS. Note that recent versions of NASM will issue a warning if
+;       Our only "data" is the string displayed when the system starts. It ends with ASCII carriage-return (13) and
+;       line-feed (10) values. The remainder of the boot sector is filled with NUL. The boot sector finally ends with
+;       the required two-byte signature checked by the BIOS. Note that recent versions of NASM will issue a warning if
 ;       the calculated address for the end-of-sector signature produces a negative value for "1024-($-$$)". This will
 ;       indicate if we have added too much data and exceeded the length of the sector. Note also that since we are at
 ;       the end of a "file" (os.com) and not the boot sector, there is no end-of-sector marker (0x55 0xaa) here.

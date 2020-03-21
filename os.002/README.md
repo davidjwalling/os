@@ -1,5 +1,5 @@
 ### Project os.002
-Source: [os.002/os.asm](../os.002/os.asm)
+Source: [os.002/os.asm](os.asm)
 
 ### Features and Topics
 - Reading Diskette Sectors usng the BIOS
