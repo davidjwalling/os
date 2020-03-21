@@ -14,16 +14,16 @@ Source: [os.001/os.asm](os.asm)
 - Basic Input/Output System (BIOS) Interrupts
 - STI, HLT, MOV SS Instruction Behavior
 
-### [Virtual](../docs/VIRTUAL.md) Machine Operation
-- Start a VirtualBox VM configured to boot from os.dsk, emulating a 3.5" 1.44MB floppy diskette following these [steps](../docs/VIRTUAL.md).
+### [Virtual](/docs/VIRTUAL.md) Machine Operation
+- Start a VirtualBox VM configured to boot from os.dsk, emulating a 3.5" 1.44MB floppy diskette following these [steps](/docs/VIRTUAL.md).
 - The boot (first) sector of the diskette image is loaded to real mode address 0x7C00 and executed.
 - The boot sector displays a message, "Starting OS", and waits for a keypress.
 - Upon a key press, the system restarts.
 
 <img src="../images/os001_VirtualBox_001.PNG" width="640"/>
 
-### [Physical](../docs/PHYSICAL.md) Machine Operation
-- Prepare a physical 3.5" 1.44MB diskette with os.dat as the boot sector following these [steps](../docs/PHYSICAL.md).
+### [Physical](/docs/PHYSICAL.md) Machine Operation
+- Prepare a physical 3.5" 1.44MB diskette with os.dat as the boot sector following these [steps](/docs/PHYSICAL.md).
 - Insert the prepared diskette into a 3.5" floppy disk drive configured as Drive A:.
 - Start the system.
 

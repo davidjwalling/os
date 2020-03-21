@@ -5,8 +5,8 @@ Source: [os.002/os.asm](os.asm)
 - Reading Diskette Sectors usng the BIOS
 - FAT-12 and Diskette Directory Organization
 
-### [Virtual](../docs/VIRTUAL.md) Machine Operation
-- Start a VirtualBox VM configured to boot from os.dsk, emulating a 3.5" 1.44MB floppy diskette following these [steps](../docs/VIRTUAL.md).
+### [Virtual](/docs/VIRTUAL.md) Machine Operation
+- Start a VirtualBox VM configured to boot from os.dsk, emulating a 3.5" 1.44MB floppy diskette following these [steps](/docs/VIRTUAL.md).
 - The boot (first) sector of the diskette image is loaded to real mode address 0x7C00 and executed.
 - The boot sector displays a message, "Loading OS".
 - The boot sector then searches the diskette, or image file, for the <span>os.com</span> program.
@@ -17,8 +17,8 @@ Source: [os.002/os.asm](os.asm)
 
 <img src="../images/os002_VirtualBox_001.PNG" width="640"/>
 
-### [Physical](../docs/PHYSICAL.md) Machine Operation
-- Prepare a physical 3.5" 1.44 MB diskette with os.002/os.dat as the boot sector following steps similar to [these](../docs/PHYSICAL.md).
+### [Physical](/docs/PHYSICAL.md) Machine Operation
+- Prepare a physical 3.5" 1.44 MB diskette with os.002/os.dat as the boot sector following steps similar to [these](/docs/PHYSICAL.md).
 - Note: Copy os.002/os.dat to the diskette boot sector instead of os.001/os.dat.
 - Copy os.002/os.com onto the physical diskette.
 - Insert the prepared diskette into a 3.5" floppy disk drive configured as Drive A:.
