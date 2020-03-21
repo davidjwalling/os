@@ -11,9 +11,9 @@ Copyright :copyright: 2010-2020 David J. Walling. MIT License.
 Click on the subproject name below for details.
 
 <table>
-<tr><td><a href="/src/os.001/README.md">os.001</a></td><td>Load and run a boot sector that displays a message and waits for a key-press.</td></tr>
-<tr><td><a href="/src/os.002/README.md">os.002</a></td><td>Extend the boot sector to load and run a program that displays a message and waits for a key.</td></tr>
-<tr><td><a href="/src/os.003/README.md">os.003</a></td><td>Create the osprep.com utility that writes the boot sector to a diskette.</td></tr>
+<tr><td><a href="/src/os.001">os.001</a></td><td>Load and run a boot sector that displays a message and waits for a key-press.</td></tr>
+<tr><td><a href="/src/os.002">os.002</a></td><td>Extend the boot sector to load and run a program that displays a message and waits for a key.</td></tr>
+<tr><td><a href="/src/os.003">os.003</a></td><td>Create the osprep.com utility that writes the boot sector to a diskette.</td></tr>
 <tr><td><a href="/docs/OS004.md">os.004</a></td><td>Expand the loader to enter protected mode and start a task.</td></tr>
 <tr><td><a href="/docs/OS005.md">os.005</a></td><td>Add a panel definition to the console task main screen.</td></tr>
 <tr><td><a href="/docs/OS006.md">os.006</a></td><td>Add a keyboard interrupt handler to display characters and shift-key status.</td></tr>
