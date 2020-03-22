@@ -3150,11 +3150,11 @@ section                 conmque                                                 
 ;       Console Task Routines
 ;
 ;       ConCode                 Console task entry point
+;       ConHome                 Prepare the home panel
 ;       ConClearPanel           Clear the panel area of video memory to spaces
 ;       ConDrawFields           Draw the panel fields to video memory
 ;       ConDrawField            Draw a panel field to video memory
 ;       ConPutCursor            Place the cursor at the current index into the current field
-;       ConMain                 Handle the main command
 ;
 ;=======================================================================================================================
 section                 concode vstart=05000h                                   ;labels relative to 5000h
@@ -3178,16 +3178,15 @@ ConCode                 mov     edi,ECONDATA                                    
                         rep     stosd                                           ;reset OIA
                         pop     es                                              ;restore extra segment
 ;
-;       Set num-lock and update lamps
-;       Display the initial OIA
+;       Set num-lock and update lamps. Display the initial OIA.
 ;
                         or      byte [wsKeybData+KEYBDATA.lock],EKEYFLOCKNUM    ;BIOS boots with num-lock on
-                        setKeyboardLamps
-                        putConsoleOIA
+                        setKeyboardLamps                                        ;set keyboard lamps
+                        putConsoleOIA                                           ;write OIA
 ;
-;       Set the current panel to Main, clear and redraw all fields.
+;       Set the current panel to the home panel, clear and redraw all fields.
 ;
-                        call    ConMain                                         ;initialize panel
+                        call    ConHome                                         ;initialize and draw home panel
 ;
 ;       Place the cursor at the current field index.
 ;
@@ -3198,6 +3197,37 @@ ConCode                 mov     edi,ECONDATA                                    
 .10                     sti                                                     ;enable interrupts
                         hlt                                                     ;halt until interrupt
                         jmp     .10                                             ;continue halt loop
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConHome
+;
+;       Description:    This routine initializes working storage for the main panel, sets the panel-level handler
+;                       routine, the panel definition address and the active field, clears the panel and draws the
+;                       panel fields.
+;
+;       In:             ES:     OS data segment
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConHome                 push    ecx                                             ;save non-volatile regs
+                        push    edi                                             ;
+;
+;       Set the panel template and field addresses.
+;
+                        mov     eax,czPanelHome                                 ;home panel addr
+                        mov     [wdConsolePanel],eax                            ;set panel addr
+                        mov     eax,czPanelHomeInput                            ;home panel command field addr
+                        mov     [wdConsoleField],eax                            ;set active field
+;
+;       Clear panel video memory and draw fields
+;
+                        call    ConClearPanel                                   ;clear the panel
+                        call    ConDrawFields                                   ;draw panel fields
+;
+;       Restore and return.
+;
+                        pop     edi                                             ;restore non-volatile regs
+                        pop     ecx                                             ;
+                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        ConClearPanel
@@ -3242,7 +3272,7 @@ ConDrawFields           push    ebx                                             
                         test    ebx,ebx                                         ;have panel?
                         jz      .30                                             ;no, branch
 ;
-;       Loop until end of panel
+;       Loop until end of panel.
 ;
 .10                     cmp     dword [ebx],0                                   ;end of panel?
                         je      .30                                             ;yes, branch
@@ -3280,8 +3310,7 @@ ConDrawFields           push    ebx                                             
 ;                               [ebx+8]         1st selected index (0-255)
 ;                               [ebx+9]         last selected index (0-255)
 ;                               [ebx+10]        attribute
-;                               [ebx+11]        flags
-;                                               80h = input field
+;                               [ebx+11]        flags                           80h = input field
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ConDrawField            push    ecx                                             ;save non-volatile regs
@@ -3317,10 +3346,10 @@ ConDrawField            push    ecx                                             
                         cld                                                     ;forward strings
                         mov     esi,[ebx]                                       ;field buffer addr
                         test    esi,esi                                         ;have field buffer?
-                        jz      .20                                             ;no, exit
+                        jz      .20                                             ;no, branch to pad with spaces
 .10                     lodsb                                                   ;field character
                         test    al,al                                           ;end of value?
-                        jz      .20                                             ;yes, branch
+                        jz      .20                                             ;yes, branch to pad with spaces
                         stosw                                                   ;store character with attribute
                         dec     ecx                                             ;decrement remaining size
                         jecxz   .30                                             ;exit if field full
@@ -3358,35 +3387,6 @@ ConPutCursor            push    ecx                                             
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Routine:        ConMain
-;
-;       Description:    This routine sets the current panel to the main panel (CON001).
-;
-;       In:             ES:     OS data segment
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConMain                 push    ecx                                             ;save non-volatile regs
-                        push    edi                                             ;
-;
-;       Initialize current panel, field.
-;
-                        mov     eax,czPnlCon001                                 ;main panel addr
-                        mov     [wdConsolePanel],eax                            ;set panel addr
-                        mov     eax,czPnlConInp                                 ;main panel command field addr
-                        mov     [wdConsoleField],eax                            ;set active field
-;
-;       Clear panel video memory and draw fields
-;
-                        call    ConClearPanel                                   ;clear panel
-                        call    ConDrawFields                                   ;draw fields
-;
-;       Restore and return.
-;
-                        pop     edi                                             ;restore non-volatile regs
-                        pop     ecx                                             ;
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
 ;       Constants
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -3400,28 +3400,19 @@ ConMain                 push    ecx                                             
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                                                                                 ;---------------------------------------
-                                                                                ;  Main Panel
+                                                                                ;  Home Panel
                                                                                 ;---------------------------------------
-czPnlCon001             dd      czFldPnlIdCon001                                ;field text
-                        db      0,0,6,0,0,0,7,0                                 ;row col siz ndx 1st nth atr flg
-                        dd      czFldTitleCon001
-                        db      0,33,14,0,0,0,7,0
-                        dd      czFldDatTmCon001
-                        db      0,63,17,0,0,0,7,0
-                        dd      czFldPrmptCon001
-                        db      23,0,1,0,0,0,7,0
-czPnlConInp             dd      wzConsoleInBuffer
-                        db      23,1,79,0,0,0,7,80h
+czPanelHome             dd      czFldColon                                      ;field text
+                        db      23,0,1,0,0,0,7,0                                ;row col siz ndx 1st nth atr flg
+czPanelHomeInput        dd      wzConsoleInBuffer
+                        db      23,1,79,0,0,0,7,080h                            ;input field
                         dd      0                                               ;end of panel
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Strings
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-czFldPnlIdCon001        db      "CON001",0                                      ;main console panel id
-czFldTitleCon001        db      "OS Version 1.0",0                              ;main console panel title
-czFldDatTmCon001        db      "DD-MMM-YYYY HH:MM",0                           ;panel date and time template
-czFldPrmptCon001        db      ":",0                                           ;command prompt
+czFldColon              db      ":",0                                           ;command prompt
                         times   4096-($-$$) db 0h                               ;zero fill to end of section
 %endif
 %ifdef BUILDDISK

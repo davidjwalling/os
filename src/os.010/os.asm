@@ -6,7 +6,7 @@
 ;
 ;       Description:    In this sample, the console task is expanded to support a command to view a memory panel.
 ;
-;       Revised:        2 September 2019
+;       Revised:        1 January 2020
 ;
 ;       Assembly:       nasm os.asm -f bin -o os.dat     -l os.dat.lst     -DBUILDBOOT
 ;                       nasm os.asm -f bin -o os.dsk     -l os.dsk.lst     -DBUILDDISK
@@ -15,7 +15,7 @@
 ;
 ;       Assembler:      Netwide Assembler (NASM) 2.14.02, 26 Dec 2018
 ;
-;       Notice:         Copyright (C) 2010-2019 David J. Walling
+;       Notice:         Copyright (C) 2010-2020 David J. Walling
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -218,13 +218,20 @@ EKEYBCAPSDOWN           equ     03Ah                                            
 EKEYBNUMDOWN            equ     045h                                            ;num-lock down
 EKEYBSCROLLDOWN         equ     046h                                            ;scroll-lock down
 EKEYBPAD7DOWN           equ     047h                                            ;keypad-7 down
+EKEYBPAD8DOWN           equ     048h                                            ;keypad-8 down
+EKEYBPAD4DOWN           equ     04Bh                                            ;keypad-4 down
+EKEYBPAD6DOWN           equ     04Dh                                            ;keypad-6 down
+EKEYBPAD1DOWN           equ     04Fh                                            ;keypad-1 down
+EKEYBPAD2DOWN           equ     050h                                            ;keypad-2 down
 EKEYBPADINSERTDOWN      equ     052h                                            ;keypad-insert down
 EKEYBPADDELETEDOWN      equ     053h                                            ;keypad-delete down
 EKEYBWINLDOWN           equ     05Bh                                            ;left windows (R) down
 EKEYBWINRDOWN           equ     05Ch                                            ;right windows (R) down
+EKEYBHOMEDOWN           equ     067h                                            ;home
 EKEYBUPARROWDOWN        equ     068h                                            ;up-arrow down (e0 48)
 EKEYBLEFTARROWDOWN      equ     06Bh                                            ;left-arrow down (e0 4b)
 EKEYBRIGHTARROWDOWN     equ     06Dh                                            ;right-arrow down (e0 4d)
+EKEYBENDDOWN            equ     06Fh                                            ;end
 EKEYBDOWNARROWDOWN      equ     070h                                            ;down-arrow down (e0 50)
 EKEYBINSERTDOWN         equ     072h                                            ;insert down (e0 52)
 EKEYBDELETEDOWN         equ     073h                                            ;delete down (e0 53)
@@ -768,7 +775,7 @@ Boot.10                 call    word .20                                        
 ;                               |  9x512-byte sectors = 4,608 = 1200h bytes     |
 ;                       009000  +-----------------------------------------------+ DS:1500  08f0:0100
 ;                               |  Directory Sector Buffer & Kernel Load Area   |
-;                               |  2 sectors = 1024 = 400h bytes
+;                               |  2 sectors = 1024 = 400h bytes                |
 ;                       009400  +-----------------------------------------------+ DS:1900
 ;
 ;       On entry, DL indicates the drive being booted from.
@@ -1163,7 +1170,7 @@ Prep                    mov     si,czPrepMsg10                                  
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 czPrepMsg10             db      13,10,"OS Boot-Diskette Preparation Program"
-                        db      13,10,"Copyright (C) 2010-2019 David J. Walling"
+                        db      13,10,"Copyright (C) 2010-2020 David J. Walling"
                         db      13,10
                         db      13,10,"This program overwrites the boot sector of a diskette with startup code that"
                         db      13,10,"will load the operating system into memory when the computer is restarted."
@@ -4035,14 +4042,11 @@ section                 conmque                                                 
 ;       ConDrawFields           Draw the panel fields to video memory
 ;       ConDrawField            Draw a panel field to video memory
 ;       ConPutCursor            Place the cursor at the current index into the current field
-;
-;       ConHandlerMain          Handle attention keys on the main panel
+;       ConHandlerHome          Handle attention keys on the home panel
 ;       ConHandlerView          Handle attention keys on the memory panel
 ;       ConTakeToken            Extract the next token from a buffer
 ;       ConDetermineCommand     Determine if a buffer value is a command
-;
 ;       ConGo                   Handle the go command
-;       ConInt6                 Handle the Int6 command
 ;       ConReset                Handle the reset command
 ;       ConView                 Handle the view command
 ;       ConClearField           Clear a panel field to nulls
@@ -4086,84 +4090,58 @@ ConCode                 mov     edi,ECONDATA                                    
 ;       Get the next key-down message.
 ;
 .20                     getConsoleMessage                                       ;get a console message
-;
                         mov     edx,eax                                         ;message and params
                         and     edx,0FFFF0000h                                  ;mask for message
                         cmp     edx,EMSGKEYDOWN                                 ;keydown message?
                         jne     .20                                             ;no, next message
 ;
-;       Give the message to the panel event-handler first. Handler sets carry if message is handled.
+;       Give the message to the panel event-handler first.
 ;
-                        mov     ecx,[wdConsoleHandler]                          ;handler addr?
+                        mov     ecx,[wdConsoleHandler]                          ;do we have a handler?
                         jecxz   .30                                             ;no, branch
-                        call    ecx                                             ;event handled?
-                        jc     .20                                              ;yes, next message
+                        call    ecx                                             ;was the event handled?
+                        jc     .20                                              ;yes, get next message
 ;
 ;       Key-down messages not handled by the panel are handled below if there is a current field.
 ;
 .30                     mov     ebx,[wdConsoleField]                            ;field addr
-                        test    ebx,ebx                                         ;field addr?
+                        test    ebx,ebx                                         ;do we have a field?
                         jz      .20                                             ;no, next message
-                        mov     ecx,[ebx]                                       ;buffer addr?
+                        mov     ecx,[ebx]                                       ;do we have a buffer addr?
                         jecxz   .20                                             ;no, next message
                         movzx   edx,byte [ebx+7]                                ;field index
 ;
-;       Handle tab down and shift-tab down to navigate panel fields.
+;       Handle key-down messages that don't produce ASCII codes first.
 ;
-                        cmp     ah,EKEYBTABDOWN                                 ;tab down?
-                        jne     .100                                            ;no, branch
-                        test    byte [wsKeybData+KEYBDATA.shift],EKEYFSHIFT     ;shift?
-                        jz      .80                                             ;no, tab forward
+                        test    al,al                                           ;ASCII code?
+                        jnz     .130                                            ;yes, branch
 ;
-;       Handle backward-tab.
+;       Handle up or left arrow.
 ;
-.40                     cmp     ebx,[wdConsolePanel]                            ;at first field?
-                        jna     .50                                             ;yes, branch
-                        lea     ebx,[ebx-12]                                    ;previous field
-                        jmp     .70                                             ;branch
-.50                     mov     ebx,[wdConsolePanel]                            ;sanity check
-                        cmp     dword [ebx+12],0                                ;last field?
-                        je      .20                                             ;yes, next message (only 1 field)
-.60                     lea     ebx,[ebx+12]                                    ;next field
-                        cmp     dword [ebx+12],0                                ;last field?
-                        jne     .60                                             ;no, continue
-.70                     cmp     ebx,[wdConsoleField]                            ;back to current field?
-                        je      .20                                             ;yes, next message
-                        test    byte [ebx+11],80h                               ;input field?
-                        jz      .40                                             ;no, next field
-                        mov     [wdConsoleField],ebx                            ;set current field
-                        jmp     .10                                             ;place cursor and get message
-;
-;       Handle forward-tab.
-.80                     lea     ebx,[ebx+12]                                    ;next field addr
-                        cmp     dword [ebx],0                                   ;end of panel?
-                        jne     .90                                             ;no, branch
-                        mov     ebx,[wdConsolePanel]                            ;start of panel
-.90                     cmp     ebx,[wdConsoleField]                            ;back to current field?
-                        je      .20                                             ;yes, next message
-                        test    byte [ebx+11],80h                               ;input field?
-                        jz      .80                                             ;no, next field
-                        mov     [wdConsoleField],ebx                            ;set current field
-                        jmp     .10                                             ;place cursor and get message
-;
-;       Handle left or up arrow.
-;
-.100                    cmp     ah,EKEYBLEFTARROWDOWN                           ;left-arrow down?
-                        je      .110                                            ;yes, branch
                         cmp     ah,EKEYBUPARROWDOWN                             ;up-arrow down?
-                        jne     .120                                            ;no, branch
-.110                    test    dl,dl                                           ;index is zero?
+                        je      .40                                             ;yes, branch
+                        cmp     ah,EKEYBPAD8DOWN                                ;keypad 8 down?
+                        je      .40                                             ;yes, branch
+                        cmp     ah,EKEYBLEFTARROWDOWN                           ;left-arrow
+                        je      .40                                             ;yes, branch
+                        cmp     ah,EKEYBPAD4DOWN                                ;keypad 4 down?
+                        jne     .50                                             ;no, branch
+.40                     test    dl,dl                                           ;index is zero?
                         jz      .20                                             ;yes, next message
                         dec     byte [ebx+7]                                    ;decrement index
                         jmp     .10                                             ;put cursor and next message
 ;
 ;       Handle right or down arrow.
 ;
-.120                    cmp     ah,EKEYBRIGHTARROWDOWN                          ;right-arrow down?
-                        je      .130                                            ;yes, branch
+.50                     cmp     ah,EKEYBRIGHTARROWDOWN                          ;right-arrow down?
+                        je      .60                                             ;yes, branch
+                        cmp     ah,EKEYBPAD6DOWN                                ;keypad 6 down?
+                        je      .60                                             ;yes, branch
                         cmp     ah,EKEYBDOWNARROWDOWN                           ;down-arrow down?
-                        jne     .140                                            ;no, branch
-.130                    cmp     byte [ecx+edx],0                                ;end of input?
+                        je      .60                                             ;yes, branch
+                        cmp     ah,EKEYBPAD2DOWN                                ;keypad 2 down?
+                        jne     .70                                             ;no,  branch
+.60                     cmp     byte [ecx+edx],0                                ;end of input?
                         je      .20                                             ;yes, next message
                         inc     dl                                              ;increment index
                         cmp     dl,byte [ebx+6]                                 ;end of field?
@@ -4171,11 +4149,73 @@ ConCode                 mov     edi,ECONDATA                                    
                         mov     [ebx+7],dl                                      ;save new index
                         jmp     .10                                             ;put cursor and next message
 ;
+;       Handle home key.
+;
+.70                     cmp     ah,EKEYBHOMEDOWN                                ;home down?
+                        je      .80                                             ;yes, branch
+                        cmp     ah,EKEYBPAD7DOWN                                ;keypad 7 down?
+                        jne     .90                                             ;no, branch
+.80                     mov     byte [ebx+7],0                                  ;zero field index
+                        jmp     .10                                             ;put cursor and next message
+;
+;       Handle end key.
+;
+.90                     cmp     ah,EKEYBENDDOWN                                 ;end down?
+                        je      .100                                            ;yes, branch
+                        cmp     ah,EKEYBPAD1DOWN                                ;keypad 1 down?
+                        jne     .20                                             ;no, next message
+.100                    xor     edx,edx                                         ;zero index
+.110                    cmp     byte [ecx+edx],0                                ;end of input?
+                        je      .120                                            ;yes, branch
+                        inc     dl                                              ;increment index
+                        jmp     .110                                            ;continue
+.120                    mov     byte [ebx+7],dl                                 ;update index
+                        jmp     .10                                             ;put cursor and next message
+;
+;       Handle tab down and shift-tab down to navigate panel fields.
+;
+.130                    cmp     ah,EKEYBTABDOWN                                 ;tab down?
+                        jne     .190                                            ;no, branch
+                        test    byte [wsKeybData+KEYBDATA.shift],EKEYFSHIFT     ;shift?
+                        jz      .170                                            ;no, branch
+;
+;       Handle backward-tab.
+;
+                        cmp     ebx,[wdConsolePanel]                            ;at first field?
+                        jna     .140                                            ;yes, branch
+                        lea     ebx,[ebx-12]                                    ;previous field
+                        jmp     .160                                            ;branch
+.140                    mov     ebx,[wdConsolePanel]                            ;sanity check
+                        cmp     dword [ebx+12],0                                ;last field?
+                        je      .20                                             ;yes, next message (only 1 field)
+.150                    lea     ebx,[ebx+12]                                    ;next field
+                        cmp     dword [ebx+12],0                                ;last field?
+                        jne     .150                                            ;no, continue
+.160                    cmp     ebx,[wdConsoleField]                            ;back to current field?
+                        je      .20                                             ;yes, next message
+                        test    byte [ebx+11],80h                               ;input field?
+                        jz      .40                                             ;no, next field
+                        mov     [wdConsoleField],ebx                            ;set current field
+                        jmp     .10                                             ;place cursor and get message
+;
+;       Handle forward-tab.
+;
+.170                    lea     ebx,[ebx+12]                                    ;next field addr
+                        cmp     dword [ebx],0                                   ;end of panel?
+                        jne     .180                                            ;no, branch
+                        mov     ebx,[wdConsolePanel]                            ;start of panel
+.180                    cmp     ebx,[wdConsoleField]                            ;back to current field?
+                        je      .20                                             ;yes, next message
+                        test    byte [ebx+11],80h                               ;input field?
+                        jz      .170                                            ;no, next field
+                        mov     [wdConsoleField],ebx                            ;set current field
+                        jmp     .10                                             ;place cursor and get message
+;
 ;       If a backspace is pressed and the field index is non-zero, decrement the index and move each character
 ;       starting from the one at the cursor to the preceding adjacent index position. Draw, place cursor, repeat.
 ;
-.140                    cmp     ah,EKEYBBACKSPACE                               ;backspace?
-                        jne     .160                                            ;no, branch
+.190                    cmp     ah,EKEYBBACKSPACE                               ;backspace?
+                        jne     .210                                            ;no, branch
                         test    dl,dl                                           ;index is zero?
                         jz      .20                                             ;yes, next message
                         dec     byte [ebx+7]                                    ;decrement index
@@ -4184,67 +4224,59 @@ ConCode                 mov     edi,ECONDATA                                    
                         mov     esi,edi                                         ;addr of char to remove
                         inc     esi                                             ;addr of first char to move
                         cld                                                     ;forward strings
-.150                    lodsb                                                   ;character to move
+.200                    lodsb                                                   ;character to move
                         stosb                                                   ;store one position preceding
                         test    al,al                                           ;did we store a nul?
-                        jnz     .150                                            ;no, next printable
-                        jmp     .190                                            ;draw field, put cursor, next message
+                        jnz     .200                                            ;no, next printable
+                        jmp     .260                                            ;draw field, put cursor, next message
 ;
 ;       If a delete is pressed and a character is at the index offset, move each character starting from the one at
 ;       the next adjacent position to its preceding adjacent index position. Draw, place cursor, repeat.
 ;
-.160                    cmp     al,EASCIIDELETE                                 ;delete?
-                        jne     .180                                            ;no, branch
+.210                    cmp     al,EASCIIDELETE                                 ;delete?
+                        jne     .230                                            ;no, branch
                         lea     edi,[ecx+edx]                                   ;addr at current index
                         cmp     byte [edi],0                                    ;printable at current index?
                         je      .20                                             ;no, get message
                         lea     esi,[edi+1]                                     ;addr of first char to move
                         cld                                                     ;forward strings
-.170                    lodsb                                                   ;character to move
+.220                    lodsb                                                   ;character to move
                         stosb                                                   ;store on position preceding
                         test    al,al                                           ;did we move a nul?
-                        jnz     .170                                            ;no, next printable
-                        call    ConDrawField                                    ;redraw field
-                        jmp     .20                                             ;get message
-;
-;       If the home key is pressed in a field context, reset the field index to zero.
-;
-
-
-;
-;       If the end key is pressed in the field context, move the field index the end of input or the end of the
-;       field, which ever is less.
-;
-
-
+                        jnz     .220                                            ;no, next printable
+                        jmp     .260                                            ;get message
 ;
 ;       If a printable ASCII is typed, place the character in the field at the current index. If the insert lock
 ;       is on, precede placing the character by moving field characters at or after the current field index to
 ;       their respective next adjacent positions, beginning with the last character in the field.
 ;
-.180                    cmp     al,EASCIISPACE                                  ;printable range? (low)
+.230                    cmp     al,EASCIISPACE                                  ;printable range? (low)
                         jb      .20                                             ;no, next message
                         cmp     al,EASCIITILDE                                  ;printable range? (high)
                         ja      .20                                             ;no, next message
-
-                        test    byte [wsKeyData+KEYBDATA.lock],EKEYFLOCKINSERT
-                        jz      .186
-
-
-
-
-
-
-
+;                        test    byte [wsKeybData+KEYBDATA.lock],EKEYFLOCKINSERT ;insert on?
+;                        jz      .184                                            ;no,branch
+;                        mov     ah,[ecx+edx]
+;                        mov     [ecx+edx],al
+;                        mov     al,ah
+;                        inc     dl
+;                        mov     [ebx+7],dl
+;.182                    mov     ah,[ecx+edx]
+;                        mov     [ecx+edx],al
+;                        mov     al,ah
+;                        inc     dl
+;                        cmp     dl,[ebx+6]                                      ;end of field?
+;                        jb      .182                                            ;yes, branch
+;                        jmp     .190
                         mov     [ecx+edx],al                                    ;store char in buffer
                         inc     dl                                              ;advance index
                         cmp     dl,[ebx+6]                                      ;end of field?
-                        jnb     .190                                            ;yes, branch
+                        jnb     .260                                            ;yes, branch
                         mov     [ebx+7],dl                                      ;save new index
 ;
 ;       Redraw the field, resume to place the cursor and get the next key-down message.
 ;
-.190                    call    ConDrawField                                    ;redraw field
+.260                    call    ConDrawField                                    ;redraw field
                         jmp     .10                                             ;put cursor and get message
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -4270,18 +4302,18 @@ ConHome                 push    ecx                                             
                         cld                                                     ;forward strings
                         rep     stosw                                           ;initialize input fields
 ;
-;       Set the panel handler, panel template and field addresses.
+;       Set the panel handler, template and field addresses.
 ;
-                        mov     eax,[cdHandlerMain]                             ;main panel handler CS-relative addr
+                        mov     eax,[cdHandlerHome]                             ;home panel handler CS-relative addr
                         mov     [wdConsoleHandler],eax                          ;set panel handler addr
-                        mov     eax,czPnlCon001                                 ;main panel addr
+                        mov     eax,czPanelHome                                 ;home panel addr
                         mov     [wdConsolePanel],eax                            ;set panel addr
-                        mov     eax,czPnlConInp                                 ;main panel command field addr
+                        mov     eax,czPanelHomeInput                            ;home panel command field addr
                         mov     [wdConsoleField],eax                            ;set active field
 ;
 ;       Clear panel video memory and draw fields
 ;
-                        call    ConClearPanel                                   ;clear panel video memory
+                        call    ConClearPanel                                   ;clear the panel
                         call    ConDrawFields                                   ;draw panel fields
 ;
 ;       Restore and return.
@@ -4327,7 +4359,7 @@ ConClearPanel           push    ecx                                             
 ;-----------------------------------------------------------------------------------------------------------------------
 ConDrawFields           push    ebx                                             ;save non-volatile regs
 ;
-;       Exit if there is no current panel.
+;       Exit if no panel
 ;
                         mov     ebx,[wdConsolePanel]                            ;panel definition addr
                         test    ebx,ebx                                         ;have panel?
@@ -4381,9 +4413,9 @@ ConDrawField            push    ecx                                             
 ;
 ;       Exit if no field or zero size.
 ;
-                        test    ebx,ebx                                         ;do we have a field?
+                        test    ebx,ebx                                         ;have field?
                         jz      .30                                             ;no, exit
-                        movzx   ecx,byte [ebx+6]                                ;does the field have a size?
+                        movzx   ecx,byte [ebx+6]                                ;have size?
                         jecxz   .30                                             ;no, exit
 ;
 ;       Address video memory.
@@ -4436,8 +4468,8 @@ ConDrawField            push    ecx                                             
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ConPutCursor            push    ecx                                             ;save non-volatile regs
-                        mov     ecx,[wdConsoleField]                            ;is there a current field?
-                        jecxz   .10                                             ;no, exit
+                        mov     ecx,[wdConsoleField]                            ;current field?
+                        jecxz   .10                                             ;no, branch
                         mov     al,[ecx+4]                                      ;field row
                         mov     [wbConsoleRow],al                               ;set current row
                         mov     al,[ecx+5]                                      ;field column
@@ -4446,10 +4478,6 @@ ConPutCursor            push    ecx                                             
                         placeCursor                                             ;place the cursor
 .10                     pop     ecx                                             ;restore non-volatile regs
                         ret                                                     ;return
-
-
-
-
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        ConGo
@@ -4460,7 +4488,6 @@ ConPutCursor            push    ecx                                             
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ConGo                   push    ebx                                             ;save non-volatile regs
-
                         mov     edx,wzConsoleInBuffer                           ;console input buffer address (params)
                         mov     ebx,wzConsoleToken                              ;console command token address
                         call    ConTakeToken                                    ;take first param as token
@@ -4472,14 +4499,13 @@ ConGo                   push    ebx                                             
 ;       ...
 ;
 .10                     call    ConHome                                         ;set panel to the home panel
-
                         pop     ebx                                             ;
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Routine:        ConHandlerMain
+;       Routine:        ConHandlerHome
 ;
-;       Description:    This routine is called to handle user input in the main console panel when a field is exited.
+;       Description:    This routine is called to handle user input in the home console panel when a field is exited.
 ;                       The event handler must set the carry flag if the event is not completely handled. In this case
 ;                       the event will be forwarded to the current field.
 ;
@@ -4490,7 +4516,7 @@ ConGo                   push    ebx                                             
 ;                               0: Event handling not complete
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-ConHandlerMain          push    ebx                                             ;save non-volatile regs
+ConHandlerHome          push    ebx                                             ;save non-volatile regs
 ;
 ;       Handle enter and keypad-enter.
 ;
@@ -4520,7 +4546,7 @@ ConHandlerMain          push    ebx                                             
 ;
 ;       Clear field.
 ;
-.20                     mov     ebx,czPnlConInp                                 ;main panel input field
+.20                     mov     ebx,czPanelHomeInput                            ;home panel input field
                         call    ConClearField                                   ;clear the field contents
                         call    ConDrawField                                    ;draw the field
                         call    ConPutCursor                                    ;place the cursor
@@ -4589,7 +4615,7 @@ ConHandlerView          push    ebx                                             
 ;
 ;       Clear and redraw the command field; place the cursor.
 ;
-.20                     mov     ebx,czPnlMenuInp                                ;panel input field
+.20                     mov     ebx,czPanelViewInput                            ;panel input field
                         call    ConClearField                                   ;clear the field
                         call    ConDrawField                                    ;draw the field
                         call    ConPutCursor                                    ;place the cursor
@@ -4802,9 +4828,7 @@ ConView                 push    ebx                                             
                         mov     edx,wzConsoleInBuffer                           ;console input buffer address (params)
                         mov     ebx,wzConsoleToken                              ;console command token address
                         call    ConTakeToken                                    ;take first param as token
-
                         mov     edx,wzConsoleToken                              ;first param
-
                         cmp     byte [edx],0                                    ;token found?
                         je      .10                                             ;no, branch
                         cmp     byte [edx],'m'                                  ;v m...?
@@ -4816,7 +4840,6 @@ ConView                 push    ebx                                             
                         cmp     byte [wzConsoleToken+2],0                       ;v m,?
                         je      .10                                             ;yes, use current mem addr
                         lea     edx,[edx+2]
-
 .08                     hexadecimalToUnsigned                                   ;convert string token to unsigned
                         mov     [wdConsoleMemBase],eax                          ;save console memory address
 ;
@@ -4905,9 +4928,9 @@ ConView                 push    ebx                                             
 ;
                         mov     eax,[cdHandlerView]                             ;mem panel handler
                         mov     [wdConsoleHandler],eax                          ;set panel handler addr
-                        mov     eax,czPnlMem001                                 ;initial console panel
+                        mov     eax,czPanelView                                 ;initial console panel
                         mov     [wdConsolePanel],eax                            ;set panel template addr
-                        mov     eax,czPnlMenuInp                                ;menu panel command field addr
+                        mov     eax,czPanelViewInput                            ;menu panel command field addr
                         mov     [wdConsoleField],eax                            ;set active field
 ;
 ;       Clear and redraw the panel.
@@ -4927,7 +4950,7 @@ ConView                 push    ebx                                             
 ;       Constants
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-cdHandlerMain           dd      ConHandlerMain - ConCode                        ;main panel code segment offset
+cdHandlerHome           dd      ConHandlerHome - ConCode                        ;home panel code segment offset
 cdHandlerView           dd      ConHandlerView - ConCode                        ;view panel code segment offset
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -4941,47 +4964,35 @@ cdHandlerView           dd      ConHandlerView - ConCode                        
                                                                                 ;---------------------------------------
                                                                                 ;  Home Panel
                                                                                 ;---------------------------------------
-czPnlCon001             dd      czFldPnlIdCon001                                ;field text
-                        db      0,0,4,0,0,0,7,0                                 ;row col siz ndx 1st nth atr flg
-                        ;dd      czFldTitleCon001
-                        ;db      0,33,14,0,0,0,7,0
-                        ;dd      czFldDatTmCon001
-                        ;db      0,63,17,0,0,0,7,0
-                        dd      wzFldMenuOptn0
+czPanelHome             dd      wzFldMenuOptn0
                         db      2,1,1,0,0,0,2,80h
-                        dd      czFldLblMainDevices
-                        db      2,4,7,0,0,0,7,0
+                        dd      czFldLblDevices
+                        db      2,3,7,0,0,0,7,0
                         dd      wzFldMenuOptn1
                         db      3,1,1,0,0,0,2,80h
-                        dd      czFldLblMainMemory
-                        db      3,4,6,0,0,0,7,0
+                        dd      czFldLblMemory
+                        db      3,3,6,0,0,0,7,0
                         dd      wzFldMenuOptn2
                         db      4,1,1,0,0,0,2,80h
-                        dd      czFldLblMainNetwork
-                        db      4,4,7,0,0,0,7,0
+                        dd      czFldLblNetwork
+                        db      4,3,7,0,0,0,7,0
                         dd      wzFldMenuOptn3
                         db      5,1,1,0,0,0,2,80h
-                        dd      czFldLblMainStorage
-                        db      5,4,7,0,0,0,7,0
+                        dd      czFldLblStorage
+                        db      5,3,7,0,0,0,7,0
                         dd      wzFldMenuOptn4
                         db      6,1,1,0,0,0,2,80h
-                        dd      czFldLblMainSystem
-                        db      6,4,6,0,0,0,7,0
-                        dd      czFldPrmptCon001
+                        dd      czFldLblSystem
+                        db      6,3,6,0,0,0,7,0
+                        dd      czFldColon
                         db      23,0,1,0,0,0,7,0
-czPnlConInp             dd      wzConsoleInBuffer
-                        db      23,1,79,0,0,0,7,80h
+czPanelHomeInput        dd      wzConsoleInBuffer
+                        db      23,1,79,0,0,0,7,0A0h                            ;input w/insert
                         dd      0                                               ;end of panel
                                                                                 ;---------------------------------------
-                                                                                ;  Memory Display Panel
+                                                                                ;  View Panel
                                                                                 ;---------------------------------------
-czPnlMem001             dd      czFldPnlIdMem001
-                        db      0,0,4,0,0,0,7,0
-                        ;dd      czFldTitleMem001
-                        ;db      0,33,14,0,0,0,7,0
-                        ;dd      czFldDatTmCon001
-                        ;db      0,63,17,0,0,0,7,0
-                        dd      wzFldMenuOptn0
+czPanelView             dd      wzFldMenuOptn0
                         db      2,1,1,0,0,0,2,80h
                         dd      wzConsoleMemBuf0
                         db      2,4,75,0,0,0,7,0
@@ -5061,10 +5072,10 @@ czPnlMem001             dd      czFldPnlIdMem001
                         db      21,1,1,0,0,0,2,80h
                         dd      wzConsoleMemBuf13
                         db      21,4,75,0,0,0,7,0
-                        dd      czFldPrmptCon001
+                        dd      czFldColon
                         db      23,0,1,0,0,0,7,0
-czPnlMenuInp            dd      wzConsoleInBuffer
-                        db      23,1,79,0,0,0,7,80h
+czPanelViewInput        dd      wzConsoleInBuffer
+                        db      23,1,79,0,0,0,7,0A0h                            ;input w/insert
                         dd      0                                               ;end of panel
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5075,9 +5086,12 @@ czPnlMenuInp            dd      wzConsoleInBuffer
                                                                                 ;  Command Jump Table
                                                                                 ;---------------------------------------
 tConJmpTbl              equ     $                                               ;command jump table
-                        dd      ConGo           - ConCode                       ;go command
-                        dd      ConReset        - ConCode                       ;reset command
-                        dd      ConView         - ConCode                       ;view command
+                        dd      ConGo    - ConCode                              ;go command
+                        dd      ConReset - ConCode                              ;r
+                        dd      ConReset - ConCode                              ;reboot
+                        dd      ConReset - ConCode                              ;restart
+                        dd      ConReset - ConCode                              ;shutdown
+                        dd      ConView  - ConCode                              ;view command
 ECONJMPTBLL             equ     ($-tConJmpTbl)                                  ;table length
 ECONJMPTBLCNT           equ     ECONJMPTBLL/4                                   ;table entries
                                                                                 ;---------------------------------------
@@ -5085,7 +5099,10 @@ ECONJMPTBLCNT           equ     ECONJMPTBLL/4                                   
                                                                                 ;---------------------------------------
 tConCmdTbl              equ     $                                               ;command name table
                         db      2,"G",0                                         ;go command
-                        db      2,"R",0                                         ;reset command
+                        db      2,"R",0                                         ;r command (reboot/reset)
+                        db      7,"REBOOT",0                                    ;reboot command
+                        db      8,"RESTART",0                                   ;restart command
+                        db      9,"SHUTDOWN",0                                  ;shutdown command
                         db      2,"V",0                                         ;view command
                         db      0                                               ;end of table
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -5093,18 +5110,12 @@ tConCmdTbl              equ     $                                               
 ;       Strings
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-czFldPnlIdCon001        db      "Home",0                                        ;home console panel id
-;czFldTitleCon001        db      "OS Version 1.0",0                              ;home console panel title
-;czFldDatTmCon001        db      "DD-MMM-YYYY HH:MM",0                           ;panel date and time template
-czFldPrmptCon001        db      ":",0                                           ;command prompt
-czFldPnlIdMem001        db      "View",0                                        ;memory panel id
-;czFldTitleMem001        db      "Memory Display",0                              ;memory panel title
-czFldMenuOptn001        db      "_",0                                           ;menu option
-czFldLblMainDevices     db      "Devices",0                                     ;main panel devices label
-czFldLblMainMemory      db      "Memory",0                                      ;main panel memory label
-czFldLblMainNetwork     db      "Network",0                                     ;main panel network label
-czFldLblMainStorage     db      "Storage",0                                     ;main panel storage label
-czFldLblMainSystem      db      "System",0                                      ;main panel system label
+czFldLblDevices         db      "Devices",0                                     ;devices label
+czFldLblMemory          db      "Memory",0                                      ;memory label
+czFldLblNetwork         db      "Network",0                                     ;network label
+czFldLblStorage         db      "Storage",0                                     ;storage label
+czFldLblSystem          db      "System",0                                      ;system label
+czFldColon              db      ":",0                                           ;command prompt
                         times   4096-($-$$) db 0h                               ;zero fill to end of section
 %endif
 %ifdef BUILDDISK
