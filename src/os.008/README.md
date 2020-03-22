@@ -7,14 +7,10 @@ Source: [os.008/os.asm](os.asm)
 - Update the Virtual Machine configuration to use os.008/os.dsk as the diskette image.
 - Start the Virtual Machine.
 
-<img src="/images/os008_VirtualBox_001.PNG" width="640"/>
-
 ### [Physical](/docs/PHYSICAL.md) Machine Operation
 - Overwrite os.com on the OS boot diskette with os.008/os.com.
 - Insert the OS boot diskette into the physical system's floppy disk drive A:.
 - Start the system.
-
-<img src="/images/os008_Boot_001.jpg"/>
 
 ### Notes
 

@@ -7,16 +7,10 @@ Source: [os.010/os.asm](os.asm)
 - Update the Virtual Machine configuration to use os.010/os.dsk as the diskette image.
 - Start the Virtual Machine.
 
-<img src="/images/os010_VirtualBox_001.PNG" width="640"/><br>
-<img src="/images/os010_VirtualBox_002.PNG" width="640"/><br>
-
 ### [Physical](/docs/PHYSICAL.md) Machine Operation
 - Overwrite os.com on the OS boot diskette with os.010/os.com.
 - Insert the OS boot diskette into the physical system's floppy disk drive A:.
 - Start the system.
-
-<img src="/images/os010_Boot_001.jpg"/><br>
-<img src="/images/os010_Boot_002.jpg"/><br>
 
 ### Notes
 This projects adds a second panel, the default view panel, that displays the values of memory locations. The view ("v") and go ("g") commands are added. First, we have added a scan-code and an ASCII equate.

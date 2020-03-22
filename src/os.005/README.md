@@ -11,14 +11,10 @@ Source: [os.005/os.asm](os.asm)
 - Update the Virtual Machine configuration to use os.005/os.dsk as the diskette image.
 - Start the Virtual Machine.
 
-<img src="/images/os005_VirtualBox_001.PNG" width="640"/>
-
 ### [Physical](/docs/PHYSICAL.md) Machine Operation
 - Overwrite ```os.com``` on the OS boot diskette with os.005/os.com.
 - Insert the OS boot diskette into the physical system's floppy disk drive A:.
 - Start the system.
-
-<img src="/images/os005_Boot_001.jpg"/>
 
 ### Notes
 This project adds code to the console task to add support for "panels". A panel is a set of fields that define text and input elements on the screen. For this project we define one main panel for the console task. The main panel displays a panel identifier, title and placeholder values for the current date and time on the top row, and a command input field preceded by a colon ":" prompt on row 24. The bottom row, row 25, will be reserved for OS indicators. This row is referred to here as the Operator Information Area (OIA).

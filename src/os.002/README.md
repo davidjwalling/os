@@ -29,8 +29,6 @@ Source: [os.002/os.asm](os.asm)
 ### Notes
 The boot sector ```os.dat``` is now sufficient to load and run the OS loader program ```os.com``` regardless of its size, within reason. From this point on, then, after this project, we do not need to update the physical boot disk sector.
 
-<img src="/images/os002_bootsector_001.PNG" width="640"/>
-
 The program introduces the BUILDCOM directive to create the OS kernel program, ```os.com```. BUILDCOM is enabled automatically if the directive BUILDDISK is defined.
 
 Project os.002 uses the BIOS diskette I/O functions to read the file ```os.com``` from the diskette image in virtual environments or from an actual diskette in physical environments.
