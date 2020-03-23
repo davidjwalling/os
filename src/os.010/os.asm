@@ -3384,7 +3384,7 @@ PutConsoleHexWord       push    eax                                             
 ;
 ;       0         1         2         3         4         5         6         7
 ;       01234567890123456789012345678901234567890123456789012345678901234567890123456789
-;       00112233  WSCA  XXAA                    C                         ASCW    ^CNS !
+;       00112233  WSCA  XXAA                    C                      ASCW ^CNS ! HH:MM
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 PutConsoleOIA           push    ebx                                             ;save non-volatile regs
@@ -3491,25 +3491,25 @@ PutConsoleOIA           push    ebx                                             
                         test    byte [esi+KEYBDATA.shift],EKEYFALTRIGHT         ;right-alt?
                         jz      .90                                             ;no, skip ahead
                         mov     al,'A'                                          ;yes, indicate with 'A'
-.90                     mov     cl,66                                           ;indicator column
+.90                     mov     cl,63                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFCTRLRIGHT        ;right-ctrl?
                         jz      .100                                            ;no, skip ahead
                         mov     al,'C'                                          ;yes, indicate with 'C'
-.100                    mov     cl,67                                           ;indicator column
+.100                    mov     cl,64                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFSHIFTRIGHT       ;right-shift
                         jz      .110                                            ;no, skip ahead
                         mov     al,'S'                                          ;yes, indicate with 'S'
-.110                    mov     cl,68                                           ;indicator column
+.110                    mov     cl,65                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFWINRIGHT         ;right-windows?
                         jz      .115                                            ;no, branch
                         mov     al,'W'                                          ;yes, indicate wiht 'W'
-.115                    mov     cl,69                                           ;indicator column
+.115                    mov     cl,66                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
 ;
 ;       Display Insert, Caps, Scroll and Num-Lock indicators.
@@ -3518,25 +3518,25 @@ PutConsoleOIA           push    ebx                                             
                         test    byte [esi+KEYBDATA.lock],EKEYFLOCKINSERT        ;insert mode?
                         jz      .120                                            ;no, branch
                         mov     al,EASCIICARET                                  ;indicate with a caret '^'
-.120                    mov     cl,74                                           ;indicoator column
+.120                    mov     cl,68                                           ;indicoator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.lock],EKEYFLOCKSCROLL        ;scroll-lock?
                         jz      .130                                            ;no, skip ahead
                         mov     al,'S'                                          ;yes, indicate with 'S'
-.130                    mov     cl,75                                           ;indicator column
+.130                    mov     cl,69                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.lock],EKEYFLOCKNUM           ;num-lock?
                         jz      .140                                            ;no, skip ahead
                         mov     al,'N'                                          ;yes, indicate with 'N'
-.140                    mov     cl,76                                           ;indicator column
+.140                    mov     cl,70                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.lock],EKEYFLOCKCAPS          ;caps-lock?
                         jz      .150                                            ;no, skip ahead
                         mov     al,'C'                                          ;yes, indicate with 'C'
-.150                    mov     cl,77                                           ;indicator column
+.150                    mov     cl,71                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
 ;
 ;       Display timeout flag.
@@ -3545,7 +3545,7 @@ PutConsoleOIA           push    ebx                                             
                         test    byte [esi+KEYBDATA.status],EKEYFTIMEOUT         ;keyboard timeout?
                         jz      .155                                            ;no, branch
                         mov     al,'!'                                          ;ASCII indicator
-.155                    mov     cl,79                                           ;indicator column
+.155                    mov     cl,73                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
 ;
 ;       Restore and return.
@@ -4228,7 +4228,7 @@ ConCode                 mov     edi,ECONDATA                                    
                         stosb                                                   ;store one position preceding
                         test    al,al                                           ;did we store a nul?
                         jnz     .200                                            ;no, next printable
-                        jmp     .260                                            ;draw field, put cursor, next message
+                        jmp     .270                                            ;draw field, put cursor, get message
 ;
 ;       If a delete is pressed and a character is at the index offset, move each character starting from the one at
 ;       the next adjacent position to its preceding adjacent index position. Draw, place cursor, repeat.
@@ -4244,39 +4244,44 @@ ConCode                 mov     edi,ECONDATA                                    
                         stosb                                                   ;store on position preceding
                         test    al,al                                           ;did we move a nul?
                         jnz     .220                                            ;no, next printable
-                        jmp     .260                                            ;get message
+                        jmp     .270                                            ;draw field, put cursor, get message
 ;
-;       If a printable ASCII is typed, place the character in the field at the current index. If the insert lock
-;       is on, precede placing the character by moving field characters at or after the current field index to
-;       their respective next adjacent positions, beginning with the last character in the field.
+;       If a printable ASCII is typed, place the character in the field at the current index if not inserting.
 ;
 .230                    cmp     al,EASCIISPACE                                  ;printable range? (low)
                         jb      .20                                             ;no, next message
                         cmp     al,EASCIITILDE                                  ;printable range? (high)
                         ja      .20                                             ;no, next message
-;                        test    byte [wsKeybData+KEYBDATA.lock],EKEYFLOCKINSERT ;insert on?
-;                        jz      .184                                            ;no,branch
-;                        mov     ah,[ecx+edx]
-;                        mov     [ecx+edx],al
-;                        mov     al,ah
-;                        inc     dl
-;                        mov     [ebx+7],dl
-;.182                    mov     ah,[ecx+edx]
-;                        mov     [ecx+edx],al
-;                        mov     al,ah
-;                        inc     dl
-;                        cmp     dl,[ebx+6]                                      ;end of field?
-;                        jb      .182                                            ;yes, branch
-;                        jmp     .190
-                        mov     [ecx+edx],al                                    ;store char in buffer
+                        test    byte [ebx+11],40h                               ;input field allows insert mode?
+                        jz      .240                                            ;no, branch to overwrite
+                        test    byte [wsKeybData+KEYBDATA.lock],EKEYFLOCKINSERT ;insert on?
+                        jnz      .250                                           ;yes branch
+.240                    mov     [ecx+edx],al                                    ;store char in buffer
                         inc     dl                                              ;advance index
                         cmp     dl,[ebx+6]                                      ;end of field?
-                        jnb     .260                                            ;yes, branch
+                        jnb     .270                                            ;yes, branch
                         mov     [ebx+7],dl                                      ;save new index
+                        jmp     .270                                            ;draw field, put cursor, get message
+;
+;       If the insert lock is on, replace each following character with the preceding one after the typed character
+;       is stored in the field.
+;
+.250                    movzx   edi,byte [ebx+6]                                ;field size
+                        add     edi,ecx                                         ;last field byte (nul)
+                        dec     edi                                             ;last input byte
+                        cmp     byte [edi],0                                    ;field full?
+                        jne     .20                                             ;yes, get message
+.260                    mov     ah,[ecx+edx]                                    ;char to move
+                        mov     [ecx+edx],al                                    ;store char
+                        inc     dl                                              ;advance index
+                        mov     al,ah                                           ;next char to move
+                        test    al,al                                           ;end of input?
+                        jnz     .260                                            ;no, continue
+                        inc     byte [ebx+7]                                    ;increment index
 ;
 ;       Redraw the field, resume to place the cursor and get the next key-down message.
 ;
-.260                    call    ConDrawField                                    ;redraw field
+.270                    call    ConDrawField                                    ;redraw field
                         jmp     .10                                             ;put cursor and get message
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -4404,6 +4409,7 @@ ConDrawFields           push    ebx                                             
 ;                               [ebx+9]         last selected index (0-255)
 ;                               [ebx+10]        attribute
 ;                               [ebx+11]        flags                           80h = input field
+;                                                                               40h = allow insert
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ConDrawField            push    ecx                                             ;save non-volatile regs
@@ -4964,8 +4970,8 @@ cdHandlerView           dd      ConHandlerView - ConCode                        
                                                                                 ;---------------------------------------
                                                                                 ;  Home Panel
                                                                                 ;---------------------------------------
-czPanelHome             dd      wzFldMenuOptn0
-                        db      2,1,1,0,0,0,2,80h
+czPanelHome             dd      wzFldMenuOptn0                                  ;field text
+                        db      2,1,1,0,0,0,2,80h                               ;row col siz ndx 1st nth atr flg
                         dd      czFldLblDevices
                         db      2,3,7,0,0,0,7,0
                         dd      wzFldMenuOptn1
@@ -4987,7 +4993,7 @@ czPanelHome             dd      wzFldMenuOptn0
                         dd      czFldColon
                         db      23,0,1,0,0,0,7,0
 czPanelHomeInput        dd      wzConsoleInBuffer
-                        db      23,1,79,0,0,0,7,0A0h                            ;input w/insert
+                        db      23,1,79,0,0,0,7,0C0h                            ;input w/insert
                         dd      0                                               ;end of panel
                                                                                 ;---------------------------------------
                                                                                 ;  View Panel
@@ -5075,7 +5081,7 @@ czPanelView             dd      wzFldMenuOptn0
                         dd      czFldColon
                         db      23,0,1,0,0,0,7,0
 czPanelViewInput        dd      wzConsoleInBuffer
-                        db      23,1,79,0,0,0,7,0A0h                            ;input w/insert
+                        db      23,1,79,0,0,0,7,0C0h                            ;input w/insert
                         dd      0                                               ;end of panel
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5086,12 +5092,12 @@ czPanelViewInput        dd      wzConsoleInBuffer
                                                                                 ;  Command Jump Table
                                                                                 ;---------------------------------------
 tConJmpTbl              equ     $                                               ;command jump table
-                        dd      ConGo    - ConCode                              ;go command
-                        dd      ConReset - ConCode                              ;r
-                        dd      ConReset - ConCode                              ;reboot
-                        dd      ConReset - ConCode                              ;restart
-                        dd      ConReset - ConCode                              ;shutdown
-                        dd      ConView  - ConCode                              ;view command
+                        dd      ConGo     - ConCode                             ;go command
+                        dd      ConReset  - ConCode                             ;r
+                        dd      ConReset  - ConCode                             ;reboot
+                        dd      ConReset  - ConCode                             ;restart
+                        dd      ConReset  - ConCode                             ;shutdown
+                        dd      ConView   - ConCode                             ;view command
 ECONJMPTBLL             equ     ($-tConJmpTbl)                                  ;table length
 ECONJMPTBLCNT           equ     ECONJMPTBLL/4                                   ;table entries
                                                                                 ;---------------------------------------

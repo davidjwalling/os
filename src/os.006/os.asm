@@ -2674,7 +2674,7 @@ PutConsoleHexByte       push    eax                                             
 ;
 ;       0         1         2         3         4         5         6         7
 ;       01234567890123456789012345678901234567890123456789012345678901234567890123456789
-;       00112233  WSCA  XXAA                    C                         ASCW    ^CNS !
+;       00112233  WSCA  XXAA                    C                      ASCW ^CNS ! HH:MM
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 PutConsoleOIA           push    ebx                                             ;save non-volatile regs
@@ -2781,25 +2781,25 @@ PutConsoleOIA           push    ebx                                             
                         test    byte [esi+KEYBDATA.shift],EKEYFALTRIGHT         ;right-alt?
                         jz      .90                                             ;no, skip ahead
                         mov     al,'A'                                          ;yes, indicate with 'A'
-.90                     mov     cl,66                                           ;indicator column
+.90                     mov     cl,63                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFCTRLRIGHT        ;right-ctrl?
                         jz      .100                                            ;no, skip ahead
                         mov     al,'C'                                          ;yes, indicate with 'C'
-.100                    mov     cl,67                                           ;indicator column
+.100                    mov     cl,64                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFSHIFTRIGHT       ;right-shift
                         jz      .110                                            ;no, skip ahead
                         mov     al,'S'                                          ;yes, indicate with 'S'
-.110                    mov     cl,68                                           ;indicator column
+.110                    mov     cl,65                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFWINRIGHT         ;right-windows?
                         jz      .115                                            ;no, branch
                         mov     al,'W'                                          ;yes, indicate wiht 'W'
-.115                    mov     cl,69                                           ;indicator column
+.115                    mov     cl,66                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
 ;
 ;       Display Insert, Caps, Scroll and Num-Lock indicators.
@@ -2808,25 +2808,25 @@ PutConsoleOIA           push    ebx                                             
                         test    byte [esi+KEYBDATA.lock],EKEYFLOCKINSERT        ;insert mode?
                         jz      .120                                            ;no, branch
                         mov     al,EASCIICARET                                  ;indicate with a caret '^'
-.120                    mov     cl,74                                           ;indicoator column
+.120                    mov     cl,68                                           ;indicoator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.lock],EKEYFLOCKSCROLL        ;scroll-lock?
                         jz      .130                                            ;no, skip ahead
                         mov     al,'S'                                          ;yes, indicate with 'S'
-.130                    mov     cl,75                                           ;indicator column
+.130                    mov     cl,69                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.lock],EKEYFLOCKNUM           ;num-lock?
                         jz      .140                                            ;no, skip ahead
                         mov     al,'N'                                          ;yes, indicate with 'N'
-.140                    mov     cl,76                                           ;indicator column
+.140                    mov     cl,70                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.lock],EKEYFLOCKCAPS          ;caps-lock?
                         jz      .150                                            ;no, skip ahead
                         mov     al,'C'                                          ;yes, indicate with 'C'
-.150                    mov     cl,77                                           ;indicator column
+.150                    mov     cl,71                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
 ;
 ;       Display timeout flag.
@@ -2835,7 +2835,7 @@ PutConsoleOIA           push    ebx                                             
                         test    byte [esi+KEYBDATA.status],EKEYFTIMEOUT         ;keyboard timeout?
                         jz      .155                                            ;no, branch
                         mov     al,'!'                                          ;ASCII indicator
-.155                    mov     cl,79                                           ;indicator column
+.155                    mov     cl,73                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
 ;
 ;       Restore and return.
