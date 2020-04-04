@@ -112,7 +112,7 @@ The program samples presented here were tested using the following physical comp
 - Insert floppy diskette into Drive A: on the target physical system.
 - Start the target physical system.
 
-<img src="../images/os_VMware_001.PNG"/>
+<img src="../images/os_VMWare_001.PNG"/>
 
 ### Using the ```osprep.com``` Program
 
