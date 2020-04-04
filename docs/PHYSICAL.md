@@ -73,24 +73,12 @@ The program samples presented here were tested using the following physical comp
 
 ### HxD Hex Editor - MS-DOS Boot Sector
 - In this example, the diskette we have selected to update already as a DOS boot sector on it.
-- We will overwrite this boot sector with the os.dat boot sector image created in project os.001.
+- We will overwrite this boot sector with the os.dat boot sector image.
 
 <img src="../images/os001_HxD_005_MSDOSBootSector.PNG"/>
 
 ### HxD Hex Editor - File Open
-- Use the File|Open menu option to open the os001/os.dat file image.
-
-<img src="../images/os001_HxD_006_FileOpen.PNG"/>
-
-### HxD Hex Editor - Select os.001/os.dat
-- Select the os.dat file in the os.001 folder.
-- Click "open" to open the os.dat file in a new tab.
-
-<img src="../images/os001_HxD_007_SelectOSDat.PNG"/>
-
-### HxD Hex Editor - OS Boot Sector
-- In the newly opened tab, the os.dat boot sector created in project os.001 is shown.
-- Select the entire boot sector - the first 512 (or 200h) bytes.
+- Use the File|Open menu option to open the os.dat file image.
 
 <img src="../images/os001_HxD_008_OSBootSector.PNG"/>
 
@@ -124,4 +112,14 @@ The program samples presented here were tested using the following physical comp
 - Insert floppy diskette into Drive A: on the target physical system.
 - Start the target physical system.
 
-<img src="../images/os001_Boot_001.jpg"/>
+<img src="../images/os022_VirtualBox_001.png"/>
+
+### Using the ```osprep.com``` Program
+
+<img src="../images/os003_osprep_001.jpg"/>
+
+<img src="../images/os003_osprep_002.jpg"/>
+
+<img src="../images/os003_osprep_003.jpg"/>
+
+<img src="../images/os003_osprep_004.jpg"/>
