@@ -112,7 +112,7 @@ The program samples presented here were tested using the following physical comp
 - Insert floppy diskette into Drive A: on the target physical system.
 - Start the target physical system.
 
-<img src="../images/os022_VirtualBox_001.png"/>
+<img src="../images/os022_VirtualBox_001.PNG"/>
 
 ### Using the ```osprep.com``` Program
 
