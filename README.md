@@ -11,7 +11,6 @@ Copyright :copyright: 2010-2020 David J. Walling. MIT License.
 
 - Samples assembled using NASM (Netwide Asssembler) version 2.14.02.
 - make.bat assembles and links on Windows using NASM and ALINK.
-- Makefile assembles and links on Linux using NASM and ld.
 
 ### Directives
 
