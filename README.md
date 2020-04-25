@@ -2,7 +2,7 @@
 
 Copyright :copyright: 2010-2020 David J. Walling. MIT License.
 
-- A simple operating system for x86-based PC-compatible systems.
+- A simple protected-mode operating system for x86-based PC-compatible systems.
 - Operates on 32-bit Intel:registered: or AMD:registered: x86 from the 80386 up through present-day processors.
 - Does not require coprocessors or other external firmware or engines beyond the chipset.
 - Clear assembly-language, hardware I/O and protocol examples.
@@ -39,7 +39,7 @@ Copyright :copyright: 2010-2020 David J. Walling. MIT License.
 
 ### Network Support
 
-- OS includes native support for the Intel :registered: PRO/1000 MT Desktop (82540EM) network adapter.
+- OS includes native support for the AMD:registered: PCInet-PCI II Am79C970 network adapter.
 - Virtual machine installations may select this adapter type in the network configuration of the VM.
 - Configure this VM network adapter using bridged networking to access the host system's network.
 
