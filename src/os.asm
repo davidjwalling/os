@@ -3373,8 +3373,7 @@ irq11.10                in      al,0A1h                                         
 ;       In:             DS      OS data segment address
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-AM79IntHandler          push    ebx                                             ;save non-volatile regs
-                        push    ecx                                             ;
+AM79IntHandler          push    ecx                                             ;save non-volatile regs
                         push    edi                                             ;
                         push    es                                              ;
 ;
@@ -3401,21 +3400,9 @@ AM79IntHandler          push    ebx                                             
 ;
 ;       Read CSR0.
 ;
-                        mov     ebx,wsConsoleEther                              ;ETHER struct address
-                        mov     ecx,[ebx+ETHER.mmio]                            ;memory mapped I/O address
-                        jecxz   .12                                             ;no branch
-                        xor     eax,eax                                         ;zero reg
-                        mov     [ecx+12h],ax                                    ;write CSR0 to RAP
-                        mov     ax,[ecx+10h]                                    ;read CSR0 from RDP
-;
-;       Acknowledge and mask controller ints.
-;
-                        and     ax,0FFB0h                                       ;not(IENA|TDMD|STOP|STRT|INIT)
-                        mov     [ecx+10h],ax                                    ;mask
-                        mov     ax,[ecx+10h]                                    ;read after write
-                        jmp     .14
-.12                     mov     edx,[wsConsoleEther+ETHER.iospace]              ;port I/O base addr
+                        mov     edx,[wsConsoleEther+ETHER.iospace]              ;port I/O base addr
                         add     edx,012h                                        ;RAP
+                        xor     ax,ax                                           ;CSR0
                         out     dx,ax                                           ;write CSR0 to RAP
                         in      ax,dx                                           ;read after write
                         sub     edx,2                                           ;RDP
@@ -3426,15 +3413,15 @@ AM79IntHandler          push    ebx                                             
 ;
 ;       Handle received frames.
 ;
-.14                     mov     edi,[ebx+ETHER.rxbase]                          ;receive descriptor ring addr
-                        mov     ecx,[ebx+ETHER.rxtail]                          ;tail index (0-63)
+                        mov     edi,[wsConsoleEther+ETHER.rxbase]               ;receive descriptor ring addr
+                        mov     ecx,[wsConsoleEther+ETHER.rxtail]               ;tail index (0-63)
 .20                     lea     edx,[edi+ecx*8]                                 ;next descriptor addr
                         test    byte [edx+AM79RXDESC.flags],080h                ;host owns?
                         jnz     .30                                             ;no, branch
 ;
 ;       Handle frame.
 ;
-                        inc     dword [ebx+ETHER.rxcount]                       ;increment frame count
+                        inc     dword [wsConsoleEther+ETHER.rxcount]            ;increment frame count
 ;
 ;       Continue to next frame.
 ;
@@ -3442,36 +3429,27 @@ AM79IntHandler          push    ebx                                             
                         mov     byte [edx+AM79RXDESC.flags],080h                ;assign descriptor to controller
                         inc     ecx                                             ;increment tail index
                         and     ecx,03Fh                                        ;wrap to zero
-                        mov     [ebx+ETHER.rxtail],ecx                          ;update tail index
+                        mov     [wsConsoleEther+ETHER.rxtail],ecx               ;update tail index
                         jmp     .20                                             ;next descriptor
 ;
 ;       Enable controller ints.
 ;
-.30                     xor     eax,eax                                         ;CSR0
-                        mov     ecx,[ebx+ETHER.mmio]                            ;memory mapped I/O addr
-                        jecxz   .32                                             ;no branch
-                        mov     [ecx+12h],ax                                    ;write CSR0 to RAP
-                        xor     edx,edx                                         ;zero reg
-                        mov     dl,040h                                         ;enable ints bit (IENA)
-                        mov     [ecx+10h],dx                                    ;enable ints
-                        mov     ax,[ecx+10h]                                    ;read after write
-                        jmp     .40                                             ;continue
-.32                     mov     edx,[wsConsoleEther+ETHER.iospace]
-                        add     edx,012h
-                        out     dx,ax
-                        in      ax,dx
-                        sub     edx,2
-                        in      ax,dx
-                        or      al,40h
-                        out     dx,ax
-                        in      ax,dx
+.30                     mov     edx,[wsConsoleEther+ETHER.iospace]              ;I/O port addr
+                        add     edx,012h                                        ;RAP
+                        xor     ax,ax                                           ;CSR0
+                        out     dx,ax                                           ;select CSR0
+                        in      ax,dx                                           ;read after write
+                        sub     edx,2                                           ;RDP
+                        in      ax,dx                                           ;read CSR0
+                        or      al,40h                                          ;set IENA
+                        out     dx,ax                                           ;write CSR0
+                        in      ax,dx                                           ;read after write
 ;
 ;       Restore and return.
 ;
 .40                     pop     es                                              ;restore non-volatile regs
                         pop     edi                                             ;
                         pop     ecx                                             ;
-                        pop     ebx                                             ;
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5353,7 +5331,6 @@ ConCode                 mov     edi,ECONDATA                                    
 ;
 ;       Scan PCI for ethernet adapter.
 ;
-                        mov     esi,wsConsoleEther                              ;ethernet context
                         mov     ebx,wsConsolePCI                                ;PCI context
 .0100                   call    ConBuildPCISelector                             ;EAX=PCI selector
                         call    ConReadPCIRegister                              ;EAX=vendor and device
@@ -5399,11 +5376,11 @@ ConCode                 mov     edi,ECONDATA                                    
 ;       Store the device's PCI selector, device, vendor, class, sub-class, prog IF and revision in the ETHER struct.
 ;
 .0500                   mov     eax,[ebx+PCI.selector]                          ;selector
-                        mov     [esi+ETHER.selector],eax                        ;store in ETHER struct
+                        mov     [wsConsoleEther+ETHER.selector],eax             ;store in ETHER struct
                         mov     eax,[ebx+PCI.vendordevice]                      ;vendor and device
-                        mov     [esi+ETHER.vendordevice],eax                    ;store in ETHER struct
+                        mov     [wsConsoleEther+ETHER.vendordevice],eax         ;store in ETHER struct
                         mov     eax,[ebx+PCI.classsubprogrev]                   ;class, sub, prog, rev
-                        mov     [esi+ETHER.classsubprogrev],eax                 ;store in ETHER struct
+                        mov     [wsConsoleEther+ETHER.classsubprogrev],eax      ;store in ETHER struct
 ;
 ;       Report supported Ethernet adapter found.
 ;
@@ -5412,50 +5389,15 @@ ConCode                 mov     edi,ECONDATA                                    
                         mov     al,2                                            ;okay message with value
                         call    ConPutInitString                                ;display message
 ;
-;       Read and save the device's status and command register. Check for memory-mapped I/O support.
+;       Read and save the device's status and command register. Check for port I/O support.
 ;
-.0600                   mov     eax,[esi+ETHER.selector]                        ;PCI selector
+.0600                   mov     eax,[wsConsoleEther+ETHER.selector]             ;PCI selector
                         mov     al,4                                            ;status & command reg
                         call    ConReadPCIRegister                              ;read status & command
-                        mov     [esi+ETHER.statuscommand],eax                   ;save status & command
-                        test    al,2                                            ;memory-mapped I/O access?
-                        jz      .0700                                           ;no, branch
-;
-;       Read BAR1. Confirm it is a non-zero, 32-bit mapped-memory address.
-;
-                        mov     eax,[esi+ETHER.selector]                        ;PCI selector
-                        mov     al,014h                                         ;memory-mapped I/O addr reg
-                        call    ConReadPCIRegister                              ;read memory-mapped I/O addr reg
-                        test    al,1                                            ;BAR 1 is memory-mapped space?
-                        jnz     .0700                                           ;no, branch
-                        test    eax,eax                                         ;memory-mapped I/O addr zero?
-                        jz      .0700                                           ;yes, branch
-                        test    al,6                                            ;32-bit memory space?
-                        jnz     .0700                                           ;no, branch
-;
-;       Save the mapped-memory I/O address and report.
-;
-                        and     al,0F0h                                         ;clear reserved bits
-                        mov     [esi+ETHER.mmio],eax                            ;save memory-mapped i/o addr
-                        mov     ecx,[esi+ETHER.mmio]                            ;MMIO address
-                        mov     edx,czEtherMemoryMapSpace                       ;message label
-                        mov     al,2                                            ;OK message with value
-                        call    ConPutInitDword                                 ;display message with value
-                        jmp     .1000                                           ;continue to IRQ line
-;
-;       Report no mapped-memory I/O.
-;
-.0700                   mov     edx,czEtherUsingMMIO                            ;using MMIO message
-                        mov     ecx,czNo                                        ;no
-                        mov     al,2                                            ;okay message with value
-                        call    ConPutInitString                                ;display message with value
-;
-;       Test the PCI command register value for port I/O access. Verify BAR0 is a valid port I/O address.
-;
-.0800                   mov     eax,[esi+ETHER.statuscommand]                   ;status & command
+                        mov     [wsConsoleEther+ETHER.statuscommand],eax        ;save status & command
                         test    al,1                                            ;port I/O access?
                         jz      .0900                                           ;no, branch
-                        mov     eax,[esi+ETHER.selector]                        ;PCI selector
+                        mov     eax,[wsConsoleEther+ETHER.selector]             ;PCI selector
                         mov     al,010h                                         ;I/O base address reg
                         call    ConReadPCIRegister                              ;read I/O base address reg
                         test    al,1                                            ;BAR 0 is I/O space?
@@ -5464,8 +5406,8 @@ ConCode                 mov     edi,ECONDATA                                    
 ;       Save the port I/O space and report.
 ;
                         and     al,0FCh                                         ;clear reserved bits
-                        mov     [esi+ETHER.iospace],eax                         ;save i/o space
-                        mov     ecx,[esi+ETHER.iospace]                         ;I/O space
+                        mov     [wsConsoleEther+ETHER.iospace],eax              ;save i/o space
+                        mov     ecx,eax
                         mov     edx,czEtherIoSpace                              ;I/O space message
                         mov     al,2                                            ;OK message with value
                         call    ConPutInitDword                                 ;display message
@@ -5488,10 +5430,10 @@ ConCode                 mov     edi,ECONDATA                                    
 ;
 ;       Report interrupt request line
 ;
-.1000                   mov     eax,[esi+ETHER.selector]                        ;PCI selector
+.1000                   mov     eax,[wsConsoleEther+ETHER.selector]             ;PCI selector
                         mov     al,03Ch                                         ;interrupt request line reg
                         call    ConReadPCIRegister                              ;AL=interrupt
-                        mov     [esi+ETHER.irq],al                              ;save interrupt request line
+                        mov     [wsConsoleEther+ETHER.irq],al                   ;save interrupt request line
                         movzx   ecx,al                                          ;interrupt request line
                         mov     edx,czEtherInterruptLine                        ;interrupt request line message
                         mov     bh,1                                            ;decimal conversion flags
@@ -5501,7 +5443,7 @@ ConCode                 mov     edi,ECONDATA                                    
 ;       Report MAC address
 ;
                         call    ConReadMAC
-                        lea     ecx,[esi+ETHER.mac]                             ;MAC address addr
+                        lea     ecx,[wsConsoleEther+ETHER.mac]                  ;MAC address addr
                         mov     edx,wzConsoleToken                              ;console token buffer
                         putMACString                                            ;convert to MAC string
                         mov     edx,czEtherMACAddress                           ;Ethernet MAC label string
@@ -5511,12 +5453,12 @@ ConCode                 mov     edi,ECONDATA                                    
 ;
 ;       Read controller status
 ;
-                        xor     eax,eax                                         ;CSR0 register
-                        call    ConReadEther                                    ;read CSR0
-                        mov     ecx,eax                                         ;controller status
-                        mov     edx,czEtherControllerStatus                     ;status message
-                        mov     al,2                                            ;message has value
-                        call    ConPutInitDword                                 ;display message with value
+;                        xor     eax,eax                                         ;CSR0 register
+;                        call    ConReadEther                                    ;read CSR0
+;                        mov     ecx,eax                                         ;controller status
+;                        mov     edx,czEtherControllerStatus                     ;status message
+;                        mov     al,2                                            ;message has value
+;                        call    ConPutInitDword                                 ;display message with value
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5530,9 +5472,9 @@ ConCode                 mov     edi,ECONDATA                                    
                         allocateMemory                                          ;allocate receive descriptor ring
                         test    eax,eax                                         ;memory allocated?
                         jz      .1300                                           ;no, branch
-                        mov     [esi+ETHER.rxblock],eax                         ;save allocated storage addr
+                        mov     [wsConsoleEther+ETHER.rxblock],eax              ;save allocated storage addr
                         add     eax,EMEMBLOCKLEN                                ;usable memory address
-                        mov     [esi+ETHER.rxbase],eax                          ;save descriptor ring addr
+                        mov     [wsConsoleEther+ETHER.rxbase],eax               ;save descriptor ring addr
 ;
 ;       Allocate receive buffers and initialize receive descriptors.
 ;
@@ -5556,9 +5498,9 @@ ConCode                 mov     edi,ECONDATA                                    
                         allocateMemory                                          ;allocate receive descriptor ring
                         test    eax,eax                                         ;memory allocated?
                         jz      .1300                                           ;no, branch
-                        mov     [esi+ETHER.txblock],eax                         ;save allocated storage addr
+                        mov     [wsConsoleEther+ETHER.txblock],eax              ;save allocated storage addr
                         add     eax,EMEMBLOCKLEN                                ;usable memory address
-                        mov     [esi+ETHER.txbase],eax                          ;save descriptor ring addr
+                        mov     [wsConsoleEther+ETHER.txbase],eax               ;save descriptor ring addr
 ;
 ;       Allocate transmit buffers and initialize transmit descriptors.
 ;
@@ -5588,9 +5530,9 @@ ConCode                 mov     edi,ECONDATA                                    
                         mov     edi,wsEtherInitBlock                            ;AM79C970 init block addr
                         xor     eax,eax                                         ;zero reg
                         stosw                                                   ;store mode
-                        mov     eax,[esi+ETHER.mac]                             ;MAC bytes 1-4
+                        mov     eax,[wsConsoleEther+ETHER.mac]                  ;MAC bytes 1-4
                         stosd                                                   ;store
-                        mov     ax,[esi+ETHER.mac+4]                            ;MAC bytes 5,6
+                        mov     ax,[wsConsoleEther+ETHER.mac+4]                 ;MAC bytes 5,6
                         stosw                                                   ;store
                         xor     eax,eax                                         ;zero reg
                         stosd                                                   ;ladrf lo
@@ -5605,7 +5547,7 @@ ConCode                 mov     edi,ECONDATA                                    
 ;       Set the interrupt handler
 ;
                         mov     eax,AM79IntHandler                              ;PCInet-PCI II interrupt handler
-                        mov     [esi+ETHER.handler],eax                         ;set ETHER interrupt handler address
+                        mov     [wsConsoleEther+ETHER.handler],eax              ;set ETHER interrupt handler address
 ;
 ;       Set CSR1 and CSR2 to point to initialization block.
 ;
@@ -5619,9 +5561,19 @@ ConCode                 mov     edi,ECONDATA                                    
 ;
 ;       Set IENA, STRT and INIT in CSR0.
 ;
-                        mov     cx,043h                                         ;IENA|STRT|INIT
-                        xor     eax,eax                                         ;zero reg
-                        mov     al,0                                            ;CSR0
+                        mov     cx,01h                                          ;INIT
+                        xor     eax,eax                                         ;CSR0
+                        call    ConWriteEther                                   ;write CSR0
+.1212                   xor     eax,eax                                         ;CSR0
+                        call    ConReadEther                                    ;read CSR0
+                        test    ah,1                                            ;initialization done?
+                        jnz     .1215                                           ;yes, branch
+                        sti                                                     ;enable maskable ints
+                        hlt                                                     ;halt until int
+                        jmp     .1212                                           ;repeat
+.1215                   mov     ecx,eax                                         ;controller status
+                        or      cl,042h                                         ;set IENA|STRT
+                        xor     eax,eax                                         ;CSR0
                         call    ConWriteEther                                   ;write CSR0
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -5641,23 +5593,23 @@ ConCode                 mov     edi,ECONDATA                                    
 ;
 ;       Report the initialization block address (low).
 ;
-                        xor     eax,eax                                         ;zero reg
-                        mov     al,1                                            ;CSR1
-                        call    ConReadEther                                    ;read init block addr (low)
-                        mov     ecx,eax                                         ;init block addr (low)
-                        mov     edx,czEtherControllerInitLo                     ;message string
-                        mov     al,2                                            ;okay message with value
-                        call    ConPutInitDword                                 ;display message with value
+;                        xor     eax,eax                                         ;zero reg
+;                        mov     al,1                                            ;CSR1
+;                        call    ConReadEther                                    ;read init block addr (low)
+;                        mov     ecx,eax                                         ;init block addr (low)
+;                        mov     edx,czEtherControllerInitLo                     ;message string
+;                        mov     al,2                                            ;okay message with value
+;                        call    ConPutInitDword                                 ;display message with value
 ;
 ;       Report the initialization block address (high).
 ;
-                        xor     eax,eax                                         ;zero reg
-                        mov     al,2                                            ;CSR2
-                        call    ConReadEther                                    ;read init block addr (high)
-                        mov     ecx,eax                                         ;init block addr (high)
-                        mov     edx,czEtherControllerInitHi                     ;message string
-                        mov     al,2                                            ;okay message with value
-                        call    ConPutInitDword                                 ;display message with value
+;                        xor     eax,eax                                         ;zero reg
+;                        mov     al,2                                            ;CSR2
+;                        call    ConReadEther                                    ;read init block addr (high)
+;                        mov     ecx,eax                                         ;init block addr (high)
+;                        mov     edx,czEtherControllerInitHi                     ;message string
+;                        mov     al,2                                            ;okay message with value
+;                        call    ConPutInitDword                                 ;display message with value
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ;       Now we enter the console operator task's message-handling loop. We initialize the loop by drawing the console
@@ -6023,24 +5975,14 @@ ConNextPCIDevice        mov     byte [ebx+PCI.function],0                       
 ;                               -1 = unable to read register
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-ConReadEther            mov     edx,[wsConsoleEther+ETHER.mmio]                 ;memory mapped I/O addr
-                        test    edx,edx                                         ;memory mapped I/O?
-                        jz      .10                                             ;no, branch
-                        mov     [edx+12h],ax                                    ;write register to RAP
-                        mov     ax,[edx+10h]                                    ;read value from RDP
-                        jmp     .30                                             ;continue
-.10                     mov     edx,[wsConsoleEther+ETHER.iospace]              ;port I/O base addr
-                        test    edx,edx                                         ;port I/O?
-                        jz      .20                                             ;no, branch
+ConReadEther            mov     edx,[wsConsoleEther+ETHER.iospace]              ;port I/O base addr
                         add     edx,012h                                        ;RAP
                         out     dx,ax                                           ;write register to RAP
                         in      ax,dx                                           ;read after write
                         sub     edx,2                                           ;RDP
                         xor     eax,eax                                         ;zero reg
                         in      ax,dx                                           ;read controller register
-                        jmp     .30                                             ;continue
-.20                     mov     eax,-1                                          ;default result
-.30                     ret                                                     ;return
+                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        ConWriteEther
@@ -6051,15 +5993,7 @@ ConReadEther            mov     edx,[wsConsoleEther+ETHER.mmio]                 
 ;                       CX      value
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-ConWriteEther           mov     edx,[wsConsoleEther+ETHER.mmio]                 ;memory mapped I/O addr
-                        test    edx,edx                                         ;memory mapped I/O?
-                        jz      .10                                             ;no, branch
-                        mov     [edx+12h],ax                                    ;write register to RAP
-                        mov     [edx+10h],cx                                    ;write value
-                        jmp     .20                                             ;continue
-.10                     mov     edx,[wsConsoleEther+ETHER.iospace]              ;port I/O base dadr
-                        test    edx,edx                                         ;port I/O?
-                        jz      .20                                             ;no, branch
+ConWriteEther           mov     edx,[wsConsoleEther+ETHER.iospace]              ;port I/O base dadr
                         add     edx,012h                                        ;RAP
                         out     dx,ax                                           ;write register to RAP
                         in      ax,dx                                           ;read after write
@@ -6067,7 +6001,7 @@ ConWriteEther           mov     edx,[wsConsoleEther+ETHER.mmio]                 
                         mov     ax,cx                                           ;value
                         out     dx,ax                                           ;write value
                         in      ax,dx                                           ;read after write
-.20                     ret                                                     ;return
+                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        ConReadMAC
@@ -6076,28 +6010,9 @@ ConWriteEther           mov     edx,[wsConsoleEther+ETHER.mmio]                 
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Test for mapped memory.
-;
-ConReadMAC              mov     edx,[wsConsoleEther+ETHER.mmio]                 ;mapped memory i/o addr
-                        test    edx,edx                                         ;mapped memory?
-                        jz      .10                                             ;no, branch
-;
-;       Read MAC from mapped memory.
-;
-                        mov     eax,[edx]                                       ;MAC[0-3]
-                        mov     [wsConsoleEther+ETHER.mac],eax                  ;save MAC[0-3]
-                        mov     ax,[edx+4]                                      ;MAC[4,5]
-                        mov     [wsConsoleEther+ETHER.mac+4],ax                 ;save MAC[4,5]
-                        jmp     .30                                             ;continue
-;
-;       Test for port i/o.
-;
-.10                     mov     edx,[wsConsoleEther+ETHER.iospace]              ;port i/o addr
-                        test    edx,edx                                         ;port i/o?
-                        jz     .20                                              ;no, branch
-;
 ;       Read MAC from port i/o.
 ;
+ConReadMAC              mov     edx,[wsConsoleEther+ETHER.iospace]              ;port i/o addr
                         add     edx,5                                           ;MAC[5] addr
                         in      al,dx                                           ;AL=MAC[5]
                         mov     ah,al                                           ;AH=MAC[5]
@@ -6116,14 +6031,7 @@ ConReadMAC              mov     edx,[wsConsoleEther+ETHER.mmio]                 
                         dec     edx                                             ;MAC[0] addr
                         in      al,dx                                           ;AL=MAC[0]
                         mov     [wsConsoleEther+ETHER.mac],eax                  ;save MAC 0-3
-                        jmp     .30                                             ;continue
-;
-;       No access to read MAC.
-;
-.20                     mov     eax,-1                                          ;default high-values
-                        mov     [wsConsoleEther+ETHER.mac],eax                  ;save MAC[0-3]
-                        mov     [wsConsoleEther+ETHER.mac+4],ax                 ;save MAC[5,6]
-.30                     ret                                                     ;return
+                        ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        ConPutInitDecimal
