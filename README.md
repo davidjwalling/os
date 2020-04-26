@@ -33,15 +33,23 @@ Copyright :copyright: 2010-2020 David J. Walling. MIT License.
 ### Installation
 
 <table>
-<tr><td><a href="/docs/VIRTUAL.md">Virtual</a></td><td>Configure a virtual machine instance to boot from a floppy drive disk image and select the os.dsk file as the disk image for Floppy Device 0. Select a base memory minimum setting of 4MB or higher.</td></tr>
-<tr><td><a href="/docs/PHYSICAL.md">Physical</a></td><td>Use a disk editor to copy os.dat to the boot sector of a formatted floppy diskette. Here we use the HxD utility program to do this. Or, use the utility osprep.com to perform this. With the boot sector prepared, copy the os loader program, os.com, to the diskette. Insert the diskette into the target physical system's diskette drive A:. Restart the target physical system.</td></tr>
+<tr><td><a href="docs/VIRTUAL.md">Virtual</a></td><td>Configure a virtual machine instance to boot from a floppy drive disk image and select the os.dsk file as the disk image for Floppy Device 0. Select a base memry minimum setting of 4MB or higher.</td></tr>
+<tr><td><a href="docs/PHYSICAL.md">Physical</a></td><td>Use a disk editor to copy os.dat to the boot sector of a formatted floppy diskette. Here we use the HxD utility program to do this. Or, use the utility osprep.com to perform this. With the boot sector prepared, copy the os loader program, os.com, to the diskette. Insert the diskette into the target physical system's diskette drive A:. Restart the target physical system.</td></tr>
 </table>
 
 ### Network Support
 
-- OS includes native support for the AMD:registered: PCInet-PCI II Am79C970 network adapter.
+- OS includes native support for the AMD:registered: PCInet-PCI FAST AM79C971KC network adapter.
 - Virtual machine installations may select this adapter type in the network configuration of the VM.
 - Configure this VM network adapter using bridged networking to access the host system's network.
+
+<table><tr>
+<td><img src="images/30_VirtualBox_boot.PNG"/></td>
+<td><img src="images/31_VirtualBox_lspci.PNG"/></td>
+</tr><tr>
+<td><img src="images/32_VirtualBox_mem.PNG"/></td>
+<td><img src="images/23_phys_boot.jpg"/></td>
+</tr></table>
 
 ### Contributors
 
