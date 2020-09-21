@@ -1,5 +1,6 @@
-### Project os.001
+### Project 001
 Source: [os.asm](os.asm)
+This project introduces source code that assembles into a minimal boot sector program that displays a message and restarts when a key is pressed.
 
 ### Features and Topics
 - Assembly Directives
