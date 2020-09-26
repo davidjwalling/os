@@ -1440,6 +1440,8 @@ Loader                  push    cs                                              
                         push    EKRNCODESEG                                     ;use kernel code segment ...
                         pop     es                                              ;... as target segment
                         xor     di,di                                           ;ES:DI = target address
+                        mov     ss,di                                           ;protected mode ss (disable ints)
+                        mov     sp,EKRNCODEBASE                                 ;initial stack pointer (enable ints)
                         mov     si,EKRNCODESRCADR                               ;DS:SI = source address
                         mov     cx,EKRNCODELEN                                  ;CX = kernel size
                         cld                                                     ;forward strings
@@ -1448,8 +1450,6 @@ Loader                  push    cs                                              
 ;       Switch to protected mode.
 ;
                         xor     si,si                                           ;ES:SI = gdt addr
-                        mov     ss,si                                           ;protected mode ss
-                        mov     sp,EKRNCODEBASE                                 ;initial stack immediate before code
                         mov     ah,EBIOSFNINITPROTMODE                          ;initialize protected mode fn.
                         mov     bx,02028h                                       ;BH,BL = IRQ int bases
                         mov     dx,001Fh                                        ;outer delay loop count
@@ -1480,7 +1480,11 @@ Loader                  push    cs                                              
 ;       In:             DS:SI   string address
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-LoaderExit              call    PutTTYString                                    ;display error message
+LoaderExit              push    si                                              ;save error message addr
+                        mov     si,czRequiresMsg                                ;error prologue
+                        call    PutTTYString                                    ;display error prologue
+                        pop     si                                              ;error message addr
+                        call    PutTTYString                                    ;display error message
                         mov     si,czRestartMsg                                 ;press key to restart message
                         call    PutTTYString                                    ;display error message
 ;
@@ -1580,10 +1584,11 @@ cwLoaderLDT             dw      EGDTLOADERLDT                                   
 cwLoaderTSS             dw      EGDTLOADERTSS                                   ;loader task state segment selector
 cbLoaderGDT             times   5 db 0                                          ;6-byte GDTR work area
 cbLoaderGDTHiByte       db      0                                               ;hi-order byte
-czCPUErrorMsg           db      "The operating system requires an i386 or later processor.",13,10
-czMemErrorMsg           db      "The operating system kernel requires at least 32KB of available RAM.",13,10,0
-czExtErrorMsg           db      "The operating system requires at least 31MB of extended RAM.",13,10,0
-czRestartMsg            db      "Please press any key to restart the computer.",13,10,0
+czRequiresMsg           db      "The operating system requires ",0              ;error message prologue
+czCPUErrorMsg           db      "an i386 or later processor.",13,10,0           ;CPU error message
+czMemErrorMsg           db      "32KB of available RAM.",13,10,0                ;memory error message
+czExtErrorMsg           db      "31MB of extended RAM.",13,10,0                 ;extended memory error message
+czRestartMsg            db      "Press any key to restart.",13,10,0             ;restart message
                         times   1024-($-$$) db 0h                               ;zero fill to end of sector
 ;=======================================================================================================================
 ;
@@ -4759,6 +4764,12 @@ section                 conmque                                                 
 ;                               |  Console Task Code                            |
 ;                               |  Console Task Constants                       |
 ;                       008000  +===============================================+
+;                               |  OS Task Expansion                            |
+;                       0A0000  +===============================================+
+;                               |  ROM                                          |
+;                       100000  +===============================================+               <-- Heap Base
+;                               |  Extended Memory                              |
+;                               +===============================================+
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ;=======================================================================================================================
@@ -6057,11 +6068,11 @@ tElapsedDaysTbl         equ     $                                               
                                                                                 ;---------------------------------------
                         align   4
 tConJmpTbl              equ     $                                               ;command jump table
-                        dd      ConDate   - ConCode                             ;date command routine offset
-                        dd      ConFree   - ConCode                             ;free command
-                        dd      ConMalloc - ConCode                             ;malloc command
-                        dd      ConMem    - ConCode                             ;mem
-                        dd      ConTime   - ConCode                             ;time command routine offset
+                        dd      ConDate     - ConCode                           ;date command routine offset
+                        dd      ConFree     - ConCode                           ;free command
+                        dd      ConMalloc   - ConCode                           ;malloc command
+                        dd      ConMem      - ConCode                           ;mem
+                        dd      ConTime     - ConCode                           ;time command routine offset
 ECONJMPTBLL             equ     ($-tConJmpTbl)                                  ;table length
 ECONJMPTBLCNT           equ     ECONJMPTBLL/4                                   ;table entries
                                                                                 ;---------------------------------------

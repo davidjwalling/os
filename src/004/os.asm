@@ -1043,21 +1043,21 @@ wcPrepInBuf             equ     $
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 fat1                                                    ;first copy of FAT
-                        db      0F0h,0FFh,0FFh, 003h,040h,000h                  ;0-3
-                        db      005h,060h,000h, 007h,080h,000h                  ;4-7
-                        db      009h,0A0h,000h, 00Bh,0C0h,000h                  ;8-11
-                        db      00Dh,0E0h,000h, 00Fh,000h,001h                  ;12-15
-                        db      011h,020h,001h, 013h,040h,001h                  ;16-19
-                        db      015h,060h,001h, 017h,080h,001h                  ;20-23
-                        db      019h,0A0h,001h, 01Bh,0C0h,001h                  ;24-27
-                        db      01Dh,0E0h,001h, 01Fh,000h,002h                  ;28-31
-                        db      021h,020h,002h, 023h,040h,002h                  ;32-35
-                        db      025h,060h,002h, 027h,080h,002h                  ;36-39
-                        db      029h,0A0h,002h, 02Bh,0C0h,002h                  ;40-43
-                        db      02Dh,0E0h,002h, 02Fh,000h,003h                  ;44-47
-                        db      031h,020h,003h, 033h,040h,003h                  ;48-51
-                        db      035h,060h,003h, 037h,080h,003h                  ;52-55
-                        db      039h,0A0h,003h, 03Bh,0F0h,0FFh                  ;56-59
+                        db      0F0h,0FFh,0FFh, 003h,040h,000h                  ;clusters 0-3           ff0 fff 003 004
+                        db      005h,060h,000h, 007h,080h,000h                  ;custters 4-7           005 006 007 008
+                        db      009h,0A0h,000h, 00Bh,0C0h,000h                  ;clusters 8-11          009 00a 00b 00c
+                        db      00Dh,0E0h,000h, 00Fh,000h,001h                  ;clusters 12-15         00d 00e 00f 010
+                        db      011h,020h,001h, 013h,040h,001h                  ;clusters 16-19         011 012 013 014
+                        db      015h,060h,001h, 017h,080h,001h                  ;clusters 20-23         015 016 017 018
+                        db      019h,0A0h,001h, 01Bh,0C0h,001h                  ;clusters 24-27         019 01a 01b 01c
+                        db      01Dh,0E0h,001h, 01Fh,000h,002h                  ;clusters 28-31         01d 01e 01f 020
+                        db      021h,020h,002h, 023h,040h,002h                  ;clusters 32-35         021 022 023 024
+                        db      025h,060h,002h, 027h,080h,002h                  ;clusters 36-39         025 026 027 028
+                        db      029h,0A0h,002h, 02Bh,0C0h,002h                  ;clusters 40-43         029 02A 02B 02C
+                        db      02Dh,0E0h,002h, 02Fh,000h,003h                  ;clusters 44-47         02D 02E 02F 030
+                        db      031h,020h,003h, 033h,040h,003h                  ;clusters 48-51         031 032 033 034
+                        db      035h,060h,003h, 037h,080h,003h                  ;clusters 52-55         035 036 037 038
+                        db      039h,0A0h,003h, 03Bh,0F0h,0FFh                  ;clusters 56-59         039 03A 03B FFF
                         times   (9*512)-($-$$) db 0                             ;zero fill to end of section
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1065,21 +1065,21 @@ section                 fat1                                                    
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 section                 fat2                                                    ;second copy of FAT
-                        db      0F0h,0FFh,0FFh, 003h,040h,000h                  ;0-3
-                        db      005h,060h,000h, 007h,080h,000h                  ;4-7
-                        db      009h,0A0h,000h, 00Bh,0C0h,000h                  ;8-11
-                        db      00Dh,0E0h,000h, 00Fh,000h,001h                  ;12-15
-                        db      011h,020h,001h, 013h,040h,001h                  ;16-19
-                        db      015h,060h,001h, 017h,080h,001h                  ;20-23
-                        db      019h,0A0h,001h, 01Bh,0C0h,001h                  ;24-27
-                        db      01Dh,0E0h,001h, 01Fh,000h,002h                  ;28-31
-                        db      021h,020h,002h, 023h,040h,002h                  ;32-35
-                        db      025h,060h,002h, 027h,080h,002h                  ;36-39
-                        db      029h,0A0h,002h, 02Bh,0C0h,002h                  ;40-43
-                        db      02Dh,0E0h,002h, 02Fh,000h,003h                  ;44-47
-                        db      031h,020h,003h, 033h,040h,003h                  ;48-51
-                        db      035h,060h,003h, 037h,080h,003h                  ;52-55
-                        db      039h,0A0h,003h, 03Bh,0F0h,0FFh                  ;56-59
+                        db      0F0h,0FFh,0FFh, 003h,040h,000h                  ;clusters 0-3           ff0 fff 003 004
+                        db      005h,060h,000h, 007h,080h,000h                  ;custters 4-7           005 006 007 008
+                        db      009h,0A0h,000h, 00Bh,0C0h,000h                  ;clusters 8-11          009 00a 00b 00c
+                        db      00Dh,0E0h,000h, 00Fh,000h,001h                  ;clusters 12-15         00d 00e 00f 010
+                        db      011h,020h,001h, 013h,040h,001h                  ;clusters 16-19         011 012 013 014
+                        db      015h,060h,001h, 017h,080h,001h                  ;clusters 20-23         015 016 017 018
+                        db      019h,0A0h,001h, 01Bh,0C0h,001h                  ;clusters 24-27         019 01a 01b 01c
+                        db      01Dh,0E0h,001h, 01Fh,000h,002h                  ;clusters 28-31         01d 01e 01f 020
+                        db      021h,020h,002h, 023h,040h,002h                  ;clusters 32-35         021 022 023 024
+                        db      025h,060h,002h, 027h,080h,002h                  ;clusters 36-39         025 026 027 028
+                        db      029h,0A0h,002h, 02Bh,0C0h,002h                  ;clusters 40-43         029 02A 02B 02C
+                        db      02Dh,0E0h,002h, 02Fh,000h,003h                  ;clusters 44-47         02D 02E 02F 030
+                        db      031h,020h,003h, 033h,040h,003h                  ;clusters 48-51         031 032 033 034
+                        db      035h,060h,003h, 037h,080h,003h                  ;clusters 52-55         035 036 037 038
+                        db      039h,0A0h,003h, 03Bh,0F0h,0FFh                  ;clusters 56-59         039 03A 03B FFF
                         times   (9*512)-($-$$) db 0                             ;zero fill to end of section
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1188,6 +1188,8 @@ Loader                  push    cs                                              
                         push    EKRNCODESEG                                     ;use kernel code segment ...
                         pop     es                                              ;... as target segment
                         xor     di,di                                           ;ES:DI = target address
+                        mov     ss,di                                           ;protected mode ss (disable ints)
+                        mov     sp,EKRNCODEBASE                                 ;initial stack pointer (enable ints)
                         mov     si,EKRNCODESRCADR                               ;DS:SI = source address
                         mov     cx,EKRNCODELEN                                  ;CX = kernel size
                         cld                                                     ;forward strings
@@ -1198,8 +1200,6 @@ Loader                  push    cs                                              
 ;       Switch to protected mode.
 ;
                         xor     si,si                                           ;ES:SI = gdt addr
-                        mov     ss,si                                           ;protected mode ss
-                        mov     sp,EKRNCODEBASE                                 ;initial stack immediate before code
                         mov     ah,EBIOSFNINITPROTMODE                          ;initialize protected mode fn.
                         mov     bx,02028h                                       ;BH,BL = IRQ int bases
                         mov     dx,001Fh                                        ;outer delay loop count
