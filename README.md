@@ -1,11 +1,26 @@
 ### OS
 
-Copyright :copyright: 2010-2020 David J. Walling. MIT License.
+Copyright (C) 2010-2020 David J. Walling. All rights reserved.
 
 - A simple protected-mode operating system for x86-based PC-compatible systems.
 - Operates on 32-bit Intel:registered: or AMD:registered: x86 from the 80386 up through present-day processors.
 - Does not require coprocessors or other external firmware or engines beyond the chipset.
 - Clear assembly-language, hardware I/O and protocol examples.
+
+### Projects
+
+<table>
+<tr><td>001</td><td>A simple boot sector that displays a message</td></tr>
+<tr><td>002</td><td>A boot sector that loads and runs a program</td></tr>
+<tr><td>003</td><td>Osprep.com writes a boot sector to a diskette</td></tr>
+<tr><td>004</td><td>Enter protected mode</td></tr>
+<tr><td>005</td><td>Keyboard interrupt</td></tr>
+<tr><td>006</td><td>Message queue</td></tr>
+<tr><td>007</td><td>CPU interrupt handler</td></tr>
+<tr><td>008</td><td>Real-time clock and date/time</td></tr>
+<tr><td>009</td><td>Allocate, free and display memory</td></tr>
+<tr><td>010</td><td>Probe PCI and read Ethernet frames</td></tr>
+</table>
 
 ### Assembly
 

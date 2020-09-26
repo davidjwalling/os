@@ -2,9 +2,9 @@
 ;
 ;       File:           os.asm
 ;
-;       Project:        OS
+;       Project:        010
 ;
-;       Description:    A rudimentary operating system for the x86 architecture.
+;       Description:    In this sample program, the "lspci" command is added to probe PCI devices.
 ;
 ;       Revised:        4 July 2020
 ;
@@ -156,7 +156,6 @@
 ;       EBOOT...        Boot sector and loader values
 ;       ECON...         Console values (dimensions and attributes)
 ;       EGDT...         Global Descriptor Table (GDT) selector values
-;       EHWF...         Hardware flags
 ;       EKEYF...        Keyboard status flags
 ;       EKRN...         Kernel values (fixed locations and sizes)
 ;       ELDT...         Local Descriptor Table (LDT) selector values
@@ -455,10 +454,6 @@ EGDTLOADERTSS           equ     058h                                            
 EGDTCONSOLELDT          equ     060h                                            ;console local descriptor table selector
 EGDTCONSOLETSS          equ     068h                                            ;console task state segment selector
 ;-----------------------------------------------------------------------------------------------------------------------
-;       Hardware Flags                                                          EHWF...
-;-----------------------------------------------------------------------------------------------------------------------
-EHWETHERNET             equ     80h                                             ;ethernet adapter found
-;-----------------------------------------------------------------------------------------------------------------------
 ;       Keyboard Flags                                                          EKEYF...
 ;-----------------------------------------------------------------------------------------------------------------------
 EKEYFCTRLLEFT           equ     00000001b                                       ;left control
@@ -502,12 +497,6 @@ EMEMWIPEBYTE            equ     000h                                            
 EMSGKEYDOWN             equ     041000000h                                      ;key-down
 EMSGKEYUP               equ     041010000h                                      ;key-up
 EMSGKEYCHAR             equ     041020000h                                      ;character
-;-----------------------------------------------------------------------------------------------------------------------
-;       Networking Identifiers                                                  ENET...
-;-----------------------------------------------------------------------------------------------------------------------
-ENETRXBUFSIZ            equ     1024                                            ;receive buffer size
-ENETRXDESCCT            equ     64                                              ;receive descriptor count
-ENETTXDESCCT            equ     64                                              ;transmit descriptor count
 ;=======================================================================================================================
 ;
 ;       Structures
@@ -5198,12 +5187,6 @@ section                 conmque                                                 
 ;                               |  Console Task Code                            |
 ;                               |  Console Task Constants                       |
 ;                       008000  +===============================================+
-;                               |  OS Task Expansion                            |
-;                       0A0000  +===============================================+
-;                               |  ROM                                          |
-;                       100000  +===============================================+               <-- Heap Base
-;                               |  Extended Memory                              |
-;                               +===============================================+
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ;=======================================================================================================================
@@ -7206,14 +7189,10 @@ czSaturday              db      "Saturday",0
                                                                                 ;---------------------------------------
 czEtherController       db      "Ethernet controller: ",0
 czEtherIoSpace          db      "  I/O address:       ",0
-czEtherMemoryMapSpace   db      "  memory space:      ",0
-czEtherUsingMMIO        db      "  memory-mapped I/O: ",0
 czEtherUsingPortIO      db      "  port I/O:          ",0
 czEtherInterruptLine    db      "  interrupt line:    ",0
 czEtherMACAddress       db      "  MAC address:       ",0
 czEtherControllerStatus db      "  controller Status: ",0
-czEtherControllerInitLo db      "  init address low:  ",0
-czEtherControllerInitHi db      "  init address high: ",0
                                                                                 ;---------------------------------------
                                                                                 ;       PCI information
                                                                                 ;---------------------------------------
