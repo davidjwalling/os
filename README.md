@@ -1,15 +1,15 @@
 ### OS
 
-Copyright (c) 2010-2020 David J. Walling. All rights reserved.
+Copyright 2010-2021 David J. Walling. All rights reserved.
 
 - A simple protected-mode operating system for x86-based PC-compatible systems.
-- Operates on 32-bit Intel:registered: or AMD:registered: x86 from the 80386 up through present-day processors.
+- Operates on 32-bit Intel or AMD x86 from the 80386 up through present-day processors.
 - Does not require coprocessors or other external firmware or engines beyond the chipset.
 - Clear assembly-language, hardware I/O and protocol examples.
 
 ### Assembly
 
-- Samples assembled using NASM (Netwide Asssembler) version 2.14.02.
+- Samples assembled using NASM (Netwide Asssembler) version 2.15.05.
 - make.bat assembles and links on Windows using NASM and ALINK.
 
 ### Directives
@@ -32,12 +32,12 @@ Copyright (c) 2010-2020 David J. Walling. All rights reserved.
 
 ### Network Support
 
-- OS includes native support for the AMD:registered: PCInet-PCI FAST AM79C971KC network adapter.
+- OS includes native support for the AMD PCInet-PCI FAST AM79C971KC network adapter.
 - Virtual machine installations may select this adapter type in the network configuration of the VM.
 - Configure this VM network adapter using bridged networking to access the host system's network.
 
 ### Contributors
 
 <table>
-<tr><td>David J. Walling</td><td>Email: david@davidjwalling.com</td><td>Twitter: @davidjwalling</td></tr>
+<tr><td>David J. Walling</td><td>david@davidjwalling.com</td></tr>
 </table>
