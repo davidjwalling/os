@@ -379,6 +379,7 @@ EASCIIUPPERZ            equ     05Ah                                            
 EASCIICARET             equ     05Eh                                            ;'^'
 EASCIILOWERA            equ     061h                                            ;'a'
 EASCIILOWERM            equ     06Dh                                            ;'m'
+EASCIILOWERN            equ     06Eh                                            ;'n'
 EASCIILOWERP            equ     070h                                            ;'p'
 EASCIILOWERV            equ     076h                                            ;'v'
 EASCIILOWERZ            equ     07Ah                                            ;'z'
@@ -500,6 +501,7 @@ EMEMWIPEBYTE            equ     000h                                            
 EMSGKEYDOWN             equ     041000000h                                      ;key-down
 EMSGKEYUP               equ     041010000h                                      ;key-up
 EMSGKEYCHAR             equ     041020000h                                      ;character
+EMSGNETFRAME            equ     050000000h                                      ;ethernet frame
 ;=======================================================================================================================
 ;
 ;       Structures
@@ -545,6 +547,7 @@ struc                   ETHER
 .subclass               resb    1                                               ;subclass
 .class                  resb    1                                               ;class
 .iospace                resd    1                                               ;i/o space address (bar 0)
+.description            resd    1                                               ;description
 .mmio                   resd    1                                               ;memory mapped i/o address (bar 0)
 .rxblock                resd    1                                               ;allocated rx memory block
 .rxbase                 resd    1                                               ;16-byte aligned
@@ -555,6 +558,7 @@ struc                   ETHER
 .handler                resd    1                                               ;handler address
 .irq                    resb    1                                               ;h/w interrupt request line (IRQ)
 .mac                    resb    6                                               ;mac address
+.filler                 resb    1
 EETHERLEN               equ     ($-.selector)
 endstruc
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -812,6 +816,7 @@ wbClockDays             resb    1                                               
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ECONDATA                equ     ($)
+wsConsoleEther          resb    EETHERLEN                                       ;ethernet context
 wdConsoleMemBase        resd    1                                               ;console memory address
 wdConsoleHeapSize       resd    1                                               ;heap size
 wzConsoleInBuffer       resb    81                                              ;command input buffer
@@ -823,7 +828,6 @@ wsKeybData              resb    EKEYBDATAL                                      
 wsConsoleMemRoot        resb    EMEMROOTLEN                                     ;memory root structure
 wsConsoleDateTime       resb    EDATETIMELEN                                    ;date-time buffer
 wsConsolePCI            resb    EPCILEN                                         ;PCI context
-wsConsoleEther          resb    EETHERLEN                                       ;ethernet context
 wsEtherInitBlock        resb    EAM79INITBLKLEN                                 ;AM79c970 init block
 ECONDATALEN             equ     ($-ECONDATA)                                    ;size of console data area
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -3415,11 +3419,22 @@ AM79IntHandler          push    ecx                                             
 ;       Handle frame.
 ;
                         inc     dword [wsConsoleEther+ETHER.rxcount]            ;increment frame count
+;                        mov     word [edx+AM79RXDESC.mcnt],0                    ;zero message byte count
+
+                        push    ecx
+                        push    edx
+
+                        mov     edx,EMSGNETFRAME
+                        xor     ecx,ecx
+                        call    PutMessage
+
+                        pop     edx
+                        pop     ecx
+
+                        or      byte [edx+AM79RXDESC.flags],080h                ;assign descriptor to controller
 ;
 ;       Continue to next frame.
 ;
-                        mov     word [edx+AM79RXDESC.mcnt],0                    ;zero message byte count
-                        mov     byte [edx+AM79RXDESC.flags],080h                ;assign descriptor to controller
                         inc     ecx                                             ;increment tail index
                         and     ecx,03Fh                                        ;wrap to zero
                         mov     [wsConsoleEther+ETHER.rxtail],ecx               ;update tail index
@@ -5273,6 +5288,8 @@ ConCode                 mov     edi,ECONDATA                                    
 ;       Display title, version and copyright.
 ;
                         call    ConVersion                                      ;display title, version, copyright
+                        mov     edx,czNewLine                                   ;new line
+                        putConsoleString                                        ;write new line
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ;       Here we initialize heap memory management. We read the number of KB of extended RAM above 1M from a register
@@ -5373,7 +5390,7 @@ ConCode                 mov     edi,ECONDATA                                    
 ;       whether memory-mapped I/O as well as port I/O is supported.
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Store the device's PCI selector, device, vendor, class, sub-class, prog IF and revision in the ETHER struct.
+;       Store device PCI selector, device, vendor, class, sub-class, prog IF, rev and description in ETHER struct.
 ;
 .0500                   mov     eax,[ebx+PCI.selector]                          ;selector
                         mov     [wsConsoleEther+ETHER.selector],eax             ;store in ETHER struct
@@ -5381,12 +5398,8 @@ ConCode                 mov     edi,ECONDATA                                    
                         mov     [wsConsoleEther+ETHER.vendordevice],eax         ;store in ETHER struct
                         mov     eax,[ebx+PCI.classsubprogrev]                   ;class, sub, prog, rev
                         mov     [wsConsoleEther+ETHER.classsubprogrev],eax      ;store in ETHER struct
-;
-;       Report supported Ethernet adapter found.
-;
-                        mov     ecx,[ebx+PCI.description]                       ;vendor device string
-                        mov     edx,czEtherController                           ;ethernet controller message
-                        call    ConPutInitString                                ;display message
+                        mov     eax,[ebx+PCI.description]                       ;vendor device string
+                        mov     [wsConsoleEther+ETHER.description],eax          ;store in ETHER struct
 ;
 ;       Read and save the device's status and command register. Check for port I/O support.
 ;
@@ -5406,9 +5419,6 @@ ConCode                 mov     edi,ECONDATA                                    
 ;
                         and     al,0FCh                                         ;clear reserved bits
                         mov     [wsConsoleEther+ETHER.iospace],eax              ;save i/o space
-                        mov     ecx,eax                                         ;doubleword value
-                        mov     edx,czEtherIoSpace                              ;I/O space message
-                        call    ConPutInitDword                                 ;display message
                         jmp     .0800                                           ;continue to IRQ line
 ;
 ;       Report no port I/O.
@@ -5431,20 +5441,10 @@ ConCode                 mov     edi,ECONDATA                                    
                         mov     al,03Ch                                         ;interrupt request line reg
                         call    ConReadPCIRegister                              ;AL=interrupt
                         mov     [wsConsoleEther+ETHER.irq],al                   ;save interrupt request line
-                        movzx   ecx,al                                          ;interrupt request line
-                        mov     edx,czEtherInterruptLine                        ;interrupt request line message
-                        mov     bh,1                                            ;decimal conversion flags
-                        call    ConPutInitDecimal                               ;display init message
 ;
-;       Report MAC address
+;       Read MAC address
 ;
-                        call    ConReadMAC
-                        lea     ecx,[wsConsoleEther+ETHER.mac]                  ;MAC address addr
-                        mov     edx,wzConsoleToken                              ;console token buffer
-                        putMACString                                            ;convert to MAC string
-                        mov     edx,czEtherMACAddress                           ;Ethernet MAC label string
-                        mov     ecx,wzConsoleToken                              ;MAC address value string
-                        call    ConPutInitString                                ;display message with value
+                        call    ConReadMAC                                      ;read MAC address
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -5562,19 +5562,9 @@ ConCode                 mov     edi,ECONDATA                                    
                         xor     eax,eax                                         ;CSR0
                         call    ConWriteEther                                   ;write CSR0
 ;
-;-----------------------------------------------------------------------------------------------------------------------
+;       Report the network status.
 ;
-;       Read and report the controller status and initialization block address register contents.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Report the controller status.
-;
-                        xor     eax,eax                                         ;CSR0
-                        call    ConReadEther                                    ;read controller status reg
-                        mov     ecx,eax                                         ;controller status
-                        mov     edx,czEtherControllerStatus                     ;status message
-                        call    ConPutInitDword                                 ;display message with value
+                        call    ConNetInfo                                      ;display network info
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ;       Now we enter the console operator task's message-handling loop. We initialize the loop by drawing the console
@@ -5602,11 +5592,20 @@ ConCode                 mov     edi,ECONDATA                                    
                         mov     edx,eax                                         ;message and params
                         and     edx,0FFFF0000h                                  ;mask for message
                         cmp     edx,EMSGKEYDOWN                                 ;keydown message?
+                        je      .1690                                           ;yes, branch
+;
+;       Test for ethernet frame message.
+;
+                        cmp     edx,EMSGNETFRAME                                ;net frame?
                         jne     .1600                                           ;no, next message
+;                        xor     ecx,ecx
+;                        mov     edx,czNetFrame
+;                        call    ConPutInitString
+                        jmp     .1600                                           ;next message
 ;
 ;       Test for enter or keypad-enter.
 ;
-                        cmp     ah,EKEYBENTERDOWN                               ;enter down?
+.1690                   cmp     ah,EKEYBENTERDOWN                               ;enter down?
                         je      .1700                                           ;yes, branch
                         cmp     ah,EKEYBPADENTERDOWN                            ;keypad-enter down?
                         je      .1700                                           ;yes, branch
@@ -7019,6 +7018,47 @@ ConWriteEther           mov     edx,[wsConsoleEther+ETHER.iospace]              
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;       Routine:        ConNetInfo
+;
+;       Description:    This routine displays network info
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConNetInfo              push    ebx                                             ;save non-volatile regs
+                        mov     ecx,[wsConsoleEther+ETHER.selector]             ;ethernet PCI selector
+                        jecxz   .90                                             ;branch if none
+                        mov     ecx,[wsConsoleEther+ETHER.description]          ;vendor device string
+                        jecxz   .10                                             ;branch if none
+                        mov     edx,czEtherController                           ;ether controller message
+                        call    ConPutInitString                                ;display message
+.10                     mov     ecx,[wsConsoleEther+ETHER.iospace]              ;i/o space
+                        jecxz   .20                                             ;branch if none
+                        mov     edx,czEtherIoSpace                              ;i/o space message
+                        call    ConPutInitDword                                 ;display message
+.20                     xor     ecx,ecx                                         ;zero register
+                        mov     cl,[wsConsoleEther+ETHER.irq]                   ;interrupt request line
+                        jecxz   .30                                             ;branch if none
+                        mov     edx,czEtherInterruptLine                        ;interrupt request line messaage
+                        mov     bh,1                                            ;decimal conversion flags
+                        call    ConPutInitDecimal                               ;display interrupt line
+.30                     lea     ecx,[wsConsoleEther+ETHER.mac]                  ;MAC address addr
+                        mov     edx,wzConsoleToken                              ;MAC address label string
+                        putMACString                                            ;convert to MAC string
+                        mov     ecx,wzConsoleToken                              ;MAC address value string
+                        mov     edx,czEtherMACAddress                           ;ethernet MAC label
+                        call    ConPutInitString                                ;display message
+                        xor     eax,eax                                         ;CSR0
+                        call    ConReadEther                                    ;read controller status reg
+                        mov     ecx,eax                                         ;controll status
+                        mov     edx,czEtherControllerStatus                     ;status message
+                        call    ConPutInitDword                                 ;display message with value
+                        mov     ecx,[wsConsoleEther+ETHER.rxcount]              ;received frame count
+                        mov     edx,czEtherReceivedFrames                       ;received frames label
+                        mov     bh,3                                            ;decimal conversion flags
+                        call    ConPutInitDecimal                               ;display message
+.90                     pop     ebx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;       Routine:        ConDisplay
 ;
 ;       Description:    This routine handles the DISPLAY command.
@@ -7059,10 +7099,24 @@ ConDisplay              push    ebx                                             
                         call    ConMem                                          ;display memory
                         jmp     .90                                             ;continue
 ;
+;       check if token is n, net
+;
+.20                     cmp     al,EASCIILOWERN                                 ;net?
+                        jne     .30                                             ;no, branch
+                        lodsb                                                   ;next token character
+                        test    al,al                                           ;end of token?
+                        jnz     .90                                             ;no, branch
+;
+;       Display network info
+;
+                        mov     byte [wzConsoleInBuffer],0                      ;clear input buffer
+                        call    ConNetInfo                                      ;display network info
+                        jmp     .90                                             ;continue
+;
 ;       Check if token is p, pci
 ;
-.20                     cmp     al,EASCIILOWERP                                 ;pci?
-                        jne     .30                                             ;no, branch
+.30                     cmp     al,EASCIILOWERP                                 ;pci?
+                        jne     .40                                             ;no, branch
                         lodsb                                                   ;next token character
                         test    al,al                                           ;end of token?
                         jnz     .90                                             ;no, branch
@@ -7074,7 +7128,7 @@ ConDisplay              push    ebx                                             
 ;
 ;       Check if token is v, ver, version
 ;
-.30                     cmp     al,EASCIILOWERV                                 ;version?
+.40                     cmp     al,EASCIILOWERV                                 ;version?
                         jne     .90                                             ;no, branch
                         lodsb                                                   ;next token character
                         test    al,al                                           ;end of token?
@@ -7141,6 +7195,7 @@ tConJmpTbl              equ     $                                               
                         dd      ConMem      - ConCode                           ;m command (mem alias)
                         dd      ConMalloc   - ConCode                           ;malloc command
                         dd      ConMem      - ConCode                           ;mem command
+                        dd      ConNetInfo  - ConCode                           ;net command
                         dd      ConPCIProbe - ConCode                           ;p command (lspci alias)
                         dd      ConTime     - ConCode                           ;time command
                         dd      ConVersion  - ConCode                           ;v command
@@ -7160,6 +7215,7 @@ tConCmdTbl              equ     $                                               
                         db      2,"M",0                                         ;m command (mem alias)
                         db      7,"MALLOC",0                                    ;malloc command
                         db      4,"MEM",0                                       ;mem command
+                        db      4,"NET",0                                       ;net command
                         db      2,"P",0                                         ;p command (lspci alias)
                         db      5,"TIME",0                                      ;time command
                         db      2,"V",0                                         ;v command (ver alias)
@@ -7171,6 +7227,7 @@ tConCmdTbl              equ     $                                               
 ;       Strings
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
+czNetFrame              db      13,10,"Ethernet Frame",0
 czNewLine               db      13,10,0                                         ;new-line
 czNo                    db      "no",0                                          ;no
 czSpace                 db      " ",0                                           ;space delimiter
@@ -7208,10 +7265,11 @@ czMallocResult          db      13,10,"Memory allocated at ",0
                                                                                 ;---------------------------------------
 czEtherController       db      13,10,"Ethernet controller: ",0
 czEtherIoSpace          db      13,10,"  I/O address:       ",0
-czEtherUsingPortIO      db      13,10,"  port I/O:          ",0
-czEtherInterruptLine    db      13,10,"  interrupt line:    ",0
+czEtherUsingPortIO      db      13,10,"  Port I/O:          ",0
+czEtherInterruptLine    db      13,10,"  Interrupt line:    ",0
 czEtherMACAddress       db      13,10,"  MAC address:       ",0
 czEtherControllerStatus db      13,10,"  controller Status: ",0
+czEtherReceivedFrames   db      13,10,"  received frames:   ",0
                                                                                 ;---------------------------------------
                                                                                 ;       PCI information
                                                                                 ;---------------------------------------
