@@ -227,7 +227,7 @@ Boot                    jmp     word Boot.10                                    
 ;       3.5" 1.44MB floppy disk since this format is widely supported by virtual machine hypervisors.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-                        db      "CustomOS"                                      ;eight-byte label
+                        db      "OS      "                                      ;eight-byte label
 cwSectorBytes           dw      EBOOTSECTORBYTES                                ;bytes per sector
 cbClusterSectors        db      1                                               ;sectors per cluster
 cwReservedSectors       dw      1                                               ;reserved sectors

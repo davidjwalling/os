@@ -11,7 +11,7 @@
 ;                       diskette to boot a physical system. The disk image, os.dsk, may be used to configure a virtual
 ;                       machine.
 ;
-;       Revised:        1 Jan 2020
+;       Revised:        1 Jan 2021
 ;
 ;       Assembly:       nasm os.asm -f bin -o os.dat -l os.dat.lst -DBUILDBOOT
 ;                       nasm os.asm -f bin -o os.dsk -l os.dsk.lst -DBUILDDISK
@@ -223,7 +223,7 @@ Boot                    jmp     word Boot.10                                    
 ;       3.5" 1.44MB floppy disk since this format is widely supported by virtual machine hypervisors.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-                        db      "CustomOS"                                      ;eight-byte label
+                        db      "OS      "                                      ;eight-byte label
 cwSectorBytes           dw      EBOOTSECTORBYTES                                ;bytes per sector
 cbClusterSectors        db      1                                               ;sectors per cluster
 cwReservedSectors       dw      1                                               ;reserved sectors
