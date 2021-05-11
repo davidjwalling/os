@@ -14,3 +14,6 @@ Each project below builds on the preceding one, introducing new concepts.
 [005](005/README.md) Add a keyboard interrupt handler.  
 [006](006/README.md) Add a message queue and "version" (or "ver") command.  
 [007](007/README.md) Add CPU interrupt handlers and "int6" test command.  
+[008](008/README.md) Add the "date" and "time" commands and remove "int6".  
+[009](009/README.md) Add the "mem" command to display memory contents.  
+[010](010/README.md) Add "malloc" and "free" commands.  
