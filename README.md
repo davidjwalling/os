@@ -25,7 +25,7 @@
 ## Output
 
 - `os.dat` A 512-byte boot sector image that may be written to a physical floppy disk for physical implementations.
-- `os.dsk` A 1.44MB floppy-disk image for use as a boot disk for either physical or virtual implementations. This disk image contains a boot sector that searches for and loads the `os.com` kernel image file into memory. Code in `os.com` places the CPU into protected mode and starts the initial 32-bit console task.
+- `os.dsk` A 1.44MB floppy-disk image for use as a boot disk for either physical or virtual implementations.
 - `os.com` The operating system kernel image loaded and run by the boot sector. `os.com` can also be run from a DOS command line.
 - `osprep.com` A DOS-compatible program that copies the os.dat boot sector image file to the boot sector of a 3.5" 1.44MB floppy disk inserted in logical drive A:.
 
