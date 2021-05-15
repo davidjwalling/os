@@ -16,7 +16,8 @@ Each project below builds on the preceding one, introducing new concepts.
 [007](007/README.md) Add CPU interrupt handlers and "int6" test command.  
 [008](008/README.md) Add the "date" and "time" commands and remove "int6".  
 [009](009/README.md) Add the "mem" command to display memory contents.  
-[010](010/README.md) Add "malloc" and "free" commands.
-[011](011/README.md) Add "lspci" command to display PCI devices.
-[012](012/README.md) Add network adapter initialization.
+[010](010/README.md) Add "malloc" and "free" commands.  
+[011](011/README.md) Add the "lspci" command to display PCI devices.  
+[012](012/README.md) Add network adapter initialization.  
+[013](013/README.md) Add "net" and "display" commands.  
    

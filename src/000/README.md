@@ -49,5 +49,5 @@ Preparing the boot diskette on the development laptop uses the external diskette
 |![Operation](../../images/13_Physical_Operation.jpg)|Insert the boot diskette into drive A:.</br>Start the test system.|
 |||
 
-[Back](../README.md) Tutorials  
+[Back](../README.md) to Tutorials  
 [Next](../001/README.md) Create a simple boot sector.    

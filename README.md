@@ -35,5 +35,5 @@
 - Virtual machine installations may select this adapter type in the network configuration of the VM.
 - Configure this VM network adapter using bridged networking to access the host system's network.
 
-Copyright 2010-2021 David J. Walling. All rights reserved.  
+Copyright &copy; 2010 David J. Walling. All rights reserved.  
 david@davidjwalling.com  
