@@ -2,10 +2,11 @@
 ;
 ;       File:           os.asm
 ;
-;       Project:        007
+;       Project:        006
 ;
-;       Description:    This sample program adds an "int6" command to generate an invalid opcode interrupt. This handler
-;                       displays the contents of registers at the time of the interrupt.
+;       Description:    This sample program extends the kernel to support a simple message queue. The keyboard interrupt
+;                       handler adds events to the queue. The console task reads and processes these events. The "ver"
+;                       and "version" commands are added to display the program title, version and copyright.
 ;
 ;       Revised:        1 Jan 2021
 ;
@@ -16,7 +17,7 @@
 ;
 ;       Assembler:      Netwide Assembler (NASM) 2.15.05, 28 Aug 2020
 ;
-;       Notice:         Copyright 2010-2021 David J. Walling. All rights reserved.
+;       Notice:         Copyright (c) 2010 David J. Walling. All rights reserved.
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -365,12 +366,6 @@ EASCIILOWERA            equ     061h                                            
 EASCIILOWERZ            equ     07Ah                                            ;'z'
 EASCIITILDE             equ     07Eh                                            ;'~'
 EASCIIDELETE            equ     07Fh                                            ;del
-EASCIIBORDSGLVERT       equ     0B3h                                            ;vertical single border
-EASCIIBORDSGLUPRRGT     equ     0BFh                                            ;upper-right single border
-EASCIIBORDSGLLWRLFT     equ     0C0h                                            ;lower-left single border
-EASCIIBORDSGLHORZ       equ     0C4h                                            ;horizontal single border
-EASCIIBORDSGLLWRRGT     equ     0D9h                                            ;lower-right single border
-EASCIIBORDSGLUPRLFT     equ     0DAh                                            ;upper-left single border
 EASCIICASEMASK          equ     11011111b                                       ;case mask
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1126,7 +1121,7 @@ Prep                    mov     si,czPrepMsg10                                  
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 czPrepMsg10             db      13,10,"OS Boot-Diskette Preparation Program"
-                        db      13,10,"Copyright 2010-2021 David J. Walling. All rights reserved."
+                        db      13,10,"(c) 2010 David J. Walling. All rights reserved."
                         db      13,10
                         db      13,10,"This program overwrites the boot sector of a diskette with startup code that"
                         db      13,10,"will load the operating system into memory when the computer is restarted."
@@ -1673,7 +1668,7 @@ section                 kernel  vstart=0h                                       
 ;       CPU Interrupt Handlers
 ;
 ;       The first 32 entries in the Interrupt Descriptor Table are reserved for use by CPU interrupts. The handling
-;       of these interrupts is expanded here to display the contents of registers at the time of the interrupt.
+;       of these interrupts will vary. For now, we will define the entry points but simply return from the interrupt.
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -1682,8 +1677,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  dividebyzero                                    ;divide by zero
-                        push    0                                               ;store interrupt nbr
-                        push    czIntDivideByZero                               ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1691,8 +1684,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  singlestep                                      ;single step
-                        push    1                                               ;store interrupt nbr
-                        push    czIntSingleStep                                 ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1700,8 +1691,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  nmi                                             ;non-maskable
-                        push    2                                               ;store interrupt nbr
-                        push    czIntNonMaskable                                ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1709,8 +1698,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  break                                           ;break
-                        push    3                                               ;store interrupt nbr
-                        push    czIntBreak                                      ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1718,8 +1705,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  into                                            ;into
-                        push    4                                               ;store interrupt nbr
-                        push    czIntInto                                       ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1727,8 +1712,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  bounds                                          ;bounds
-                        push    5                                               ;store interrupt nbr
-                        push    czIntBounds                                     ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1736,8 +1719,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  badopcode                                       ;bad opcode interrupt
-                        push    6                                               ;store interrupt nbr
-                        push    czIntBadOpCode                                  ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1745,8 +1726,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  nocoproc                                        ;no coprocessor interrupt
-                        push    7                                               ;store interrupt nbr
-                        push    czIntNoCoprocessor                              ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1754,8 +1733,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  doublefault                                     ;doublefault interrupt
-                        push    8                                               ;store interrupt nbr
-                        push    czIntDoubleFault                                ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1763,8 +1740,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  operand                                         ;operand interrupt
-                        push    9                                               ;store interrupt nbr
-                        push    czIntOperand                                    ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1772,8 +1747,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  badtss                                          ;bad TSS interrupt
-                        push    10                                              ;store interrupt nbr
-                        push    czIntBadTSS                                     ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1781,8 +1754,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  notpresent                                      ;not present interrupt
-                        push    11                                              ;store interrupt nbr
-                        push    czIntNotPresent                                 ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1790,8 +1761,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  stacklimit                                      ;stack limit interrupt
-                        push    12                                              ;store interrupt nbr
-                        push    czIntStackLimit                                 ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1799,8 +1768,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  protection                                      ;protection fault interrupt
-                        push    13                                              ;store interrupt nbr
-                        push    czIntProtection                                 ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1808,8 +1775,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int14                                           ;(reserved)
-                        push    14                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1817,8 +1782,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int15                                           ;(reserved)
-                        push    15                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1826,8 +1789,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  coproccalc                                      ;coprocessor calculation
-                        push    16                                              ;store interrupt nbr
-                        push    czIntCoprocessorCalc                            ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1835,8 +1796,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int17                                           ;(reserved)
-                        push    17                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1844,8 +1803,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int18                                           ;(reserved)
-                        push    18                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1853,8 +1810,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int19                                           ;(reserved)
-                        push    19                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1862,8 +1817,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int20                                           ;(reserved)
-                        push    20                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1871,8 +1824,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int21                                           ;(reserved)
-                        push    21                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1880,8 +1831,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int22                                           ;(reserved)
-                        push    22                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1889,8 +1838,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int23                                           ;(reserved)
-                        push    23                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1898,8 +1845,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int24                                           ;(reserved)
-                        push    24                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1907,8 +1852,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int25                                           ;(reserved)
-                        push    25                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1916,8 +1859,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int26                                           ;(reserved)
-                        push    26                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1925,8 +1866,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int27                                           ;(reserved)
-                        push    27                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1934,8 +1873,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int28                                           ;(reserved)
-                        push    28                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1943,8 +1880,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int29                                           ;(reserved)
-                        push    29                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1952,8 +1887,6 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int30                                           ;(reserved)
-                        push    30                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1961,391 +1894,16 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int31                                           ;(reserved)
-                        push    31                                              ;store interrupt nbr
-                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        ReportInterrupt
 ;
-;       Description:    This routine displays register contents when a CPU interrupt occurs.
-;
-;       In:             [ESP+16]        EFLAGS                                  stored by interrupt call
-;                       [ESP+12]        CS                                      stored by interrupt call
-;                       [ESP+8]         EIP                                     stored by interrupt call
-;                       [ESP+4]         interrupt number (0-31)                 stored by push instruction
-;                       [ESP+0]         error message address                   stored by push instructions
-;
-;       Out:            N/A             This routine does not exit.
+;       Description:    This routine will be used to respond to processor interrupts that are not otherwise handled.
+;                       At this stage, we simply restore the stack and return from the interrupt.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-ReportInterrupt         push    ds                                              ;save DS at time of interrupt
-                        push    es                                              ;save ES at time of interrupt
-                        pushad                                                  ;save EAX,ECX,EDX,EBX,EBP,ESP,ESI,EDI
-                        mov     ebp,esp                                         ;EBP --> [EDI]
-;
-;       Addressability to registers at the time of the interrupt is now established as:
-;
-;                       [EBP+56]        EFLAGS
-;                       [EBP+52]        CS
-;                       [EBP+48]        EIP
-;                       [EBP+44]        interrupt number (0-31)
-;                       [EBP+40]        error message address
-;                       [EBP+36]        DS
-;                       [EBP+32]        ES
-;                       [EBP+28]        EAX
-;                       [EBP+24]        ECX
-;                       [EBP+20]        EDX
-;                       [EBP+16]        EBX
-;                       [EBP+12]        ESP
-;                       [EBP+8]         EBP
-;                       [EBP+4]         ESI
-;                       [EBP+0]         EDI
-;
-                        push    cs                                              ;load code selector ...
-                        pop     ds                                              ;... into DS
-                        push    EGDTCGA                                         ;load CGA memory selector ...
-                        pop     es                                              ;... into ES
-;
-;       Display the interrupt report boundary box.
-;
-                        mov     cl,13                                           ;column
-                        mov     ch,6                                            ;row
-                        mov     dl,50                                           ;width
-                        mov     dh,8                                            ;height
-                        mov     bh,07h                                          ;attribute
-                        call    DrawTextDialogBox                               ;draw text dialog box
-;
-;       Display the report header.
-;
-                        mov     cl,15                                           ;column
-                        mov     ch,7                                            ;row
-                        mov     esi,czIntHeader                                 ;interrupt message header
-                        call    SetConsoleString                                ;draw text string
-;
-;       Display the interrupt description label.
-;
-                        mov     cl,15                                           ;column
-                        mov     ch,8                                            ;row
-                        mov     esi,czIntLabel                                  ;interrupt message description lead
-                        call    SetConsoleString                                ;draw text string
-;
-;       Display the interrupt number.
-;
-                        mov     eax,[ebp+44]                                    ;interrupt number
-                        mov     cl,26                                           ;column
-                        mov     ch,8                                            ;row
-                        call    PutConsoleHexByte                               ;draw ASCII hex byte
-;
-;       Display the interrupt name.
-;
-                        mov     cl,29                                           ;column
-                        mov     ch,8                                            ;row
-                        mov     esi,[ebp+40]                                    ;interrupt-specific message
-                        call    SetConsoleString                                ;display interrupt description
-;
-;       Display the register values header.
-;
-                        mov     cl,15                                           ;column
-                        mov     ch,10                                           ;row
-                        mov     esi,czIntRegsHeader                             ;interrupt registers header
-                        call    SetConsoleString                                ;draw text string
-;
-;       Display the EAX register label and value.
-;
-                        mov     cl,15                                           ;column
-                        mov     ch,11                                           ;row
-                        mov     esi,czIntEAX                                    ;register EAX label
-                        call    SetConsoleString                                ;draw label
-                        mov     eax,[ebp+28]                                    ;EAX value at interrupt
-                        mov     cl,19                                           ;column
-                        mov     ch,11                                           ;row
-                        call    PutConsoleHexDword                              ;draw ASCII hex doubleword
-;
-;       Display the ECX register label and value.
-;
-                        mov     cl,15                                           ;column
-                        mov     ch,12                                           ;row
-                        mov     esi,czIntECX                                    ;label
-                        call    SetConsoleString                                ;draw label
-                        mov     eax,[ebp+24]                                    ;ECX value at interrupt
-                        mov     cl,19                                           ;column
-                        mov     ch,12                                           ;row
-                        call    PutConsoleHexDword                              ;draw ASCII hex doubleword
-;
-;       Display the EDX register label and value.
-;
-                        mov     cl,15                                           ;column
-                        mov     ch,13                                           ;row
-                        mov     esi,czIntEDX                                    ;label
-                        call    SetConsoleString                                ;draw label
-                        mov     eax,[ebp+20]                                    ;EDX value at interrupt
-                        mov     cl,19                                           ;column
-                        mov     ch,13                                           ;row
-                        call    PutConsoleHexDword                              ;draw ASCII hex doubleword
-;
-;       Display the EBX register label and value.
-;
-                        mov     cl,15                                           ;column
-                        mov     ch,14                                           ;row
-                        mov     esi,czIntEBX                                    ;label
-                        call    SetConsoleString                                ;draw label
-                        mov     eax,[ebp+16]                                    ;EBX value at interrupt
-                        mov     cl,19                                           ;column
-                        mov     ch,14                                           ;row
-                        call    PutConsoleHexDword                              ;draw ASCII hex doubleword
-;
-;       Display the ESI register label and value.
-;
-                        mov     cl,29                                           ;column
-                        mov     ch,11                                           ;row
-                        mov     esi,czIntESI                                    ;label
-                        call    SetConsoleString                                ;draw label
-                        mov     eax,[ebp+4]                                     ;ESI
-                        mov     cl,33                                           ;column
-                        mov     ch,11                                           ;row
-                        call    PutConsoleHexDword                              ;draw ASCII hex doubleword
-;
-;       Display the EDI register label and value.
-;
-                        mov     cl,29                                           ;column
-                        mov     ch,12                                           ;row
-                        mov     esi,czIntEDI                                    ;label
-                        call    SetConsoleString                                ;draw label
-                        mov     eax,[ebp+0]                                     ;EDI
-                        mov     cl,33                                           ;column
-                        mov     ch,12                                           ;row
-                        call    PutConsoleHexDword                              ;draw ASCII hex doubleword
-;
-;       Display the EBP register label and value.
-;
-                        mov     cl,29                                           ;column
-                        mov     ch,13                                           ;row
-                        mov     esi,czIntEBP                                    ;label
-                        call    SetConsoleString                                ;draw label
-                        mov     eax,[ebp+8]                                     ;EBP
-                        mov     cl,33                                           ;column
-                        mov     ch,13                                           ;row
-                        call    PutConsoleHexDword                              ;draw ASCII hex doubleword
-;
-;       Display the DS register label and value.
-;
-                        mov     cl,42                                           ;column
-                        mov     ch,11                                           ;row
-                        mov     esi,czIntDS                                     ;label
-                        call    SetConsoleString                                ;draw label
-                        xor     eax,eax                                         ;zero register
-                        mov     ax,[ebp+36]                                     ;DS
-                        mov     cl,46                                           ;column
-                        mov     ch,11                                           ;row
-                        call    PutConsoleHexWord                               ;draw ASCII hex word
-;
-;       Display the ES register label and value.
-;
-                        mov     cl,42                                           ;column
-                        mov     ch,12                                           ;row
-                        mov     esi,czIntES                                     ;label
-                        call    SetConsoleString                                ;draw label
-                        xor     eax,eax                                         ;zero register
-                        mov     ax,[ebp+32]                                     ;ES
-                        mov     cl,46                                           ;column
-                        mov     ch,12                                           ;row
-                        call    PutConsoleHexWord                               ;draw ASCII hex word
-;
-;       Display the SS register label and value.
-;
-                        mov     cl,42                                           ;column
-                        mov     ch,13                                           ;row
-                        mov     esi,czIntSS                                     ;label
-                        call    SetConsoleString                                ;draw label
-                        xor     eax,eax                                         ;zero register
-                        mov     ax,ss                                           ;SS
-                        mov     cl,46                                           ;column
-                        mov     ch,13                                           ;row
-                        call    PutConsoleHexWord                               ;draw ASCII hex word
-;
-;       Display the CS register lable and value.
-;
-                        mov     cl,42                                           ;column
-                        mov     ch,14                                           ;row
-                        mov     esi,czIntCS                                     ;label
-                        call    SetConsoleString                                ;draw label
-                        xor     eax,eax                                         ;zero register
-                        mov     ax,[ebp+52]                                     ;CS
-                        mov     cl,46                                           ;column
-                        mov     ch,14                                           ;row
-                        call    PutConsoleHexWord                               ;draw ASCII hex word
-;
-;       Display the EFLAGS register label and value.
-;
-                        mov     cl,51                                           ;column
-                        mov     ch,11                                           ;row
-                        mov     esi,czIntEFLAGS                                 ;label
-                        call    SetConsoleString                                ;draw label
-                        mov     eax,[ebp+56]                                    ;EFLAGS
-                        mov     cl,55                                           ;column
-                        mov     ch,11                                           ;row
-                        call    PutConsoleHexDword                              ;draw ASCII hex doubleword
-;
-;       Display the ESP register label and value.
-;
-                        mov     cl,51                                           ;column
-                        mov     ch,13                                           ;row
-                        mov     esi,czIntESP                                    ;label
-                        call    SetConsoleString                                ;draw label
-                        mov     eax,[ebp+12]                                    ;ESP
-                        mov     cl,55                                           ;column
-                        mov     ch,13                                           ;row
-                        call    PutConsoleHexDword                              ;draw ASCII hex doubleword
-;
-;       Display the EIP register label and value.
-;
-                        mov     cl,51                                           ;column
-                        mov     ch,14                                           ;row
-                        mov     esi,czIntEIP                                    ;label
-                        call    SetConsoleString                                ;draw label
-                        mov     eax,[ebp+48]                                    ;EIP lo-order 32-bits
-                        mov     cl,55                                           ;column
-                        mov     ch,14                                           ;row
-                        call    PutConsoleHexDword                              ;draw ASCII hex doubleword
-;
-;       Halt and loop until reset.
-;
-.10                     sti                                                     ;enable maskable interrupts
-                        hlt                                                     ;halt processor
-                        jmp     .10                                             ;resume on interrupt
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Processor Interrupt Name Strings
-;
-;-----------------------------------------------------------------------------------------------------------------------
-czIntDivideByZero       db      "Division by zero",0
-czIntSingleStep         db      "Single step",0
-czIntNonMaskable        db      "Non-maskable interrupt",0
-czIntBreak              db      "Break",0
-czIntInto               db      "Into",0
-czIntBounds             db      "Bounds",0
-czIntBadOpCode          db      "Bad Operation Code",0
-czIntNoCoprocessor      db      "No Coprocessor",0
-czIntDoubleFault        db      "Double Fault",0
-czIntOperand            db      "Operand",0
-czIntBadTSS             db      "Bad Task State Segment",0
-czIntNotPresent         db      "Not Present",0
-czIntStackLimit         db      "Stack Limit",0
-czIntProtection         db      "General Protection Fault",0
-czIntCoprocessorCalc    db      "Coprocessor Calculation",0
-czIntReserved           db      "Reserved",0
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Processor Interrupt Handling Strings
-;
-;-----------------------------------------------------------------------------------------------------------------------
-czIntHeader             db      "An unhandled processor interrupt has occurred:",0
-czIntLabel              db      "Interrupt #",0
-czIntRegsHeader         db      "Registers at the time of the interrupt:",0
-czIntEAX                db      "EAX:",0
-czIntECX                db      "ECX:",0
-czIntEDX                db      "EDX:",0
-czIntEBX                db      "EBX:",0
-czIntESI                db      "ESI:",0
-czIntEDI                db      "EDI:",0
-czIntEBP                db      "EBP:",0
-czIntESP                db      "ESP:",0
-czIntDS                 db      " DS:",0
-czIntES                 db      " ES:",0
-czIntSS                 db      " SS:",0
-czIntCS                 db      " CS:",0
-czIntEFLAGS             db      "FLG:",0
-czIntEIP                db      "EIP:",0
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        DrawTextDialogBox
-;
-;       Description:    This routine opens a text-mode dialog box with an ASCII border.
-;
-;       In:             CL      upper left column (0-79)
-;                       CH      upper left row (0-24)
-;                       DL      column width, excluding border
-;                       DH      row height, excluding border
-;                       BH      color attribute
-;
-;-----------------------------------------------------------------------------------------------------------------------
-DrawTextDialogBox       push    ecx                                             ;save non-volatile regs
-                        push    esi                                             ;
-                        push    edi                                             ;
-                        push    es                                              ;
-                        push    EGDTCGA                                         ;load CGA selector ...
-                        pop     es                                              ;... into ES
-;
-;       Compute target display offset.
-;
-                        xor     eax,eax                                         ;zero register
-                        mov     al,ch                                           ;row
-                        mov     ah,ECONROWBYTES                                 ;mulitplicand
-                        mul     ah                                              ;row offset
-                        add     al,cl                                           ;add column
-                        adc     ah,0                                            ;add overflow
-                        add     al,cl                                           ;add column
-                        adc     ah,0                                            ;add overflow
-                        mov     edi,eax                                         ;target row offset
-;
-;       Display top border row.
-;
-                        push    edi                                             ;save target row offset
-                        mov     ah,bh                                           ;attribute
-                        mov     al,EASCIIBORDSGLUPRLFT                          ;upper-left single border
-                        stosw                                                   ;display character and attribute
-                        mov     al,EASCIIBORDSGLHORZ                            ;horizontal single border
-                        xor     ecx,ecx                                         ;zero register
-                        mov     cl,dl                                           ;width, excluding border
-                        rep     stosw                                           ;display horizontal border
-                        mov     al,EASCIIBORDSGLUPRRGT                          ;upper-right single border
-                        stosw                                                   ;display character and attribute
-                        pop     edi                                             ;restore target row offset
-                        add     edi,ECONROWBYTES                                ;next row
-;
-;       Display dialog box body rows.
-;
-                        xor     ecx,ecx                                         ;zero register
-                        mov     cl,dh                                           ;height, excluding border
-.10                     push    ecx                                             ;save remaining rows
-                        push    edi                                             ;save target row offset
-                        mov     ah,bh                                           ;attribute
-                        mov     al,EASCIIBORDSGLVERT                            ;vertical single border
-                        stosw                                                   ;display character and attribute
-                        mov     al,EASCIISPACE                                  ;space
-                        xor     ecx,ecx                                         ;zero register
-                        mov     cl,dl                                           ;width, excluding border
-                        rep     stosw                                           ;display row
-                        mov     al,EASCIIBORDSGLVERT                            ;vertical single border
-                        stosw                                                   ;display character and attribute
-                        pop     edi                                             ;restore target row offset
-                        add     edi,ECONROWBYTES                                ;next row
-                        pop     ecx                                             ;remaining rows
-                        loop    .10                                             ;next row
-;
-;       Display bottom border row.
-;
-                        push    edi                                             ;save target row offset
-                        mov     ah,bh                                           ;attribute
-                        mov     al,EASCIIBORDSGLLWRLFT                          ;lower-left single border
-                        stosw                                                   ;display character and attribute
-                        mov     al,EASCIIBORDSGLHORZ                            ;horizontal single border
-                        xor     ecx,ecx                                         ;zero register
-                        mov     cl,dl                                           ;width, excluding border
-                        rep     stosw                                           ;display horizontal border
-                        mov     al,EASCIIBORDSGLLWRRGT                          ;lower-right single border
-                        stosw                                                   ;display character and attribute
-                        pop     edi                                             ;restore target row offset
-                        add     edi,ECONROWBYTES                                ;next row
-;
-;       Restore and return.
-;
-                        pop     es                                              ;restore non-volatile regs
-                        pop     edi                                             ;
-                        pop     esi                                             ;
-                        pop     ecx                                             ;
-                        ret                                                     ;return
+ReportInterrupt         iretd                                                   ;return
 ;=======================================================================================================================
 ;
 ;       Hardware Device Interupts
@@ -3182,8 +2740,6 @@ maxtsvc                 equ     ($-tsvc)/4                                      
 ;       NextConsoleRow
 ;       PutConsoleChar
 ;       PutConsoleHexByte
-;       PutConsoleHexDword
-;       PutConsoleHexWord
 ;       PutConsoleOIA
 ;       PutConsoleString
 ;
@@ -3298,44 +2854,6 @@ PutConsoleHexByte       push    eax                                             
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Routine:        PutConsoleHexDword
-;
-;       Description:    This routine writes eight ASCII characters to the console representing a doubleword value.
-;
-;       In:             EAX     value
-;                       CL      column
-;                       CH      row
-;                       DS      OS data selector
-;                       ES      CGA selector
-;
-;-----------------------------------------------------------------------------------------------------------------------
-PutConsoleHexDword      push    eax                                             ;save value
-                        shr     eax,16                                          ;high-order word
-                        call    PutConsoleHexWord                               ;display high-order word
-                        pop     eax                                             ;restore value
-                        call    PutConsoleHexWord                               ;display low-order word
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        PutConsoleHexWord
-;
-;       Description:    This routine writes four ASCII characters to the console representing a word value.
-;
-;       In:             EAX     value
-;                       CL      column
-;                       CH      row
-;                       DS      OS data selector
-;                       ES      CGA selector
-;
-;-----------------------------------------------------------------------------------------------------------------------
-PutConsoleHexWord       push    eax                                             ;save value
-                        shr     eax,8                                           ;high-order byte
-                        call    PutConsoleHexByte                               ;display high-order byte
-                        pop     eax                                             ;restore value
-                        call    PutConsoleHexByte                               ;display low-order byte
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
 ;       Routine:        PutConsoleOIA
 ;
 ;       Description:    This routine updates the Operator Information Area (OIA).
@@ -3386,27 +2904,27 @@ PutConsoleOIA           push    ebx                                             
                         mov     ch,ECONOIAROW                                   ;OIA row
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFWINLEFT          ;left-windows?
-                        jz      .35                                             ;no, branch
+                        jz      .40                                             ;no, branch
                         mov     al,'W'                                          ;yes, indicate with 'W'
-.35                     mov     cl,9                                            ;indicator column
+.40                     mov     cl,9                                            ;indicator column
                         call    SetConsoleChar                                  ;display ASCII indicator
                         mov     al,EASCIISPACE                                  ;space is default character
                         test    byte [esi+KEYBDATA.shift],EKEYFSHIFTLEFT        ;left-shift?
-                        jz      .40                                             ;no, skip ahead
+                        jz      .50                                             ;no, skip ahead
                         mov     al,'S'                                          ;yes, indicate with 'S'
-.40                     mov     cl,10                                           ;indicator column
+.50                     mov     cl,10                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFCTRLLEFT         ;left-ctrl?
-                        jz      .50                                             ;no, skip ahead
+                        jz      .60                                             ;no, skip ahead
                         mov     al,'C'                                          ;yes, indicate with 'C'
-.50                     mov     cl,11                                           ;indicator column
+.60                     mov     cl,11                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFALTLEFT          ;left-alt?
-                        jz      .60                                             ;no, skip ahead
+                        jz      .70                                             ;no, skip ahead
                         mov     al,'A'                                          ;yes, indicate with 'A'
-.60                     mov     cl,12                                           ;indicator column
+.70                     mov     cl,12                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
 ;
 ;       We do not display left or right shift make or break codes even if they are stored as the final
@@ -3415,15 +2933,15 @@ PutConsoleOIA           push    ebx                                             
 ;
                         mov     al,[esi+KEYBDATA.scan]                          ;final scan code
                         test    al,al                                           ;null?
-                        jz      .65                                             ;yes, branch
+                        jz      .80                                             ;yes, branch
                         cmp     al,EKEYBSHIFTLDOWN                              ;left shift make?
-                        je      .65                                             ;yes, branch
+                        je      .80                                             ;yes, branch
                         cmp     al,EKEYBSHIFTLUP                                ;left shift break?
-                        je      .65                                             ;yes, branch
+                        je      .80                                             ;yes, branch
                         cmp     al,EKEYBSHIFTRDOWN                              ;right shift make?
-                        je      .65                                             ;yes, branch
+                        je      .80                                             ;yes, branch
                         cmp     al,EKEYBSHIFTRUP                                ;right shift break?
-                        je      .65                                             ;yes, branch
+                        je      .80                                             ;yes, branch
 ;
 ;       Display scan code returned in messages.
 ;
@@ -3435,13 +2953,13 @@ PutConsoleOIA           push    ebx                                             
 ;
 ;       Display ASCII character.
 ;
-.65                     mov     al,[esi+KEYBDATA.char]                          ;ASCII char
+.80                     mov     al,[esi+KEYBDATA.char]                          ;ASCII char
                         cmp     al,EASCIISPACE                                  ;printable? (lower-bounds)
-                        jb      .70                                             ;no, skip ahead
+                        jb      .90                                             ;no, skip ahead
                         cmp     al,EASCIITILDE                                  ;printable? (upper-bounds)
-                        jbe     .80                                             ;yes, branch
-.70                     mov     al,EASCIISPACE                                  ;use space for non-printables
-.80                     mov     ch,bh                                           ;OIA row
+                        jbe     .100                                            ;yes, branch
+.90                     mov     al,EASCIISPACE                                  ;use space for non-printables
+.100                    mov     ch,bh                                           ;OIA row
                         mov     cl,40                                           ;character display column
                         call    SetConsoleChar                                  ;display ASCII character
 ;
@@ -3449,68 +2967,68 @@ PutConsoleOIA           push    ebx                                             
 ;
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFALTRIGHT         ;right-alt?
-                        jz      .90                                             ;no, skip ahead
+                        jz      .110                                            ;no, skip ahead
                         mov     al,'A'                                          ;yes, indicate with 'A'
-.90                     mov     cl,63                                           ;indicator column
+.110                    mov     cl,63                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFCTRLRIGHT        ;right-ctrl?
-                        jz      .100                                            ;no, skip ahead
+                        jz      .120                                            ;no, skip ahead
                         mov     al,'C'                                          ;yes, indicate with 'C'
-.100                    mov     cl,64                                           ;indicator column
+.120                    mov     cl,64                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFSHIFTRIGHT       ;right-shift
-                        jz      .110                                            ;no, skip ahead
+                        jz      .130                                            ;no, skip ahead
                         mov     al,'S'                                          ;yes, indicate with 'S'
-.110                    mov     cl,65                                           ;indicator column
+.130                    mov     cl,65                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFWINRIGHT         ;right-windows?
-                        jz      .115                                            ;no, branch
+                        jz      .140                                            ;no, branch
                         mov     al,'W'                                          ;yes, indicate wiht 'W'
-.115                    mov     cl,66                                           ;indicator column
+.140                    mov     cl,66                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
 ;
 ;       Display Insert, Caps, Scroll and Num-Lock indicators.
 ;
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.lock],EKEYFLOCKINSERT        ;insert mode?
-                        jz      .120                                            ;no, branch
+                        jz      .150                                            ;no, branch
                         mov     al,EASCIICARET                                  ;indicate with a caret '^'
-.120                    mov     cl,68                                           ;indicoator column
+.150                    mov     cl,68                                           ;indicoator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.lock],EKEYFLOCKSCROLL        ;scroll-lock?
-                        jz      .130                                            ;no, skip ahead
+                        jz      .160                                            ;no, skip ahead
                         mov     al,'S'                                          ;yes, indicate with 'S'
-.130                    mov     cl,69                                           ;indicator column
+.160                    mov     cl,69                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.lock],EKEYFLOCKNUM           ;num-lock?
-                        jz      .140                                            ;no, skip ahead
+                        jz      .170                                            ;no, skip ahead
                         mov     al,'N'                                          ;yes, indicate with 'N'
-.140                    mov     cl,70                                           ;indicator column
+.170                    mov     cl,70                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.lock],EKEYFLOCKCAPS          ;caps-lock?
-                        jz      .150                                            ;no, skip ahead
+                        jz      .180                                            ;no, skip ahead
                         mov     al,'C'                                          ;yes, indicate with 'C'
-.150                    mov     cl,71                                           ;indicator column
+.180                    mov     cl,71                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
 ;
 ;       Display timeout flag.
 ;
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.status],EKEYFTIMEOUT         ;keyboard timeout?
-                        jz      .155                                            ;no, branch
+                        jz      .190                                            ;no, branch
                         mov     al,'!'                                          ;ASCII indicator
-.155                    mov     cl,73                                           ;indicator column
+.190                    mov     cl,73                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
 ;
 ;       Restore and return.
 ;
-.160                    pop     es                                              ;restore non-volatile regs
+                        pop     es                                              ;restore non-volatile regs
                         pop     esi                                             ;
                         pop     ecx                                             ;
                         pop     ebx                                             ;
@@ -3628,7 +3146,6 @@ PutMessage              push    ds                                              
 ;
 ;       ScrollConsoleRow
 ;       SetConsoleChar
-;       SetConsoleString
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -3685,27 +3202,6 @@ SetConsoleChar          mov     dl,al                                           
                         shl     eax,1                                           ;screen offset
                         mov     [es:eax],dl                                     ;store character
                         inc     cl                                              ;next column
-                        ret                                                     ;return
-;-----------------------------------------------------------------------------------------------------------------------
-;
-;       Routine:        SetConsoleString
-;
-;       Description:    This routine outputs a sequence of ASCII character at the given row and column.
-;
-;       In:             ESI     source offset (DS:)
-;                       CL      column
-;                       CH      row
-;                       ES      CGA selector
-;
-;-----------------------------------------------------------------------------------------------------------------------
-SetConsoleString        push    esi                                             ;save non-volatile regs
-                        cld                                                     ;forward strings
-.10                     lodsb                                                   ;next ASCII character
-                        test    al,al                                           ;end of string?
-                        jz      .20                                             ;yes, branch
-                        call    SetConsoleChar                                  ;store character
-                        jmp     .10                                             ;continue
-.20                     pop     esi                                             ;restore non-volatile regs
                         ret                                                     ;return
 ;=======================================================================================================================
 ;
@@ -3973,7 +3469,6 @@ section                 conmque                                                 
 ;       ConVersion              Display the program title, version and copyright
 ;       ConDrawField            Draw a panel field to video memory
 ;       ConTakeToken            Extract the next token from a buffer
-;       ConInt6                 Handle the Int6 command
 ;
 ;=======================================================================================================================
 section                 concode vstart=05000h                                   ;labels relative to 5000h
@@ -4149,7 +3644,7 @@ ConCode                 mov     edi,ECONDATA                                    
                         mov     ecx,[ebx]                                       ;field buffer
                         movzx   edx,byte [ebx+7]                                ;field index
                         test    al,al                                           ;ASCII code?
-                        jnz     .3400                                           ;yes, branch
+                        jnz     .3500                                           ;yes, branch
 ;
 ;       Handle up or left arrow.
 ;
@@ -4205,9 +3700,9 @@ ConCode                 mov     edi,ECONDATA                                    
                         inc     dl                                              ;increment index
                         jmp     .3200                                           ;continue
 .3300                   cmp     dl, byte [ebx+6]                                ;field full?
-                        jb      .3350                                           ;no, branch
+                        jb      .3400                                           ;no, branch
                         dec     dl                                              ;cursor at last character
-.3350                   mov     byte [ebx+7],dl                                 ;update index
+.3400                   mov     byte [ebx+7],dl                                 ;update index
                         jmp     .1500                                           ;put cursor and next message
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -4219,8 +3714,8 @@ ConCode                 mov     edi,ECONDATA                                    
 ;       If a backspace is pressed and the field index is non-zero, decrement the index and move each character
 ;       starting from the one at the cursor to the preceding adjacent index position. Draw, place cursor, repeat.
 ;
-.3400                   cmp     ah,EKEYBBACKSPACE                               ;backspace?
-                        jne     .3600                                           ;no, branch
+.3500                   cmp     ah,EKEYBBACKSPACE                               ;backspace?
+                        jne     .3700                                           ;no, branch
                         test    dl,dl                                           ;index is zero?
                         jz      .1600                                           ;yes, next message
                         dec     byte [ebx+7]                                    ;decrement index
@@ -4229,64 +3724,64 @@ ConCode                 mov     edi,ECONDATA                                    
                         mov     esi,edi                                         ;addr of char to remove
                         inc     esi                                             ;addr of first char to move
                         cld                                                     ;forward strings
-.3500                   lodsb                                                   ;character to move
+.3600                   lodsb                                                   ;character to move
                         stosb                                                   ;store one position preceding
                         test    al,al                                           ;did we store a nul?
-                        jnz     .3500                                           ;no, next printable
-                        jmp     .4200                                           ;draw field, put cursor, get message
+                        jnz     .3600                                           ;no, next printable
+                        jmp     .1400                                           ;draw field, put cursor, get message
 ;
 ;       If a delete is pressed and a character is at the index offset, move each character starting from the one at
 ;       the next adjacent position to its preceding adjacent index position. Draw, place cursor, repeat.
 ;
-.3600                   cmp     al,EASCIIDELETE                                 ;delete?
-                        jne     .3800                                           ;no, branch
+.3700                   cmp     al,EASCIIDELETE                                 ;delete?
+                        jne     .3900                                           ;no, branch
                         lea     edi,[ecx+edx]                                   ;addr at current index
                         cmp     byte [edi],0                                    ;printable at current index?
                         je      .1600                                           ;no, get message
                         lea     esi,[edi+1]                                     ;addr of first char to move
                         cld                                                     ;forward strings
-.3700                   lodsb                                                   ;character to move
+.3800                   lodsb                                                   ;character to move
                         stosb                                                   ;store on position preceding
                         test    al,al                                           ;did we move a nul?
-                        jnz     .3700                                           ;no, next printable
-                        jmp     .4200                                           ;draw field, put cursor, get message
+                        jnz     .3800                                           ;no, next printable
+                        jmp     .1400                                           ;draw field, put cursor, get message
 ;
 ;       If a printable ASCII is typed, place the character in the field at the current index if not inserting.
 ;
-.3800                   cmp     al,EASCIISPACE                                  ;printable range? (low)
+.3900                   cmp     al,EASCIISPACE                                  ;printable range? (low)
                         jb      .1600                                           ;no, next message
                         cmp     al,EASCIITILDE                                  ;printable range? (high)
                         ja      .1600                                           ;no, next message
                         test    byte [ebx+11],40h                               ;input field allows insert mode?
-                        jz      .3900                                           ;no, branch to overwrite
+                        jz      .4000                                           ;no, branch to overwrite
                         test    byte [wsKeybData+KEYBDATA.lock],EKEYFLOCKINSERT ;insert on?
-                        jnz      .4000                                          ;yes branch
-.3900                   mov     [ecx+edx],al                                    ;store char in buffer
+                        jnz      .4100                                          ;yes branch
+.4000                   mov     [ecx+edx],al                                    ;store char in buffer
                         inc     dl                                              ;advance index
                         cmp     dl,[ebx+6]                                      ;end of field?
-                        jnb     .4200                                           ;yes, branch
+                        jnb     .4300                                           ;yes, branch
                         mov     [ebx+7],dl                                      ;save new index
-                        jmp     .4200                                           ;draw field, put cursor, get message
+                        jmp     .1400                                           ;draw field, put cursor, get message
 ;
 ;       If the insert lock is on, replace each following character with the preceding one after the typed character
 ;       is stored in the field.
 ;
-.4000                   movzx   edi,byte [ebx+6]                                ;field size
+.4100                   movzx   edi,byte [ebx+6]                                ;field size
                         add     edi,ecx                                         ;last field byte (nul)
                         dec     edi                                             ;last input byte
                         cmp     byte [edi],0                                    ;field full?
                         jne     .1600                                           ;yes, get message
-.4100                   mov     ah,[ecx+edx]                                    ;char to move
+.4200                   mov     ah,[ecx+edx]                                    ;char to move
                         mov     [ecx+edx],al                                    ;store char
                         inc     dl                                              ;advance index
                         mov     al,ah                                           ;next char to move
                         test    al,al                                           ;end of input?
-                        jnz     .4100                                           ;no, continue
+                        jnz     .4200                                           ;no, continue
                         inc     byte [ebx+7]                                    ;increment index
 ;
 ;       Redraw the field, resume to place the cursor and get the next key-down message.
 ;
-.4200                   jmp     .1400                                           ;draw field, place cursor
+.4300                   jmp     .1400                                           ;draw field, place cursor
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        ConVersion
@@ -4435,15 +3930,6 @@ ConTakeToken            push    esi                                             
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
-;       Routine:        ConInt6
-;
-;       Description:    This routine issues an interrupt 6 to exercise the interrupt handler.
-;
-;-----------------------------------------------------------------------------------------------------------------------
-ConInt6                 ud2                                                     ;raise bad opcode exception
-                        ret                                                     ;return (not executed)
-;-----------------------------------------------------------------------------------------------------------------------
-;
 ;       Constants
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -4459,7 +3945,6 @@ czInputField            dd      wzConsoleInBuffer                               
                                                                                 ;---------------------------------------
                         align   4
 tConJmpTbl              equ     $                                               ;command jump table
-                        dd      ConInt6     - ConCode                           ;int6 command
                         dd      ConVersion  - ConCode                           ;ver command
                         dd      ConVersion  - ConCode                           ;version command
 ECONJMPTBLL             equ     ($-tConJmpTbl)                                  ;table length
@@ -4468,7 +3953,6 @@ ECONJMPTBLCNT           equ     ECONJMPTBLL/4                                   
                                                                                 ;  Command Name Table
                                                                                 ;---------------------------------------
 tConCmdTbl              equ     $                                               ;command name table
-                        db      5,"INT6",0                                      ;int6 command
                         db      4,"VER",0                                       ;ver command
                         db      8,"VERSION",0                                   ;version command
                         db      0                                               ;end of table
@@ -4478,8 +3962,8 @@ tConCmdTbl              equ     $                                               
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 czNewLine               db      13,10,0                                         ;new-line
-czTitle                 db      13,10,"Operating System [1.0.0.0]"              ;title and copyright
-                        db      13,10,"Copyright 2010-2021 David J. Walling. All rights reserved.",0
+czTitle                 db      13,10,"Operating System [Version 1.0.0.0]"      ;title and copyright
+                        db      13,10,"(c) 2010 David J. Walling. All rights reserved.",0
 czUnknownCommand        db      "Unknown command",0                             ;unknown command
                         times   3000h-($-$$) db 0h                              ;zero fill to end of section
 %endif

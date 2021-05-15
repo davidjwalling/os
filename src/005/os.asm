@@ -16,7 +16,7 @@
 ;
 ;       Assembler:      Netwide Assembler (NASM) 2.15.05, 28 Aug 2020
 ;
-;       Notice:         Copyright 2010-2021 David J. Walling. All rights reserved.
+;       Notice:         Copyright (c) 2010 David J. Walling. All rights reserved.
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -1079,7 +1079,7 @@ Prep                    mov     si,czPrepMsg10                                  
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 czPrepMsg10             db      13,10,"OS Boot-Diskette Preparation Program"
-                        db      13,10,"Copyright 2010-2021 David J. Walling. All rights reserved."
+                        db      13,10,"(c) 2010 David J. Walling. All rights reserved."
                         db      13,10
                         db      13,10,"This program overwrites the boot sector of a diskette with startup code that"
                         db      13,10,"will load the operating system into memory when the computer is restarted."
@@ -2819,27 +2819,27 @@ PutConsoleOIA           push    ebx                                             
                         mov     ch,ECONOIAROW                                   ;OIA row
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFWINLEFT          ;left-windows?
-                        jz      .35                                             ;no, branch
+                        jz      .40                                             ;no, branch
                         mov     al,'W'                                          ;yes, indicate with 'W'
-.35                     mov     cl,9                                            ;indicator column
+.40                     mov     cl,9                                            ;indicator column
                         call    SetConsoleChar                                  ;display ASCII indicator
                         mov     al,EASCIISPACE                                  ;space is default character
                         test    byte [esi+KEYBDATA.shift],EKEYFSHIFTLEFT        ;left-shift?
-                        jz      .40                                             ;no, skip ahead
+                        jz      .50                                             ;no, skip ahead
                         mov     al,'S'                                          ;yes, indicate with 'S'
-.40                     mov     cl,10                                           ;indicator column
+.50                     mov     cl,10                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFCTRLLEFT         ;left-ctrl?
-                        jz      .50                                             ;no, skip ahead
+                        jz      .60                                             ;no, skip ahead
                         mov     al,'C'                                          ;yes, indicate with 'C'
-.50                     mov     cl,11                                           ;indicator column
+.60                     mov     cl,11                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFALTLEFT          ;left-alt?
-                        jz      .60                                             ;no, skip ahead
+                        jz      .70                                             ;no, skip ahead
                         mov     al,'A'                                          ;yes, indicate with 'A'
-.60                     mov     cl,12                                           ;indicator column
+.70                     mov     cl,12                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
 ;
 ;       We do not display left or right shift make or break codes even if they are stored as the final
@@ -2848,15 +2848,15 @@ PutConsoleOIA           push    ebx                                             
 ;
                         mov     al,[esi+KEYBDATA.scan]                          ;final scan code
                         test    al,al                                           ;null?
-                        jz      .65                                             ;yes, branch
+                        jz      .80                                             ;yes, branch
                         cmp     al,EKEYBSHIFTLDOWN                              ;left shift make?
-                        je      .65                                             ;yes, branch
+                        je      .80                                             ;yes, branch
                         cmp     al,EKEYBSHIFTLUP                                ;left shift break?
-                        je      .65                                             ;yes, branch
+                        je      .80                                             ;yes, branch
                         cmp     al,EKEYBSHIFTRDOWN                              ;right shift make?
-                        je      .65                                             ;yes, branch
+                        je      .80                                             ;yes, branch
                         cmp     al,EKEYBSHIFTRUP                                ;right shift break?
-                        je      .65                                             ;yes, branch
+                        je      .80                                             ;yes, branch
 ;
 ;       Display scan code returned in messages.
 ;
@@ -2868,13 +2868,13 @@ PutConsoleOIA           push    ebx                                             
 ;
 ;       Display ASCII character.
 ;
-.65                     mov     al,[esi+KEYBDATA.char]                          ;ASCII char
+.80                     mov     al,[esi+KEYBDATA.char]                          ;ASCII char
                         cmp     al,EASCIISPACE                                  ;printable? (lower-bounds)
-                        jb      .70                                             ;no, skip ahead
+                        jb      .90                                             ;no, skip ahead
                         cmp     al,EASCIITILDE                                  ;printable? (upper-bounds)
-                        jbe     .80                                             ;yes, branch
-.70                     mov     al,EASCIISPACE                                  ;use space for non-printables
-.80                     mov     ch,bh                                           ;OIA row
+                        jbe     .100                                            ;yes, branch
+.90                     mov     al,EASCIISPACE                                  ;use space for non-printables
+.100                    mov     ch,bh                                           ;OIA row
                         mov     cl,40                                           ;character display column
                         call    SetConsoleChar                                  ;display ASCII character
 ;
@@ -2882,68 +2882,68 @@ PutConsoleOIA           push    ebx                                             
 ;
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFALTRIGHT         ;right-alt?
-                        jz      .90                                             ;no, skip ahead
+                        jz      .110                                            ;no, skip ahead
                         mov     al,'A'                                          ;yes, indicate with 'A'
-.90                     mov     cl,63                                           ;indicator column
+.110                    mov     cl,63                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFCTRLRIGHT        ;right-ctrl?
-                        jz      .100                                            ;no, skip ahead
+                        jz      .120                                            ;no, skip ahead
                         mov     al,'C'                                          ;yes, indicate with 'C'
-.100                    mov     cl,64                                           ;indicator column
+.120                    mov     cl,64                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFSHIFTRIGHT       ;right-shift
-                        jz      .110                                            ;no, skip ahead
+                        jz      .130                                            ;no, skip ahead
                         mov     al,'S'                                          ;yes, indicate with 'S'
-.110                    mov     cl,65                                           ;indicator column
+.130                    mov     cl,65                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFWINRIGHT         ;right-windows?
-                        jz      .115                                            ;no, branch
+                        jz      .140                                            ;no, branch
                         mov     al,'W'                                          ;yes, indicate wiht 'W'
-.115                    mov     cl,66                                           ;indicator column
+.140                    mov     cl,66                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
 ;
 ;       Display Insert, Caps, Scroll and Num-Lock indicators.
 ;
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.lock],EKEYFLOCKINSERT        ;insert mode?
-                        jz      .120                                            ;no, branch
+                        jz      .150                                            ;no, branch
                         mov     al,EASCIICARET                                  ;indicate with a caret '^'
-.120                    mov     cl,68                                           ;indicoator column
+.150                    mov     cl,68                                           ;indicoator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.lock],EKEYFLOCKSCROLL        ;scroll-lock?
-                        jz      .130                                            ;no, skip ahead
+                        jz      .160                                            ;no, skip ahead
                         mov     al,'S'                                          ;yes, indicate with 'S'
-.130                    mov     cl,69                                           ;indicator column
+.160                    mov     cl,69                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.lock],EKEYFLOCKNUM           ;num-lock?
-                        jz      .140                                            ;no, skip ahead
+                        jz      .170                                            ;no, skip ahead
                         mov     al,'N'                                          ;yes, indicate with 'N'
-.140                    mov     cl,70                                           ;indicator column
+.170                    mov     cl,70                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.lock],EKEYFLOCKCAPS          ;caps-lock?
-                        jz      .150                                            ;no, skip ahead
+                        jz      .180                                            ;no, skip ahead
                         mov     al,'C'                                          ;yes, indicate with 'C'
-.150                    mov     cl,71                                           ;indicator column
+.180                    mov     cl,71                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
 ;
 ;       Display timeout flag.
 ;
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.status],EKEYFTIMEOUT         ;keyboard timeout?
-                        jz      .155                                            ;no, branch
+                        jz      .190                                            ;no, branch
                         mov     al,'!'                                          ;ASCII indicator
-.155                    mov     cl,73                                           ;indicator column
+.190                    mov     cl,73                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
 ;
 ;       Restore and return.
 ;
-.160                    pop     es                                              ;restore non-volatile regs
+                        pop     es                                              ;restore non-volatile regs
                         pop     esi                                             ;
                         pop     ecx                                             ;
                         pop     ebx                                             ;
@@ -3464,8 +3464,8 @@ czInputField            dd      wzConsoleInBuffer                               
 ;       Strings
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-czTitle                 db      13,10,"Operating System [1.0.0.0]"              ;title and copyright
-                        db      13,10,"Copyright 2010-2021 David J. Walling. All rights reserved.",0
+czTitle                 db      13,10,"Operating System [Version 1.0.0.0]"      ;title and copyright
+                        db      13,10,"(c) 2010 David J. Walling. All rights reserved.",0
                         times   3000h-($-$$) db 0h                              ;zero fill to end of section
 %endif
 %ifdef BUILDDISK

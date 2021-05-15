@@ -16,7 +16,7 @@
 ;
 ;       Assembler:      Netwide Assembler (NASM) 2.15.05, 28 Aug 2020
 ;
-;       Notice:         Copyright 2010-2021 David J. Walling. All rights reserved.
+;       Notice:         Copyright (c) 2010 David J. Walling. All rights reserved.
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -989,7 +989,7 @@ Prep                    mov     si,czPrepMsg10                                  
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 czPrepMsg10             db      13,10,"OS Boot-Diskette Preparation Program"
-                        db      13,10,"Copyright 2010-2021 David J. Walling. All rights reserved."
+                        db      13,10,"(c) 2010 David J. Walling. All rights reserved."
                         db      13,10
                         db      13,10,"This program overwrites the boot sector of a diskette with startup code that"
                         db      13,10,"will load the operating system into memory when the computer is restarted."
@@ -2475,8 +2475,8 @@ ConVersion              mov     edx,czTitle                                     
 ;       Strings
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-czTitle                 db      13,10,"Operating System [1.0.0.0]"              ;title and copyright
-                        db      13,10,"Copyright 2010-2021 David J. Walling. All rights reserved.",0
+czTitle                 db      13,10,"Operating System [Version 1.0.0.0]"      ;title and copyright
+                        db      13,10,"(c) 2010 David J. Walling. All rights reserved.",0
                         times   3000h-($-$$) db 0h                              ;zero fill to end of section
 %endif
 %ifdef BUILDDISK

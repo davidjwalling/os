@@ -7,7 +7,7 @@
 
 ## Tutorial
 
-- The [tutorial](tutorial/README.md) presents step-by-step instructions for setting up both virtual and physical test environments and explains operating sytem logic in progressive sample programs.
+- The [tutorial](src/README.md) presents step-by-step instructions for setting up both virtual and physical test environments and explains operating sytem logic in progressive sample programs.
   
 ## Assembly
 

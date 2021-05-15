@@ -2,11 +2,9 @@
 ;
 ;       File:           os.asm
 ;
-;       Project:        006
+;       Project:        009
 ;
-;       Description:    This sample program extends the kernel to support a simple message queue. The keyboard interrupt
-;                       handler adds events to the queue. The console task reads and processes these events. The "ver"
-;                       and "version" commands are added to display the program title, version and copyright.
+;       Description:    This sample program adds the "mem" command to display memory contents.
 ;
 ;       Revised:        1 Jan 2021
 ;
@@ -17,7 +15,7 @@
 ;
 ;       Assembler:      Netwide Assembler (NASM) 2.15.05, 28 Aug 2020
 ;
-;       Notice:         Copyright 2010-2021 David J. Walling. All rights reserved.
+;       Notice:         Copyright (c) 2010 David J. Walling. All rights reserved.
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -286,8 +284,19 @@ EPITDAYTICKS            equ     01800B0h                                        
 ;-----------------------------------------------------------------------------------------------------------------------
 ERTCREGPORT             equ     070h                                            ;register select port
 ERTCDATAPORT            equ     071h                                            ;data port
+ERTCSECONDREG           equ     000h                                            ;second
+ERTCMINUTEREG           equ     002h                                            ;minute
+ERTCHOURREG             equ     004h                                            ;hour
+ERTCWEEKDAYREG          equ     006h                                            ;weekday
+ERTCDAYREG              equ     007h                                            ;day
+ERTCMONTHREG            equ     008h                                            ;month
+ERTCYEARREG             equ     009h                                            ;year of the century
+ERTCSTATUSREG           equ     00Bh                                            ;status
 ERTCEXTRAMLO            equ     017h                                            ;extended RAM low
 ERTCEXTRAMHI            equ     018h                                            ;extended RAM high
+ERTCCENTURYREG          equ     032h                                            ;century
+ERTCBINARYVALS          equ     00000100b                                       ;values are binary
+ERTCSETBIT              equ     10000000b                                       ;set mode
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       x86 CPU Architecture                                                    ;EX86...
@@ -359,6 +368,7 @@ EASCIISPACE             equ     020h                                            
 EASCIISLASH             equ     02Fh                                            ;slash
 EASCIIZERO              equ     030h                                            ;zero
 EASCIININE              equ     039h                                            ;nine
+EASCIICOLON             equ     03Ah                                            ;colon
 EASCIIUPPERA            equ     041h                                            ;'A'
 EASCIIUPPERZ            equ     05Ah                                            ;'Z'
 EASCIICARET             equ     05Eh                                            ;'^'
@@ -366,6 +376,12 @@ EASCIILOWERA            equ     061h                                            
 EASCIILOWERZ            equ     07Ah                                            ;'z'
 EASCIITILDE             equ     07Eh                                            ;'~'
 EASCIIDELETE            equ     07Fh                                            ;del
+EASCIIBORDSGLVERT       equ     0B3h                                            ;vertical single border
+EASCIIBORDSGLUPRRGT     equ     0BFh                                            ;upper-right single border
+EASCIIBORDSGLLWRLFT     equ     0C0h                                            ;lower-left single border
+EASCIIBORDSGLHORZ       equ     0C4h                                            ;horizontal single border
+EASCIIBORDSGLLWRRGT     equ     0D9h                                            ;lower-right single border
+EASCIIBORDSGLUPRLFT     equ     0DAh                                            ;upper-left single border
 EASCIICASEMASK          equ     11011111b                                       ;case mask
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -450,6 +466,25 @@ EMSGKEYCHAR             equ     041020000h                                      
 ;       Structures
 ;
 ;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       DATETIME
+;
+;       The DATETIME structure stores date and time values from the real-time clock.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+struc                   DATETIME
+.second                 resb    1                                               ;seconds
+.minute                 resb    1                                               ;minutes
+.hour                   resb    1                                               ;hours
+.weekday                resb    1                                               ;day of week
+.day                    resb    1                                               ;day of month
+.month                  resb    1                                               ;month of year
+.year                   resb    1                                               ;year of century
+.century                resb    1                                               ;century
+.yyyy                   resw    1                                               ;year
+EDATETIMELEN            equ     ($-.second)
+endstruc
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       KEYBDATA
@@ -600,11 +635,14 @@ wbClockDays             resb    1                                               
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 ECONDATA                equ     ($)
+wdConsoleMemBase        resd    1                                               ;console memory address
 wzConsoleInBuffer       resb    81                                              ;command input buffer
 wzConsoleToken          resb    81                                              ;token buffer
+wzConsoleOutBuffer      resb    81                                              ;output buffer
 wbConsoleColumn         resb    1                                               ;console column
 wbConsoleRow            resb    1                                               ;console row
 wsKeybData              resb    EKEYBDATAL                                      ;keyboard data
+wsConsoleDateTime       resb    EDATETIMELEN                                    ;date-time buffer
 ECONDATALEN             equ     ($-ECONDATA)                                    ;size of console data area
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1121,7 +1159,7 @@ Prep                    mov     si,czPrepMsg10                                  
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 czPrepMsg10             db      13,10,"OS Boot-Diskette Preparation Program"
-                        db      13,10,"Copyright 2010-2021 David J. Walling. All rights reserved."
+                        db      13,10,"(c) 2010 David J. Walling. All rights reserved."
                         db      13,10
                         db      13,10,"This program overwrites the boot sector of a diskette with startup code that"
                         db      13,10,"will load the operating system into memory when the computer is restarted."
@@ -1668,7 +1706,7 @@ section                 kernel  vstart=0h                                       
 ;       CPU Interrupt Handlers
 ;
 ;       The first 32 entries in the Interrupt Descriptor Table are reserved for use by CPU interrupts. The handling
-;       of these interrupts will vary. For now, we will define the entry points but simply return from the interrupt.
+;       of these interrupts is expanded here to display the contents of registers at the time of the interrupt.
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -1677,6 +1715,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  dividebyzero                                    ;divide by zero
+                        push    0                                               ;store interrupt nbr
+                        push    czIntDivideByZero                               ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1684,6 +1724,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  singlestep                                      ;single step
+                        push    1                                               ;store interrupt nbr
+                        push    czIntSingleStep                                 ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1691,6 +1733,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  nmi                                             ;non-maskable
+                        push    2                                               ;store interrupt nbr
+                        push    czIntNonMaskable                                ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1698,6 +1742,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  break                                           ;break
+                        push    3                                               ;store interrupt nbr
+                        push    czIntBreak                                      ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1705,6 +1751,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  into                                            ;into
+                        push    4                                               ;store interrupt nbr
+                        push    czIntInto                                       ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1712,6 +1760,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  bounds                                          ;bounds
+                        push    5                                               ;store interrupt nbr
+                        push    czIntBounds                                     ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1719,6 +1769,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  badopcode                                       ;bad opcode interrupt
+                        push    6                                               ;store interrupt nbr
+                        push    czIntBadOpCode                                  ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1726,6 +1778,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  nocoproc                                        ;no coprocessor interrupt
+                        push    7                                               ;store interrupt nbr
+                        push    czIntNoCoprocessor                              ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1733,6 +1787,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  doublefault                                     ;doublefault interrupt
+                        push    8                                               ;store interrupt nbr
+                        push    czIntDoubleFault                                ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1740,6 +1796,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  operand                                         ;operand interrupt
+                        push    9                                               ;store interrupt nbr
+                        push    czIntOperand                                    ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1747,6 +1805,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  badtss                                          ;bad TSS interrupt
+                        push    10                                              ;store interrupt nbr
+                        push    czIntBadTSS                                     ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1754,6 +1814,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  notpresent                                      ;not present interrupt
+                        push    11                                              ;store interrupt nbr
+                        push    czIntNotPresent                                 ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1761,6 +1823,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  stacklimit                                      ;stack limit interrupt
+                        push    12                                              ;store interrupt nbr
+                        push    czIntStackLimit                                 ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1768,6 +1832,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  protection                                      ;protection fault interrupt
+                        push    13                                              ;store interrupt nbr
+                        push    czIntProtection                                 ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1775,6 +1841,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int14                                           ;(reserved)
+                        push    14                                              ;store interrupt nbr
+                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1782,6 +1850,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int15                                           ;(reserved)
+                        push    15                                              ;store interrupt nbr
+                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1789,6 +1859,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  coproccalc                                      ;coprocessor calculation
+                        push    16                                              ;store interrupt nbr
+                        push    czIntCoprocessorCalc                            ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1796,6 +1868,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int17                                           ;(reserved)
+                        push    17                                              ;store interrupt nbr
+                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1803,6 +1877,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int18                                           ;(reserved)
+                        push    18                                              ;store interrupt nbr
+                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1810,6 +1886,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int19                                           ;(reserved)
+                        push    19                                              ;store interrupt nbr
+                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1817,6 +1895,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int20                                           ;(reserved)
+                        push    20                                              ;store interrupt nbr
+                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1824,6 +1904,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int21                                           ;(reserved)
+                        push    21                                              ;store interrupt nbr
+                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1831,6 +1913,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int22                                           ;(reserved)
+                        push    22                                              ;store interrupt nbr
+                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1838,6 +1922,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int23                                           ;(reserved)
+                        push    23                                              ;store interrupt nbr
+                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1845,6 +1931,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int24                                           ;(reserved)
+                        push    24                                              ;store interrupt nbr
+                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1852,6 +1940,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int25                                           ;(reserved)
+                        push    25                                              ;store interrupt nbr
+                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1859,6 +1949,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int26                                           ;(reserved)
+                        push    26                                              ;store interrupt nbr
+                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1866,6 +1958,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int27                                           ;(reserved)
+                        push    27                                              ;store interrupt nbr
+                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1873,6 +1967,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int28                                           ;(reserved)
+                        push    28                                              ;store interrupt nbr
+                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1880,6 +1976,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int29                                           ;(reserved)
+                        push    29                                              ;store interrupt nbr
+                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1887,6 +1985,8 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int30                                           ;(reserved)
+                        push    30                                              ;store interrupt nbr
+                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -1894,16 +1994,391 @@ section                 kernel  vstart=0h                                       
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  int31                                           ;(reserved)
+                        push    31                                              ;store interrupt nbr
+                        push    czIntReserved                                   ;store message offset
                         jmp     ReportInterrupt                                 ;report interrupt
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        ReportInterrupt
 ;
-;       Description:    This routine will be used to respond to processor interrupts that are not otherwise handled.
-;                       At this stage, we simply restore the stack and return from the interrupt.
+;       Description:    This routine displays register contents when a CPU interrupt occurs.
+;
+;       In:             [ESP+16]        EFLAGS                                  stored by interrupt call
+;                       [ESP+12]        CS                                      stored by interrupt call
+;                       [ESP+8]         EIP                                     stored by interrupt call
+;                       [ESP+4]         interrupt number (0-31)                 stored by push instruction
+;                       [ESP+0]         error message address                   stored by push instructions
+;
+;       Out:            N/A             This routine does not exit.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-ReportInterrupt         iretd                                                   ;return
+ReportInterrupt         push    ds                                              ;save DS at time of interrupt
+                        push    es                                              ;save ES at time of interrupt
+                        pushad                                                  ;save EAX,ECX,EDX,EBX,EBP,ESP,ESI,EDI
+                        mov     ebp,esp                                         ;EBP --> [EDI]
+;
+;       Addressability to registers at the time of the interrupt is now established as:
+;
+;                       [EBP+56]        EFLAGS
+;                       [EBP+52]        CS
+;                       [EBP+48]        EIP
+;                       [EBP+44]        interrupt number (0-31)
+;                       [EBP+40]        error message address
+;                       [EBP+36]        DS
+;                       [EBP+32]        ES
+;                       [EBP+28]        EAX
+;                       [EBP+24]        ECX
+;                       [EBP+20]        EDX
+;                       [EBP+16]        EBX
+;                       [EBP+12]        ESP
+;                       [EBP+8]         EBP
+;                       [EBP+4]         ESI
+;                       [EBP+0]         EDI
+;
+                        push    cs                                              ;load code selector ...
+                        pop     ds                                              ;... into DS
+                        push    EGDTCGA                                         ;load CGA memory selector ...
+                        pop     es                                              ;... into ES
+;
+;       Display the interrupt report boundary box.
+;
+                        mov     cl,13                                           ;column
+                        mov     ch,6                                            ;row
+                        mov     dl,50                                           ;width
+                        mov     dh,8                                            ;height
+                        mov     bh,07h                                          ;attribute
+                        call    DrawTextDialogBox                               ;draw text dialog box
+;
+;       Display the report header.
+;
+                        mov     cl,15                                           ;column
+                        mov     ch,7                                            ;row
+                        mov     esi,czIntHeader                                 ;interrupt message header
+                        call    SetConsoleString                                ;draw text string
+;
+;       Display the interrupt description label.
+;
+                        mov     cl,15                                           ;column
+                        mov     ch,8                                            ;row
+                        mov     esi,czIntLabel                                  ;interrupt message description lead
+                        call    SetConsoleString                                ;draw text string
+;
+;       Display the interrupt number.
+;
+                        mov     eax,[ebp+44]                                    ;interrupt number
+                        mov     cl,26                                           ;column
+                        mov     ch,8                                            ;row
+                        call    PutConsoleHexByte                               ;draw ASCII hex byte
+;
+;       Display the interrupt name.
+;
+                        mov     cl,29                                           ;column
+                        mov     ch,8                                            ;row
+                        mov     esi,[ebp+40]                                    ;interrupt-specific message
+                        call    SetConsoleString                                ;display interrupt description
+;
+;       Display the register values header.
+;
+                        mov     cl,15                                           ;column
+                        mov     ch,10                                           ;row
+                        mov     esi,czIntRegsHeader                             ;interrupt registers header
+                        call    SetConsoleString                                ;draw text string
+;
+;       Display the EAX register label and value.
+;
+                        mov     cl,15                                           ;column
+                        mov     ch,11                                           ;row
+                        mov     esi,czIntEAX                                    ;register EAX label
+                        call    SetConsoleString                                ;draw label
+                        mov     eax,[ebp+28]                                    ;EAX value at interrupt
+                        mov     cl,19                                           ;column
+                        mov     ch,11                                           ;row
+                        call    PutConsoleHexDword                              ;draw ASCII hex doubleword
+;
+;       Display the ECX register label and value.
+;
+                        mov     cl,15                                           ;column
+                        mov     ch,12                                           ;row
+                        mov     esi,czIntECX                                    ;label
+                        call    SetConsoleString                                ;draw label
+                        mov     eax,[ebp+24]                                    ;ECX value at interrupt
+                        mov     cl,19                                           ;column
+                        mov     ch,12                                           ;row
+                        call    PutConsoleHexDword                              ;draw ASCII hex doubleword
+;
+;       Display the EDX register label and value.
+;
+                        mov     cl,15                                           ;column
+                        mov     ch,13                                           ;row
+                        mov     esi,czIntEDX                                    ;label
+                        call    SetConsoleString                                ;draw label
+                        mov     eax,[ebp+20]                                    ;EDX value at interrupt
+                        mov     cl,19                                           ;column
+                        mov     ch,13                                           ;row
+                        call    PutConsoleHexDword                              ;draw ASCII hex doubleword
+;
+;       Display the EBX register label and value.
+;
+                        mov     cl,15                                           ;column
+                        mov     ch,14                                           ;row
+                        mov     esi,czIntEBX                                    ;label
+                        call    SetConsoleString                                ;draw label
+                        mov     eax,[ebp+16]                                    ;EBX value at interrupt
+                        mov     cl,19                                           ;column
+                        mov     ch,14                                           ;row
+                        call    PutConsoleHexDword                              ;draw ASCII hex doubleword
+;
+;       Display the ESI register label and value.
+;
+                        mov     cl,29                                           ;column
+                        mov     ch,11                                           ;row
+                        mov     esi,czIntESI                                    ;label
+                        call    SetConsoleString                                ;draw label
+                        mov     eax,[ebp+4]                                     ;ESI
+                        mov     cl,33                                           ;column
+                        mov     ch,11                                           ;row
+                        call    PutConsoleHexDword                              ;draw ASCII hex doubleword
+;
+;       Display the EDI register label and value.
+;
+                        mov     cl,29                                           ;column
+                        mov     ch,12                                           ;row
+                        mov     esi,czIntEDI                                    ;label
+                        call    SetConsoleString                                ;draw label
+                        mov     eax,[ebp+0]                                     ;EDI
+                        mov     cl,33                                           ;column
+                        mov     ch,12                                           ;row
+                        call    PutConsoleHexDword                              ;draw ASCII hex doubleword
+;
+;       Display the EBP register label and value.
+;
+                        mov     cl,29                                           ;column
+                        mov     ch,13                                           ;row
+                        mov     esi,czIntEBP                                    ;label
+                        call    SetConsoleString                                ;draw label
+                        mov     eax,[ebp+8]                                     ;EBP
+                        mov     cl,33                                           ;column
+                        mov     ch,13                                           ;row
+                        call    PutConsoleHexDword                              ;draw ASCII hex doubleword
+;
+;       Display the DS register label and value.
+;
+                        mov     cl,42                                           ;column
+                        mov     ch,11                                           ;row
+                        mov     esi,czIntDS                                     ;label
+                        call    SetConsoleString                                ;draw label
+                        xor     eax,eax                                         ;zero register
+                        mov     ax,[ebp+36]                                     ;DS
+                        mov     cl,46                                           ;column
+                        mov     ch,11                                           ;row
+                        call    PutConsoleHexWord                               ;draw ASCII hex word
+;
+;       Display the ES register label and value.
+;
+                        mov     cl,42                                           ;column
+                        mov     ch,12                                           ;row
+                        mov     esi,czIntES                                     ;label
+                        call    SetConsoleString                                ;draw label
+                        xor     eax,eax                                         ;zero register
+                        mov     ax,[ebp+32]                                     ;ES
+                        mov     cl,46                                           ;column
+                        mov     ch,12                                           ;row
+                        call    PutConsoleHexWord                               ;draw ASCII hex word
+;
+;       Display the SS register label and value.
+;
+                        mov     cl,42                                           ;column
+                        mov     ch,13                                           ;row
+                        mov     esi,czIntSS                                     ;label
+                        call    SetConsoleString                                ;draw label
+                        xor     eax,eax                                         ;zero register
+                        mov     ax,ss                                           ;SS
+                        mov     cl,46                                           ;column
+                        mov     ch,13                                           ;row
+                        call    PutConsoleHexWord                               ;draw ASCII hex word
+;
+;       Display the CS register lable and value.
+;
+                        mov     cl,42                                           ;column
+                        mov     ch,14                                           ;row
+                        mov     esi,czIntCS                                     ;label
+                        call    SetConsoleString                                ;draw label
+                        xor     eax,eax                                         ;zero register
+                        mov     ax,[ebp+52]                                     ;CS
+                        mov     cl,46                                           ;column
+                        mov     ch,14                                           ;row
+                        call    PutConsoleHexWord                               ;draw ASCII hex word
+;
+;       Display the EFLAGS register label and value.
+;
+                        mov     cl,51                                           ;column
+                        mov     ch,11                                           ;row
+                        mov     esi,czIntEFLAGS                                 ;label
+                        call    SetConsoleString                                ;draw label
+                        mov     eax,[ebp+56]                                    ;EFLAGS
+                        mov     cl,55                                           ;column
+                        mov     ch,11                                           ;row
+                        call    PutConsoleHexDword                              ;draw ASCII hex doubleword
+;
+;       Display the ESP register label and value.
+;
+                        mov     cl,51                                           ;column
+                        mov     ch,13                                           ;row
+                        mov     esi,czIntESP                                    ;label
+                        call    SetConsoleString                                ;draw label
+                        mov     eax,[ebp+12]                                    ;ESP
+                        mov     cl,55                                           ;column
+                        mov     ch,13                                           ;row
+                        call    PutConsoleHexDword                              ;draw ASCII hex doubleword
+;
+;       Display the EIP register label and value.
+;
+                        mov     cl,51                                           ;column
+                        mov     ch,14                                           ;row
+                        mov     esi,czIntEIP                                    ;label
+                        call    SetConsoleString                                ;draw label
+                        mov     eax,[ebp+48]                                    ;EIP lo-order 32-bits
+                        mov     cl,55                                           ;column
+                        mov     ch,14                                           ;row
+                        call    PutConsoleHexDword                              ;draw ASCII hex doubleword
+;
+;       Halt and loop until reset.
+;
+.10                     sti                                                     ;enable maskable interrupts
+                        hlt                                                     ;halt processor
+                        jmp     .10                                             ;resume on interrupt
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Processor Interrupt Name Strings
+;
+;-----------------------------------------------------------------------------------------------------------------------
+czIntDivideByZero       db      "Division by zero",0
+czIntSingleStep         db      "Single step",0
+czIntNonMaskable        db      "Non-maskable interrupt",0
+czIntBreak              db      "Break",0
+czIntInto               db      "Into",0
+czIntBounds             db      "Bounds",0
+czIntBadOpCode          db      "Bad Operation Code",0
+czIntNoCoprocessor      db      "No Coprocessor",0
+czIntDoubleFault        db      "Double Fault",0
+czIntOperand            db      "Operand",0
+czIntBadTSS             db      "Bad Task State Segment",0
+czIntNotPresent         db      "Not Present",0
+czIntStackLimit         db      "Stack Limit",0
+czIntProtection         db      "General Protection Fault",0
+czIntCoprocessorCalc    db      "Coprocessor Calculation",0
+czIntReserved           db      "Reserved",0
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Processor Interrupt Handling Strings
+;
+;-----------------------------------------------------------------------------------------------------------------------
+czIntHeader             db      "An unhandled processor interrupt has occurred:",0
+czIntLabel              db      "Interrupt #",0
+czIntRegsHeader         db      "Registers at the time of the interrupt:",0
+czIntEAX                db      "EAX:",0
+czIntECX                db      "ECX:",0
+czIntEDX                db      "EDX:",0
+czIntEBX                db      "EBX:",0
+czIntESI                db      "ESI:",0
+czIntEDI                db      "EDI:",0
+czIntEBP                db      "EBP:",0
+czIntESP                db      "ESP:",0
+czIntDS                 db      " DS:",0
+czIntES                 db      " ES:",0
+czIntSS                 db      " SS:",0
+czIntCS                 db      " CS:",0
+czIntEFLAGS             db      "FLG:",0
+czIntEIP                db      "EIP:",0
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        DrawTextDialogBox
+;
+;       Description:    This routine opens a text-mode dialog box with an ASCII border.
+;
+;       In:             CL      upper left column (0-79)
+;                       CH      upper left row (0-24)
+;                       DL      column width, excluding border
+;                       DH      row height, excluding border
+;                       BH      color attribute
+;
+;-----------------------------------------------------------------------------------------------------------------------
+DrawTextDialogBox       push    ecx                                             ;save non-volatile regs
+                        push    esi                                             ;
+                        push    edi                                             ;
+                        push    es                                              ;
+                        push    EGDTCGA                                         ;load CGA selector ...
+                        pop     es                                              ;... into ES
+;
+;       Compute target display offset.
+;
+                        xor     eax,eax                                         ;zero register
+                        mov     al,ch                                           ;row
+                        mov     ah,ECONROWBYTES                                 ;mulitplicand
+                        mul     ah                                              ;row offset
+                        add     al,cl                                           ;add column
+                        adc     ah,0                                            ;add overflow
+                        add     al,cl                                           ;add column
+                        adc     ah,0                                            ;add overflow
+                        mov     edi,eax                                         ;target row offset
+;
+;       Display top border row.
+;
+                        push    edi                                             ;save target row offset
+                        mov     ah,bh                                           ;attribute
+                        mov     al,EASCIIBORDSGLUPRLFT                          ;upper-left single border
+                        stosw                                                   ;display character and attribute
+                        mov     al,EASCIIBORDSGLHORZ                            ;horizontal single border
+                        xor     ecx,ecx                                         ;zero register
+                        mov     cl,dl                                           ;width, excluding border
+                        rep     stosw                                           ;display horizontal border
+                        mov     al,EASCIIBORDSGLUPRRGT                          ;upper-right single border
+                        stosw                                                   ;display character and attribute
+                        pop     edi                                             ;restore target row offset
+                        add     edi,ECONROWBYTES                                ;next row
+;
+;       Display dialog box body rows.
+;
+                        xor     ecx,ecx                                         ;zero register
+                        mov     cl,dh                                           ;height, excluding border
+.10                     push    ecx                                             ;save remaining rows
+                        push    edi                                             ;save target row offset
+                        mov     ah,bh                                           ;attribute
+                        mov     al,EASCIIBORDSGLVERT                            ;vertical single border
+                        stosw                                                   ;display character and attribute
+                        mov     al,EASCIISPACE                                  ;space
+                        xor     ecx,ecx                                         ;zero register
+                        mov     cl,dl                                           ;width, excluding border
+                        rep     stosw                                           ;display row
+                        mov     al,EASCIIBORDSGLVERT                            ;vertical single border
+                        stosw                                                   ;display character and attribute
+                        pop     edi                                             ;restore target row offset
+                        add     edi,ECONROWBYTES                                ;next row
+                        pop     ecx                                             ;remaining rows
+                        loop    .10                                             ;next row
+;
+;       Display bottom border row.
+;
+                        push    edi                                             ;save target row offset
+                        mov     ah,bh                                           ;attribute
+                        mov     al,EASCIIBORDSGLLWRLFT                          ;lower-left single border
+                        stosw                                                   ;display character and attribute
+                        mov     al,EASCIIBORDSGLHORZ                            ;horizontal single border
+                        xor     ecx,ecx                                         ;zero register
+                        mov     cl,dl                                           ;width, excluding border
+                        rep     stosw                                           ;display horizontal border
+                        mov     al,EASCIIBORDSGLLWRRGT                          ;lower-right single border
+                        stosw                                                   ;display character and attribute
+                        pop     edi                                             ;restore target row offset
+                        add     edi,ECONROWBYTES                                ;next row
+;
+;       Restore and return.
+;
+                        pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     esi                                             ;
+                        pop     ecx                                             ;
+                        ret                                                     ;return
 ;=======================================================================================================================
 ;
 ;       Hardware Device Interupts
@@ -2693,10 +3168,14 @@ svc90                   iretd                                                   
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 tsvc                    tsvce   GetConsoleMessage                               ;get message
+                        tsvce   HexadecimalToUnsigned                           ;convert hexadecimal string to unsigned integer
                         tsvce   PlaceCursor                                     ;place the cursor at the current loc
                         tsvce   PutConsoleOIA                                   ;display the operator information area
                         tsvce   PutConsoleString                                ;display a string on the console
+                        tsvce   PutDateString                                   ;put MM/DD/YYYY string
+                        tsvce   PutTimeString                                   ;put HH:MM:SS string
                         tsvce   SetKeyboardLamps                                ;turn keboard LEDs on or off
+                        tsvce   UnsignedToHexadecimal                           ;convert unsigned integer to hexadecimal string
 maxtsvc                 equ     ($-tsvc)/4                                      ;function out of range
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
@@ -2707,6 +3186,10 @@ maxtsvc                 equ     ($-tsvc)/4                                      
 ;-----------------------------------------------------------------------------------------------------------------------
 %macro                  getConsoleMessage 0
                         mov     al,eGetConsoleMessage                           ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  hexadecimalToUnsigned 0
+                        mov     al,eHexadecimalToUnsigned                       ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
 %macro                  placeCursor 0
@@ -2721,8 +3204,20 @@ maxtsvc                 equ     ($-tsvc)/4                                      
                         mov     al,ePutConsoleString                            ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
+%macro                  putDateString 0
+                        mov     al,ePutDateString                               ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  putTimeString 0
+                        mov     al,ePutTimeString                               ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
 %macro                  setKeyboardLamps 0
                         mov     al,eSetKeyboardLamps                            ;function code
+                        int     _svc                                            ;invoke OS service
+%endmacro
+%macro                  unsignedToHexadecimal 0
+                        mov     al,eUnsignedToHexadecimal                       ;function code
                         int     _svc                                            ;invoke OS service
 %endmacro
 ;=======================================================================================================================
@@ -2730,6 +3225,104 @@ maxtsvc                 equ     ($-tsvc)/4                                      
 ;       Kernel Function Library
 ;
 ;=======================================================================================================================
+;=======================================================================================================================
+;
+;       Date and Time Helper Routines
+;
+;       PutDateString
+;       PutTimeString
+;
+;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutDateString
+;
+;       Description:    This routine returns an ASCIIZ mm/dd/yyyy string at ds:edx from the date in the DATETIME
+;                       structure at ds:ebx.
+;
+;       In:             DS:EBX  DATETIME address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutDateString           push    ecx                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    es                                              ;
+                        push    ds                                              ;store data selector ...
+                        pop     es                                              ;... in extra segment reg
+                        mov     edi,edx                                         ;output buffer address
+                        mov     cl,10                                           ;divisor
+                        mov     edx,0002F3030h                                  ;ASCIIZ "00/" (reversed)
+                        movzx   eax,byte [ebx+DATETIME.month]                   ;month
+                        div     cl                                              ;AH = rem; AL = quotient
+                        or      eax,edx                                         ;apply ASCII zones and delimiter
+                        cld                                                     ;forward strings
+                        stosd                                                   ;store "mm/"nul
+                        dec     edi                                             ;address of terminator
+                        movzx   eax,byte [ebx+DATETIME.day]                     ;day
+                        div     cl                                              ;AH = rem; AL = quotient
+                        or      eax,edx                                         ;apply ASCII zones and delimiter
+                        stosd                                                   ;store "dd/"nul
+                        dec     edi                                             ;address of terminator
+                        movzx   eax,byte [ebx+DATETIME.century]                 ;century
+                        div     cl                                              ;AH = rem; AL = quotient
+                        or      eax,edx                                         ;apply ASCII zones and delimiter
+                        stosd                                                   ;store "cc/"null
+                        dec     edi                                             ;address of terminator
+                        dec     edi                                             ;address of delimiter
+                        movzx   eax,byte [ebx+DATETIME.year]                    ;year (yy)
+                        div     cl                                              ;AH = rem; AL = quotient
+                        or      eax,edx                                         ;apply ASCII zones and delimiter
+                        stosb                                                   ;store quotient
+                        mov     al,ah                                           ;remainder
+                        stosb                                                   ;store remainder
+                        xor     al,al                                           ;null terminator
+                        stosb                                                   ;store terminator
+                        pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     ecx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutTimeString
+;
+;       Description:    This routine returns an ASCIIZ hh:mm:ss string at ds:edx from the date in the DATETIME
+;                       structure at ds:ebx.
+;
+;       In:             DS:EBX  DATETIME address
+;                       DS:EDX  output buffer address
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutTimeString           push    ecx                                             ;save non-volatile regs
+                        push    edi                                             ;
+                        push    es                                              ;
+                        push    ds                                              ;store data selector ...
+                        pop     es                                              ;... in extra segment reg
+                        mov     edi,edx                                         ;output buffer address
+                        mov     cl,10                                           ;divisor
+                        mov     edx,003a3030h                                   ;ASCIIZ "00:" (reversed)
+                        movzx   eax,byte [ebx+DATETIME.hour]                    ;hour
+                        div     cl                                              ;ah = rem; al = quotient
+                        or      eax,edx                                         ;apply ASCII zones and delimiter
+                        cld                                                     ;forward strings
+                        stosd                                                   ;store "mm/"nul
+                        dec     edi                                             ;address of terminator
+                        movzx   eax,byte [ebx+DATETIME.minute]                  ;minute
+                        div     cl                                              ;ah = rem; al = quotient
+                        or      eax,edx                                         ;apply ASCII zones and delimiter
+                        stosd                                                   ;store "dd/"nul
+                        dec     edi                                             ;address of terminator
+                        movzx   eax,byte [ebx+DATETIME.second]                  ;second
+                        div     cl                                              ;ah = rem; al = quotient
+                        or      eax,edx                                         ;apply ASCII zones and delimiter
+                        stosb                                                   ;store quotient
+                        mov     al,ah                                           ;remainder
+                        stosb                                                   ;store remainder
+                        xor     al,al                                           ;null terminator
+                        stosb                                                   ;store terminator
+                        pop     es                                              ;restore non-volatile regs
+                        pop     edi                                             ;
+                        pop     ecx                                             ;
+                        ret                                                     ;return
 ;=======================================================================================================================
 ;
 ;       Console Helper Routines
@@ -2740,6 +3333,8 @@ maxtsvc                 equ     ($-tsvc)/4                                      
 ;       NextConsoleRow
 ;       PutConsoleChar
 ;       PutConsoleHexByte
+;       PutConsoleHexDword
+;       PutConsoleHexWord
 ;       PutConsoleOIA
 ;       PutConsoleString
 ;
@@ -2854,6 +3449,44 @@ PutConsoleHexByte       push    eax                                             
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;       Routine:        PutConsoleHexDword
+;
+;       Description:    This routine writes eight ASCII characters to the console representing a doubleword value.
+;
+;       In:             EAX     value
+;                       CL      column
+;                       CH      row
+;                       DS      OS data selector
+;                       ES      CGA selector
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutConsoleHexDword      push    eax                                             ;save value
+                        shr     eax,16                                          ;high-order word
+                        call    PutConsoleHexWord                               ;display high-order word
+                        pop     eax                                             ;restore value
+                        call    PutConsoleHexWord                               ;display low-order word
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        PutConsoleHexWord
+;
+;       Description:    This routine writes four ASCII characters to the console representing a word value.
+;
+;       In:             EAX     value
+;                       CL      column
+;                       CH      row
+;                       DS      OS data selector
+;                       ES      CGA selector
+;
+;-----------------------------------------------------------------------------------------------------------------------
+PutConsoleHexWord       push    eax                                             ;save value
+                        shr     eax,8                                           ;high-order byte
+                        call    PutConsoleHexByte                               ;display high-order byte
+                        pop     eax                                             ;restore value
+                        call    PutConsoleHexByte                               ;display low-order byte
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;       Routine:        PutConsoleOIA
 ;
 ;       Description:    This routine updates the Operator Information Area (OIA).
@@ -2904,27 +3537,27 @@ PutConsoleOIA           push    ebx                                             
                         mov     ch,ECONOIAROW                                   ;OIA row
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFWINLEFT          ;left-windows?
-                        jz      .35                                             ;no, branch
+                        jz      .40                                             ;no, branch
                         mov     al,'W'                                          ;yes, indicate with 'W'
-.35                     mov     cl,9                                            ;indicator column
+.40                     mov     cl,9                                            ;indicator column
                         call    SetConsoleChar                                  ;display ASCII indicator
                         mov     al,EASCIISPACE                                  ;space is default character
                         test    byte [esi+KEYBDATA.shift],EKEYFSHIFTLEFT        ;left-shift?
-                        jz      .40                                             ;no, skip ahead
+                        jz      .50                                             ;no, skip ahead
                         mov     al,'S'                                          ;yes, indicate with 'S'
-.40                     mov     cl,10                                           ;indicator column
+.50                     mov     cl,10                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFCTRLLEFT         ;left-ctrl?
-                        jz      .50                                             ;no, skip ahead
+                        jz      .60                                             ;no, skip ahead
                         mov     al,'C'                                          ;yes, indicate with 'C'
-.50                     mov     cl,11                                           ;indicator column
+.60                     mov     cl,11                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFALTLEFT          ;left-alt?
-                        jz      .60                                             ;no, skip ahead
+                        jz      .70                                             ;no, skip ahead
                         mov     al,'A'                                          ;yes, indicate with 'A'
-.60                     mov     cl,12                                           ;indicator column
+.70                     mov     cl,12                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
 ;
 ;       We do not display left or right shift make or break codes even if they are stored as the final
@@ -2933,15 +3566,15 @@ PutConsoleOIA           push    ebx                                             
 ;
                         mov     al,[esi+KEYBDATA.scan]                          ;final scan code
                         test    al,al                                           ;null?
-                        jz      .65                                             ;yes, branch
+                        jz      .80                                             ;yes, branch
                         cmp     al,EKEYBSHIFTLDOWN                              ;left shift make?
-                        je      .65                                             ;yes, branch
+                        je      .80                                             ;yes, branch
                         cmp     al,EKEYBSHIFTLUP                                ;left shift break?
-                        je      .65                                             ;yes, branch
+                        je      .80                                             ;yes, branch
                         cmp     al,EKEYBSHIFTRDOWN                              ;right shift make?
-                        je      .65                                             ;yes, branch
+                        je      .80                                             ;yes, branch
                         cmp     al,EKEYBSHIFTRUP                                ;right shift break?
-                        je      .65                                             ;yes, branch
+                        je      .80                                             ;yes, branch
 ;
 ;       Display scan code returned in messages.
 ;
@@ -2953,13 +3586,13 @@ PutConsoleOIA           push    ebx                                             
 ;
 ;       Display ASCII character.
 ;
-.65                     mov     al,[esi+KEYBDATA.char]                          ;ASCII char
+.80                     mov     al,[esi+KEYBDATA.char]                          ;ASCII char
                         cmp     al,EASCIISPACE                                  ;printable? (lower-bounds)
-                        jb      .70                                             ;no, skip ahead
+                        jb      .90                                             ;no, skip ahead
                         cmp     al,EASCIITILDE                                  ;printable? (upper-bounds)
-                        jbe     .80                                             ;yes, branch
-.70                     mov     al,EASCIISPACE                                  ;use space for non-printables
-.80                     mov     ch,bh                                           ;OIA row
+                        jbe     .100                                            ;yes, branch
+.90                     mov     al,EASCIISPACE                                  ;use space for non-printables
+.100                    mov     ch,bh                                           ;OIA row
                         mov     cl,40                                           ;character display column
                         call    SetConsoleChar                                  ;display ASCII character
 ;
@@ -2967,68 +3600,68 @@ PutConsoleOIA           push    ebx                                             
 ;
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFALTRIGHT         ;right-alt?
-                        jz      .90                                             ;no, skip ahead
+                        jz      .110                                            ;no, skip ahead
                         mov     al,'A'                                          ;yes, indicate with 'A'
-.90                     mov     cl,63                                           ;indicator column
+.110                    mov     cl,63                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFCTRLRIGHT        ;right-ctrl?
-                        jz      .100                                            ;no, skip ahead
+                        jz      .120                                            ;no, skip ahead
                         mov     al,'C'                                          ;yes, indicate with 'C'
-.100                    mov     cl,64                                           ;indicator column
+.120                    mov     cl,64                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFSHIFTRIGHT       ;right-shift
-                        jz      .110                                            ;no, skip ahead
+                        jz      .130                                            ;no, skip ahead
                         mov     al,'S'                                          ;yes, indicate with 'S'
-.110                    mov     cl,65                                           ;indicator column
+.130                    mov     cl,65                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.shift],EKEYFWINRIGHT         ;right-windows?
-                        jz      .115                                            ;no, branch
+                        jz      .140                                            ;no, branch
                         mov     al,'W'                                          ;yes, indicate wiht 'W'
-.115                    mov     cl,66                                           ;indicator column
+.140                    mov     cl,66                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
 ;
 ;       Display Insert, Caps, Scroll and Num-Lock indicators.
 ;
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.lock],EKEYFLOCKINSERT        ;insert mode?
-                        jz      .120                                            ;no, branch
+                        jz      .150                                            ;no, branch
                         mov     al,EASCIICARET                                  ;indicate with a caret '^'
-.120                    mov     cl,68                                           ;indicoator column
+.150                    mov     cl,68                                           ;indicoator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.lock],EKEYFLOCKSCROLL        ;scroll-lock?
-                        jz      .130                                            ;no, skip ahead
+                        jz      .160                                            ;no, skip ahead
                         mov     al,'S'                                          ;yes, indicate with 'S'
-.130                    mov     cl,69                                           ;indicator column
+.160                    mov     cl,69                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.lock],EKEYFLOCKNUM           ;num-lock?
-                        jz      .140                                            ;no, skip ahead
+                        jz      .170                                            ;no, skip ahead
                         mov     al,'N'                                          ;yes, indicate with 'N'
-.140                    mov     cl,70                                           ;indicator column
+.170                    mov     cl,70                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.lock],EKEYFLOCKCAPS          ;caps-lock?
-                        jz      .150                                            ;no, skip ahead
+                        jz      .180                                            ;no, skip ahead
                         mov     al,'C'                                          ;yes, indicate with 'C'
-.150                    mov     cl,71                                           ;indicator column
+.180                    mov     cl,71                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
 ;
 ;       Display timeout flag.
 ;
                         mov     al,EASCIISPACE                                  ;ASCII space
                         test    byte [esi+KEYBDATA.status],EKEYFTIMEOUT         ;keyboard timeout?
-                        jz      .155                                            ;no, branch
+                        jz      .190                                            ;no, branch
                         mov     al,'!'                                          ;ASCII indicator
-.155                    mov     cl,73                                           ;indicator column
+.190                    mov     cl,73                                           ;indicator column
                         call    SetConsoleChar                                  ;display ASCII character
 ;
 ;       Restore and return.
 ;
-.160                    pop     es                                              ;restore non-volatile regs
+                        pop     es                                              ;restore non-volatile regs
                         pop     esi                                             ;
                         pop     ecx                                             ;
                         pop     ebx                                             ;
@@ -3062,6 +3695,71 @@ PutConsoleString        push    esi                                             
                         call    NextConsoleColumn                               ;advance to next column
                         jmp     .10                                             ;next character
 .40                     pop     esi                                             ;restore non-volatile regs
+                        ret                                                     ;return
+;=======================================================================================================================
+;
+;       Data-Type Conversion Helper Routines
+;
+;       HexadecimalToUnsigned
+;       UnsignedToHexadecimal
+;
+;=======================================================================================================================
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        HexadecimalToUnsigned
+;
+;       Description:    This routine returns an unsigned integer of the value of the input ASCIIZ hexadecimal string.
+;
+;       Input:          DS:EDX  null-terminated hexadecimal string address
+;
+;       Output:         EAX     unsigned integer value
+;
+;-----------------------------------------------------------------------------------------------------------------------
+HexadecimalToUnsigned   push    esi                                             ;save non-volatile regs
+                        mov     esi,edx                                         ;source address
+                        xor     edx,edx                                         ;zero register
+.10                     lodsb                                                   ;source byte
+                        test    al,al                                           ;end of string?
+                        jz      .30                                             ;yes, branch
+                        cmp     al,'9'                                          ;hexadecimal?
+                        jna     .20                                             ;no, skip ahead
+                        sub     al,037h                                         ;'A' = 41h, less 37h = 0Ah
+.20                     and     eax,00Fh                                        ;remove ascii zone
+                        shl     edx,4                                           ;previous total x 16
+                        add     edx,eax                                         ;add prior value x 16
+                        jmp     .10                                             ;next
+.30                     mov     eax,edx                                         ;result
+                        pop     esi                                             ;restore non-volatile regs
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        UnsignedToHexadecimal
+;
+;       Description:    This routine creates an ASCIIZ string representing the hexadecimal value of binary input
+;
+;       Input:          DS:EDX  output buffer address
+;                       ECX     32-bit binary
+;
+;-----------------------------------------------------------------------------------------------------------------------
+UnsignedToHexadecimal   push    ecx                                             ;store non-volatile regs
+                        push    edi                                             ;
+                        mov     edi,edx                                         ;output buffer address
+                        mov     edx,ecx                                         ;32-bit unsigned
+                        xor     ecx,ecx                                         ;zero register
+                        mov     cl,8                                            ;nybble count
+.10                     rol     edx,4                                           ;next hi-order nybble in bits 0-3
+                        mov     al,dl                                           ;????bbbb
+                        and     al,00Fh                                         ;mask out bits 4-7
+                        or      al,EASCIIZERO                                   ;mask in ascii zone
+                        cmp     al,EASCIININE                                   ;A through F?
+                        jbe     .20                                             ;no, skip ahead
+                        add     al,7                                            ;41h through 46h
+.20                     stosb                                                   ;store hexnum
+                        loop    .10                                             ;next nybble
+                        xor     al,al                                           ;zero reg
+                        stosb                                                   ;null terminate
+                        pop     edi                                             ;restore non-volatile regs
+                        pop     ecx                                             ;
                         ret                                                     ;return
 ;=======================================================================================================================
 ;
@@ -3146,6 +3844,7 @@ PutMessage              push    ds                                              
 ;
 ;       ScrollConsoleRow
 ;       SetConsoleChar
+;       SetConsoleString
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -3202,6 +3901,27 @@ SetConsoleChar          mov     dl,al                                           
                         shl     eax,1                                           ;screen offset
                         mov     [es:eax],dl                                     ;store character
                         inc     cl                                              ;next column
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        SetConsoleString
+;
+;       Description:    This routine outputs a sequence of ASCII character at the given row and column.
+;
+;       In:             ESI     source offset (DS:)
+;                       CL      column
+;                       CH      row
+;                       ES      CGA selector
+;
+;-----------------------------------------------------------------------------------------------------------------------
+SetConsoleString        push    esi                                             ;save non-volatile regs
+                        cld                                                     ;forward strings
+.10                     lodsb                                                   ;next ASCII character
+                        test    al,al                                           ;end of string?
+                        jz      .20                                             ;yes, branch
+                        call    SetConsoleChar                                  ;store character
+                        jmp     .10                                             ;continue
+.20                     pop     esi                                             ;restore non-volatile regs
                         ret                                                     ;return
 ;=======================================================================================================================
 ;
@@ -3469,6 +4189,15 @@ section                 conmque                                                 
 ;       ConVersion              Display the program title, version and copyright
 ;       ConDrawField            Draw a panel field to video memory
 ;       ConTakeToken            Extract the next token from a buffer
+;       ConDate                 Report the current date
+;       ConTime                 Report the current time
+;       ConTakeAsciiWord        Take an ascii word token
+;       ConTakeAsciiByte        Take an ASCII byte
+;       ConBCDByteToBinary      Convert BCD byte to binary
+;       ConBinaryByteToBCD      Convert binary byte to BCD
+;       ConReadCMOSRegister     Read a CMOS register
+;       ConWriteCMOSRegister    Write a CMOS register
+;       ConMem                  Handle the mem command
 ;
 ;=======================================================================================================================
 section                 concode vstart=05000h                                   ;labels relative to 5000h
@@ -3515,9 +4244,10 @@ ConCode                 mov     edi,ECONDATA                                    
                         call    ConVersion                                      ;display title, version, copyright
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
-;       Now we enter the console operator task's message-handling loop. When the input field contents change, the loop
-;       is entered at .1400. If content is not changed but the cursor has moved, the loop is entered at .1500. If no
-;       cursor movement, the next key-down message is read at .1600.
+;       Now we enter the console operator task's message-handling loop. We initialize the loop by drawing the console
+;       prompt field. When the console operator input field must be redrawn, the loop re-enters at .1400. When the
+;       field contents have not change, but the cursor has moved, the loop re-enters at .1500. When neither the field
+;       nor the cursor position have changed, the loop re-enters at .1600.
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Draw input field.
@@ -3644,7 +4374,7 @@ ConCode                 mov     edi,ECONDATA                                    
                         mov     ecx,[ebx]                                       ;field buffer
                         movzx   edx,byte [ebx+7]                                ;field index
                         test    al,al                                           ;ASCII code?
-                        jnz     .3400                                           ;yes, branch
+                        jnz     .3500                                           ;yes, branch
 ;
 ;       Handle up or left arrow.
 ;
@@ -3700,9 +4430,9 @@ ConCode                 mov     edi,ECONDATA                                    
                         inc     dl                                              ;increment index
                         jmp     .3200                                           ;continue
 .3300                   cmp     dl, byte [ebx+6]                                ;field full?
-                        jb      .3350                                           ;no, branch
+                        jb      .3400                                           ;no, branch
                         dec     dl                                              ;cursor at last character
-.3350                   mov     byte [ebx+7],dl                                 ;update index
+.3400                   mov     byte [ebx+7],dl                                 ;update index
                         jmp     .1500                                           ;put cursor and next message
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -3714,8 +4444,8 @@ ConCode                 mov     edi,ECONDATA                                    
 ;       If a backspace is pressed and the field index is non-zero, decrement the index and move each character
 ;       starting from the one at the cursor to the preceding adjacent index position. Draw, place cursor, repeat.
 ;
-.3400                   cmp     ah,EKEYBBACKSPACE                               ;backspace?
-                        jne     .3600                                           ;no, branch
+.3500                   cmp     ah,EKEYBBACKSPACE                               ;backspace?
+                        jne     .3700                                           ;no, branch
                         test    dl,dl                                           ;index is zero?
                         jz      .1600                                           ;yes, next message
                         dec     byte [ebx+7]                                    ;decrement index
@@ -3724,64 +4454,64 @@ ConCode                 mov     edi,ECONDATA                                    
                         mov     esi,edi                                         ;addr of char to remove
                         inc     esi                                             ;addr of first char to move
                         cld                                                     ;forward strings
-.3500                   lodsb                                                   ;character to move
+.3600                   lodsb                                                   ;character to move
                         stosb                                                   ;store one position preceding
                         test    al,al                                           ;did we store a nul?
-                        jnz     .3500                                           ;no, next printable
-                        jmp     .4200                                           ;draw field, put cursor, get message
+                        jnz     .3600                                           ;no, next printable
+                        jmp     .1400                                           ;draw field, put cursor, get message
 ;
 ;       If a delete is pressed and a character is at the index offset, move each character starting from the one at
 ;       the next adjacent position to its preceding adjacent index position. Draw, place cursor, repeat.
 ;
-.3600                   cmp     al,EASCIIDELETE                                 ;delete?
-                        jne     .3800                                           ;no, branch
+.3700                   cmp     al,EASCIIDELETE                                 ;delete?
+                        jne     .3900                                           ;no, branch
                         lea     edi,[ecx+edx]                                   ;addr at current index
                         cmp     byte [edi],0                                    ;printable at current index?
                         je      .1600                                           ;no, get message
                         lea     esi,[edi+1]                                     ;addr of first char to move
                         cld                                                     ;forward strings
-.3700                   lodsb                                                   ;character to move
+.3800                   lodsb                                                   ;character to move
                         stosb                                                   ;store on position preceding
                         test    al,al                                           ;did we move a nul?
-                        jnz     .3700                                           ;no, next printable
-                        jmp     .4200                                           ;draw field, put cursor, get message
+                        jnz     .3800                                           ;no, next printable
+                        jmp     .1400                                           ;draw field, put cursor, get message
 ;
 ;       If a printable ASCII is typed, place the character in the field at the current index if not inserting.
 ;
-.3800                   cmp     al,EASCIISPACE                                  ;printable range? (low)
+.3900                   cmp     al,EASCIISPACE                                  ;printable range? (low)
                         jb      .1600                                           ;no, next message
                         cmp     al,EASCIITILDE                                  ;printable range? (high)
                         ja      .1600                                           ;no, next message
                         test    byte [ebx+11],40h                               ;input field allows insert mode?
-                        jz      .3900                                           ;no, branch to overwrite
+                        jz      .4000                                           ;no, branch to overwrite
                         test    byte [wsKeybData+KEYBDATA.lock],EKEYFLOCKINSERT ;insert on?
-                        jnz      .4000                                          ;yes branch
-.3900                   mov     [ecx+edx],al                                    ;store char in buffer
+                        jnz      .4100                                          ;yes branch
+.4000                   mov     [ecx+edx],al                                    ;store char in buffer
                         inc     dl                                              ;advance index
                         cmp     dl,[ebx+6]                                      ;end of field?
-                        jnb     .4200                                           ;yes, branch
+                        jnb     .4300                                           ;yes, branch
                         mov     [ebx+7],dl                                      ;save new index
-                        jmp     .4200                                           ;draw field, put cursor, get message
+                        jmp     .1400                                           ;draw field, put cursor, get message
 ;
 ;       If the insert lock is on, replace each following character with the preceding one after the typed character
 ;       is stored in the field.
 ;
-.4000                   movzx   edi,byte [ebx+6]                                ;field size
+.4100                   movzx   edi,byte [ebx+6]                                ;field size
                         add     edi,ecx                                         ;last field byte (nul)
                         dec     edi                                             ;last input byte
                         cmp     byte [edi],0                                    ;field full?
                         jne     .1600                                           ;yes, get message
-.4100                   mov     ah,[ecx+edx]                                    ;char to move
+.4200                   mov     ah,[ecx+edx]                                    ;char to move
                         mov     [ecx+edx],al                                    ;store char
                         inc     dl                                              ;advance index
                         mov     al,ah                                           ;next char to move
                         test    al,al                                           ;end of input?
-                        jnz     .4100                                           ;no, continue
+                        jnz     .4200                                           ;no, continue
                         inc     byte [ebx+7]                                    ;increment index
 ;
 ;       Redraw the field, resume to place the cursor and get the next key-down message.
 ;
-.4200                   jmp     .1400                                           ;draw field, place cursor
+.4300                   jmp     .1400                                           ;draw field, place cursor
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Routine:        ConVersion
@@ -3930,6 +4660,625 @@ ConTakeToken            push    esi                                             
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;       Routine:        ConDate
+;
+;       Description:    This routine handles the DATE command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConDate                 push    ebx                                             ;save non-volatile regs
+                        push    ecx                                             ;
+                        push    esi                                             ;
+;
+;       Branch ahead if user is not setting the date.
+;
+                        call    ConTakeToken                                    ;mm/dd/yyyy
+                        mov     esi,wzConsoleToken                              ;token address
+                        cmp     byte [esi],0                                    ;input?
+                        je      .20                                             ;no, branch
+;
+;       Take the month value from the user input, validating delimiter.
+;
+                        call    ConTakeAsciiByte                                ;binary month?
+                        jne     .90                                             ;no, branch
+                        cmp     al,12                                           ;valid month?
+                        ja      .90                                             ;no, branch
+                        cmp     al,1                                            ;valid month?
+                        jb      .90                                             ;no, branch
+                        mov     bh,al                                           ;BH=month
+                        lodsb                                                   ;delim
+                        cmp     al,'/'                                          ;valid delim?
+                        jne     .90                                             ;no, branch
+;
+;       Take the day value from the user input, validating delimiter.
+;
+                        call    ConTakeAsciiByte                                ;binary day?
+                        jne     .90                                             ;no, branch
+                        cmp     al,31                                           ;valid day?
+                        ja      .90                                             ;no, branch
+                        cmp     al,1                                            ;valid day?
+                        jb      .90                                             ;no, branch
+                        mov     bl,al                                           ;BL=day
+                        lodsb                                                   ;delim
+                        cmp     al,'/'                                          ;valid delim?
+                        jne     .90                                             ;no, branch
+;
+;       Exit if the day is too great for the month, for any year.
+;
+                        movzx   eax,bh                                          ;EDX=month
+                        cmp     bl,[tMonthDaysTbl+eax-1]                        ;day in range for month?
+                        ja      .90                                             ;no, branch
+;
+;       Take the year value from the user input.
+;
+                        call    ConTakeAsciiWord                                ;binary year?
+                        jne     .90                                             ;no, branch
+                        cmp     eax,2099                                        ;valid year?
+                        ja      .90                                             ;no, branch
+                        cmp     eax,2020                                        ;valid year?
+                        jb      .90                                             ;no, branch
+                        cmp     byte [esi],0                                    ;end of input?
+                        jne     .90                                             ;no, branch
+;
+;       Separate century and year.
+;
+                        mov     word [wsConsoleDateTime+DATETIME.yyyy],ax       ;save year
+                        mov     cl,100                                          ;divisor
+                        div     cl                                              ;AL=century, AH=year
+                        mov     ecx,eax                                         ;CL=century, CH=year
+;
+;       Continue if the date being set is not February 29th.
+;
+                        cmp     bh,2                                            ;february?
+                        jne     .05                                             ;no, branch
+                        cmp     bl,29                                           ;day 29?
+                        jne     .05                                             ;no, branch
+;
+;       Exit if the year is not a leap year.
+;
+                        mov     eax,edx                                         ;EAX=year
+                        test    al,00000011b                                    ;divisible by four?
+                        jnz     .90                                             ;no, not a leap year
+                        mov     dl,100                                          ;divisor
+                        div     dl                                              ;AL=year/100,AH=remainder
+                        test    ah,ah                                           ;year divisible by 100?
+                        jnz     .05                                             ;no, it is a leap year
+                        test    al,00000011b                                    ;year divisible by 400?
+                        jnz     .90                                             ;no, not a leap year
+;
+;       Store binary values in DATETIME.
+;
+.05                     mov     byte [wsConsoleDateTime+DATETIME.month],bh      ;save month
+                        mov     byte [wsConsoleDateTime+DATETIME.day],bl        ;save day
+                        mov     byte [wsConsoleDateTime+DATETIME.year],ch       ;save year
+                        mov     byte [wsConsoleDateTime+DATETIME.century],cl    ;save century
+;
+;       Continue if clock stores binary values.
+;
+                        mov     al,ERTCSTATUSREG                                ;status reg
+                        call    ConReadCMOSRegister                             ;RTC status
+                        test    ah,ERTCBINARYVALS                               ;binary values?
+                        jnz     .10                                             ;yes, branch
+;
+;       Convert binary values to BCD.
+;
+                        mov     al,bh                                           ;binary month
+                        call    ConBinaryByteToBCD                              ;to BCD
+                        mov     bh,al                                           ;BCD month
+                        mov     al,bl                                           ;binary day
+                        call    ConBinaryByteToBCD                              ;to BCD
+                        mov     bl,al                                           ;BCD day
+                        mov     al,ch                                           ;binary year
+                        call    ConBinaryByteToBCD                              ;to BCD
+                        mov     ch,al                                           ;BCD year
+                        mov     al,cl                                           ;binary century
+                        call    ConBinaryByteToBCD                              ;to BCD
+                        mov     cl,al                                           ;BCD century
+;
+;       Write values to the RTC.
+;
+.10                     mov     al,ERTCMONTHREG                                 ;month reg
+                        mov     ah,bh                                           ;month
+                        call    ConWriteCMOSRegister                            ;put month in RTC
+                        mov     al,ERTCDAYREG                                   ;day reg
+                        mov     ah,bl                                           ;day
+                        call    ConWriteCMOSRegister                            ;put day in RTC
+                        mov     al,ERTCYEARREG                                  ;year reg
+                        mov     ah,ch                                           ;year
+                        call    ConWriteCMOSRegister                            ;put year in RTC
+                        mov     al,ERTCCENTURYREG                               ;century reg
+                        mov     ah,cl                                           ;century
+                        call    ConWriteCMOSRegister                            ;put centiry in RTC
+;
+;       Compute days elapsed in years since 2020.
+;
+                        mov     bh,[wsConsoleDateTime+DATETIME.month]           ;binary month
+                        mov     bl,[wsConsoleDateTime+DATETIME.day]             ;binary day of month
+                        xor     ecx,ecx                                         ;zero days accumulator
+                        mov     eax,2020                                        ;earliest settable year
+.wkday_10               cmp     ax,[wsConsoleDateTime+DATETIME.yyyy]            ;at year being set?
+                        jnb     .wkday_20                                       ;yes, branch
+                        add     ecx,365                                         ;add days in standard year
+;
+;       Add leap day if leap year.
+;
+                        test    al,00000011b                                    ;divisible by four?
+                        jnz     .not_leap                                       ;no, branch
+                        mov     dl,100                                          ;divisor
+                        div     dl                                              ;AL=year/100,AH=remainder
+                        test    ah,ah                                           ;divisible by 100?
+                        jnz     .is_leap                                        ;no, is leap
+                        test    al,00000011b                                    ;divisible by 400?
+                        jnz     .not_leap                                       ;no, not leap
+.is_leap                inc     ecx                                             ;increment for leap day
+.not_leap               inc     eax                                             ;increment year
+                        jmp     short .wkday_10                                 ;continue
+;
+;       Accumulate elapsed days in the current year.
+;                        
+.wkday_20               movzx   eax,bh                                          ;month of year (1-12)
+                        dec     eax                                             ;elapsed months?
+                        shl     eax,1                                           ;table index
+                        movzx   eax,word [tElapsedDaysTbl+eax]                  ;days elapsed at month start
+                        add     ecx,eax                                         ;add elapsed days in year
+                        movzx   eax,bl                                          ;day of month (1-31)
+                        dec     eax                                             ;elapsed days in month
+                        add     ecx,eax                                         ;add elpased days in month
+;
+;       Decrement if past February and not a leap year.
+;
+                        cmp     bh,2                                            ;jan or feb?
+                        jle     .is_leap_2                                      ;yes, branch
+                        movzx   eax,word [wsConsoleDateTime+DATETIME.yyyy]      ;yyyy
+                        test    al,00000011b                                    ;divisible by four?
+                        jnz     .not_leap_2                                     ;no, branch
+                        mov     dl,100                                          ;divisor
+                        div     dl                                              ;AL=year/100,AH=remainder
+                        test    ah,ah                                           ;divisible by 100?
+                        jnz     .is_leap_2                                      ;no, is leap
+                        test    al,00000011b                                    ;divisible by 400?
+                        jz      .is_leap_2                                      ;yes, is leap
+.not_leap_2             dec     ecx                                             ;decrement no leap day
+;
+;       Divide elapsed days by seven and adjust for 1/1/2020 being a Wednesday.
+;
+.is_leap_2              mov     eax,ecx                                         ;elapsed days since 1/1/2020
+                        xor     edx,edx                                         ;zero high-order dividend
+                        xor     ecx,ecx                                         ;zero register
+                        mov     cl,7                                            ;days in week
+                        div     ecx                                             ;EAX=weeks,EDX=weekday
+                        mov     eax,edx                                         ;weekday
+                        add     al,3                                            ;adjust for 1/1/2020 Wednesday
+                        cmp     al,7                                            ;range test high?
+                        jb      .wkday_30                                       ;no, branch
+                        sub     al,7                                            ;Sunday=0
+;
+;       Write weekday to real-time clock (Sunday=1).
+;
+.wkday_30               movzx   ecx,al                                          ;weekday (0-6)
+                        inc     al                                              ;weekday (1-7)
+                        mov     [wsConsoleDateTime+DATETIME.weekday],al         ;save in DATETIME
+                        mov     ah,al                                           ;weekday (1-7)
+                        mov     al,ERTCWEEKDAYREG                               ;weekday reg
+                        call    ConWriteCMOSRegister                            ;write to RTC
+;
+;       Display day of week and new date on the console.
+;
+                        mov     edx,czNewLine                                   ;new-line
+                        putConsoleString                                        ;display new-line
+                        mov     edx,[tDayNames+ecx*4]                           ;weekday name string
+                        putConsoleString                                        ;display weekday name
+                        mov     edx,czSpace                                     ;space
+                        putConsoleString                                        ;display space
+                        mov     ebx,wsConsoleDateTime                           ;DATETIME
+                        mov     edx,wzConsoleOutBuffer                          ;output buffer
+                        putDateString                                           ;prepare date string
+                        mov     edx,wzConsoleOutBuffer                          ;output buffer
+                        putConsoleString                                        ;display output bufer
+                        jmp     .90                                             ;continue
+;
+;       Read values from the RTC.
+;
+.20                     mov     al,ERTCMONTHREG                                 ;month reg
+                        call    ConReadCMOSRegister                             ;read month
+                        mov     bh,ah                                           ;month
+                        mov     al,ERTCDAYREG                                   ;day reg
+                        call    ConReadCMOSRegister                             ;read day
+                        mov     bl,ah                                           ;day
+                        mov     al,ERTCYEARREG                                  ;year reg
+                        call    ConReadCMOSRegister                             ;read year
+                        mov     ch,ah                                           ;year
+                        mov     al,ERTCCENTURYREG                               ;century reg
+                        call    ConReadCMOSRegister                             ;read century
+                        mov     cl,ah                                           ;century
+;
+;       Continue if clock stores binary values.
+;
+                        mov     al,ERTCSTATUSREG                                ;status reg
+                        call    ConReadCMOSRegister                             ;RTC status
+                        test    ah,ERTCBINARYVALS                               ;binary vals?
+                        jnz     .30                                             ;yes, branch
+;
+;       Convert BCD values to binary.
+;
+                        mov     al,bh                                           ;month
+                        call    ConBCDByteToBinary                              ;to binary
+                        mov     bh,al                                           ;binary month
+                        mov     al,bl                                           ;day
+                        call    ConBCDByteToBinary                              ;to binary
+                        mov     bl,al                                           ;binary day
+                        mov     al,ch                                           ;year
+                        call    ConBCDByteToBinary                              ;to binary
+                        mov     ch,al                                           ;binary year
+                        mov     al,cl                                           ;year
+                        call    ConBCDByteToBinary                              ;to binary
+                        mov     cl,al                                           ;binary year
+;
+;       Store values in DATETIME.
+;
+.30                     mov     byte [wsConsoleDateTime+DATETIME.month],bh      ;save month
+                        mov     byte [wsConsoleDateTime+DATETIME.day],bl        ;save day
+                        mov     byte [wsConsoleDateTime+DATETIME.year],ch       ;save year
+                        mov     byte [wsConsoleDateTime+DATETIME.century],cl    ;save century
+;
+;       Build and display the date string.
+;
+.40                     mov     ebx,wsConsoleDateTime                           ;DATETIME
+                        mov     edx,wzConsoleOutBuffer                          ;output buffer
+                        putDateString                                           ;put date string
+                        mov     edx,czNewLine                                   ;new-line
+                        putConsoleString                                        ;put string
+                        mov     edx,wzConsoleOutBuffer                          ;output buffer
+                        putConsoleString                                        ;put string
+;
+;       Restore and return.
+;
+.90                     pop     esi                                             ;restore non-volatile regs
+                        pop     ecx                                             ;
+                        pop     ebx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;        Routine:        ConTime
+;
+;        Description:    This routine Handles the TIME command.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConTime                 push    ebx                                             ;save non-volatile regs
+                        push    ecx                                             ;
+                        push    esi                                             ;
+                        call    ConTakeToken                                    ;hh:mm:ss
+                        mov     esi,wzConsoleToken                              ;token address
+                        cmp     byte [esi],0                                    ;input?
+                        je      .20                                             ;no, branch
+                        call    ConTakeAsciiByte                                ;binary hour?
+                        jne     .50                                             ;no, branch
+                        cmp     al,23                                           ;valid hour?
+                        ja      .50                                             ;no, branch
+                        mov     bh,al                                           ;hold hour
+                        lodsb                                                   ;delim
+                        cmp     al,EASCIICOLON                                  ;valid delim?
+                        jne     .50                                             ;no, branch
+                        call    ConTakeAsciiByte                                ;binary minute?
+                        jne     .50                                             ;no, branch
+                        cmp     al,59                                           ;valid minute?
+                        ja      .50                                             ;no, branch
+                        mov     bl,al                                           ;hold minute
+                        lodsb                                                   ;delim
+                        cmp     al,EASCIICOLON                                  ;valid delim?
+                        jne     .50                                             ;no, branch
+                        call    ConTakeAsciiByte                                ;binary second?
+                        jne     .50                                             ;no, branch
+                        cmp     al,59                                           ;valid second?
+                        ja      .50                                             ;no, branch
+                        mov     ch,al                                           ;hold second
+                        mov     byte [wsConsoleDateTime+DATETIME.hour],bh       ;save hour
+                        mov     byte [wsConsoleDateTime+DATETIME.minute],bl     ;save minute
+                        mov     byte [wsConsoleDateTime+DATETIME.second],ch     ;save second
+                        mov     al,ERTCSTATUSREG                                ;status reg
+                        call    ConReadCMOSRegister                             ;RTC status
+                        test    ah,ERTCBINARYVALS                               ;binary values?
+                        jnz     .10                                             ;yes, branch
+                        mov     al,bh                                           ;binary hour
+                        call    ConBinaryByteToBCD                              ;to BCD
+                        mov     bh,al                                           ;BCD hour
+                        mov     al,bl                                           ;binary minute
+                        call    ConBinaryByteToBCD                              ;to BCD
+                        mov     bl,al                                           ;BCD minute
+                        mov     al,ch                                           ;binary second
+                        call    ConBinaryByteToBCD                              ;to BCD
+                        mov     ch,al                                           ;BCD second
+.10                     mov     al,ERTCHOURREG                                  ;hour reg
+                        mov     ah,bh                                           ;hour
+                        call    ConWriteCMOSRegister                            ;put hour in RTC
+                        mov     al,ERTCMINUTEREG                                ;minute reg
+                        mov     ah,bl                                           ;minute
+                        call    ConWriteCMOSRegister                            ;put minute in RTC
+                        mov     al,ERTCSECONDREG                                ;second reg
+                        mov     ah,ch                                           ;second
+                        call    ConWriteCMOSRegister                            ;put second in RTC
+                        jmp     .40                                             ;continue
+.20                     mov     al,ERTCHOURREG                                  ;hour reg
+                        call    ConReadCMOSRegister                             ;read hour
+                        mov     bh,ah                                           ;hour
+                        mov     al,ERTCMINUTEREG                                ;minute reg
+                        call    ConReadCMOSRegister                             ;read minute
+                        mov     bl,ah                                           ;minute
+                        mov     al,ERTCSECONDREG                                ;second reg
+                        call    ConReadCMOSRegister                             ;read second
+                        mov     ch,ah                                           ;second
+                        mov     al,ERTCSTATUSREG                                ;status reg
+                        call    ConReadCMOSRegister                             ;RTC status
+                        test    ah,ERTCBINARYVALS                               ;binary vals?
+                        jnz     .30                                             ;yes, branch
+                        mov     al,bh                                           ;hour
+                        call    ConBCDByteToBinary                              ;to binary
+                        mov     bh,al                                           ;binary hour
+                        mov     al,bl                                           ;minute
+                        call    ConBCDByteToBinary                              ;to binary
+                        mov     bl,al                                           ;binary minute
+                        mov     al,ch                                           ;second
+                        call    ConBCDByteToBinary                              ;to binary
+                        mov     ch,al                                           ;binary second
+.30                     mov     byte [wsConsoleDateTime+DATETIME.hour],bh       ;save hour
+                        mov     byte [wsConsoleDateTime+DATETIME.minute],bl     ;save minute
+                        mov     byte [wsConsoleDateTime+DATETIME.second],ch     ;save second
+.40                     mov     ebx,wsConsoleDateTime                           ;DATETIME
+                        mov     edx,wzConsoleOutBuffer                          ;output bufer
+                        putTimeString                                           ;put time string
+                        mov     edx,czNewLine                                   ;new-line
+                        putConsoleString                                        ;put string
+                        mov     edx,wzConsoleOutBuffer                          ;output buffer
+                        putConsoleString                                        ;put string
+;
+;       Restore and return.
+;
+.50                     pop     esi                                             ;restore non-volatile regs
+                        pop     ecx                                             ;
+                        pop     ebx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConTakeAsciiWord
+;
+;       Description:    This routine converts four ASCII decimal numerals into a word
+;
+;       In:             DS:ESI  ASCII source address
+;
+;       Out:            AX      binary
+;                       ZF      1 = success
+;                               0 = fail
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConTakeAsciiWord        call    ConTakeAsciiByte                                ;take ASCII byte
+                        jne     .90                                             ;no, branch
+                        movzx   eax,al                                          ;binary century
+                        mov     edx,eax                                         ;hold binary century
+                        call    ConTakeAsciiByte                                ;take ASCII byte
+                        jne     .90                                             ;no, branch
+                        movzx   eax,al                                          ;binary year of century
+                        shl     edx,2                                           ;century * 4
+                        add     eax,edx                                         ;year + century * 4
+                        shl     edx,3                                           ;century * 32
+                        add     eax,edx                                         ;year + century * 36
+                        shl     edx,1                                           ;century * 64
+                        add     eax,edx                                         ;year + century * 100
+                        cmp     al,al                                           ;set zero flag
+.90                     ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConTakeAsciiByte
+;
+;       Description:    This routine converts two ASCII decimal numerals into a byte.
+;
+;       In:             DS:ESI  ASCII source address
+;
+;       Out:            AL      binary
+;                       ZF      1 = success
+;                               0 = fail
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConTakeAsciiByte        lodsb                                                   ;ASCII tens numeral
+                        cmp     al,'0'                                          ;range test low?
+                        jb      .10                                             ;no, branch
+                        cmp     al,'9'                                          ;range test high?
+                        ja      .10                                             ;no, branch
+                        and     al,00Fh                                         ;mask out zone
+                        mov     ah,al                                           ;tens
+                        shl     al,2                                            ;tens * 4
+                        add     ah,al                                           ;tens * 4 + tens
+                        shl     ah,1                                            ;tens * 8 + tens * 2
+                        lodsb                                                   ;ASCII ones numeral
+                        cmp     al,'0'                                          ;range test low?
+                        jb      .10                                             ;no, branch
+                        cmp     al,'9'                                          ;range test high?
+                        ja      .10                                             ;no, branch
+                        and     al,00Fh                                         ;mask out zone
+                        add     al,ah                                           ;add tens
+                        cmp     al,al                                           ;set ZF
+.10                     ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConBCDByteToBinary
+;
+;       Description:    Convert a binary-coded decimal (BCD) byte to binary.
+;
+;       In:             AL      BCD byte (e.g. '11' = 00010001)
+;
+;       Out:            AL      binary (e.g. '11' = 00001011)
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConBCDByteToBinary      mov     ah,al                                           ;BCD value
+                        and     al,00001111b                                    ;low-order decimal zone
+                        and     ah,11110000b                                    ;hi-order decimal zone
+                        shr     ah,1                                            ;hi-order decimal * 8
+                        add     al,ah                                           ;low-order + hi-order * 8
+                        shr     ah,2                                            ;hi-order decimal * 2
+                        add     al,ah                                           ;low-order + hi-order * 10
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConBinaryByteToBCD
+;
+;       Description:    Convert a binary byte to binary-coded decimal (BCD).
+;
+;       In:             AL      binary (e.g. '11' = 00001011)
+;
+;       Out:            AL      BCD byte (e.g. '11' = 00010001)
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConBinaryByteToBCD      xor     ah,ah                                           ;zero high-order
+                        mov     dl,100                                          ;divisor
+                        div     dl                                              ;AL=quotient, AH=remainder
+                        mov     al,ah                                           ;binary value mod 100
+                        xor     ah,ah                                           ;zero high-order
+                        mov     dl,10                                           ;divisor
+                        div     dl                                              ;AL=10s, AH=1s
+                        shl     al,4                                            ;AL=10s<<4, AH=1s
+                        or      al,ah                                           ;AL=BCD
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConReadCMOSRegister
+;
+;       In:             AL      register to read
+;
+;       Out:            AH      value read
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConReadCMOSRegister     cli                                                     ;disable maskable ints
+                        or      al,80h                                          ;disable NMI
+                        out     ERTCREGPORT,al                                  ;select reg and disable NMI
+                        jmp     short $+2                                       ;short delay
+                        in      al,ERTCDATAPORT                                 ;read register
+                        mov     ah,al                                           ;value read
+                        xor     al,al                                           ;no reg w/NMI enable
+                        out     ERTCREGPORT,al                                  ;enable NMI
+                        sti                                                     ;enable maskable ints
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConWriteCMOSRegister
+;
+;       In:             AL      register to write
+;                       AH      value to write
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConWriteCMOSRegister    cli                                                     ;disable maskable ints
+                        or      al,80h                                          ;disable NMI
+                        out     ERTCREGPORT,al                                  ;select register
+                        jmp     short $+2                                       ;short delay
+                        mov     al,ah                                           ;value
+                        out     ERTCDATAPORT,al                                 ;store value
+                        jmp     short $+2                                       ;short delay
+                        xor     al,al                                           ;no reg w/NMI enable
+                        out     ERTCREGPORT,al                                  ;enable NMI
+                        sti                                                     ;enable maskable ints
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
+;       Routine:        ConMem
+;
+;       Description:    This routine handles the MEMORY command and its MEM alias.
+;
+;       Input:          wzConsoleInBuffer contains parameter(s)
+;
+;       Output:         01234567890123456789012345678901234567890123456789012345678901234567890123456789
+;                       AAAAAAA0  00 11 22 33  44 55 66 77  88 99 AA BB  CC DD EE FF  0123456789ABCDEF
+;-----------------------------------------------------------------------------------------------------------------------
+ConMem                  push    ebx                                             ;save non-volatile regs
+                        push    esi                                             ;
+                        push    edi                                             ;
+;
+;       Update the source address if a parameter is given.
+;
+                        call    ConTakeToken                                    ;take first param as token
+                        cmp     byte [wzConsoleToken],0                         ;token found?
+                        je      .10                                             ;no, branch
+                        mov     edx,wzConsoleToken                              ;first param as token address
+                        hexadecimalToUnsigned                                   ;convert string token to unsigned
+                        mov     [wdConsoleMemBase],eax                          ;save console memory address
+;
+;       Setup source address and row count.
+;
+.10                     mov     esi,[wdConsoleMemBase]                          ;source memory address
+                        xor     ecx,ecx                                         ;zero register
+                        mov     cl,16                                           ;row count
+;
+;       Start the row with the source address in hexadecimal.
+;
+.20                     push    ecx                                             ;save remaining rows
+                        mov     edi,wzConsoleOutBuffer                          ;output buffer address
+                        mov     edx,edi                                         ;output buffer address
+                        mov     ecx,esi                                         ;console memory address
+                        unsignedToHexadecimal                                   ;convert unsigned address to hex string
+                        add     edi,8                                           ;end of memory addr hexnum
+                        mov     al,EASCIISPACE                                  ;ascii space delimiter
+                        stosb                                                   ;store delimiter
+                        stosb                                                   ;store delimiter
+;
+;       Output 16 ASCII hexadecimal byte values for the row in four sets.
+;
+                        xor     ecx,ecx                                         ;zero register
+                        mov     cl,4                                            ;set count
+.25                     push    ecx                                             ;save remaining sets
+                        mov     cl,4                                            ;byte count
+.30                     push    ecx                                             ;save byte count
+                        lodsb                                                   ;memory byte
+                        mov     ah,al                                           ;memory byte
+                        shr     al,4                                            ;high-order in bits 3-0
+                        or      al,EASCIIZERO                                   ;apply ascii numeric zone
+                        cmp     al,EASCIININE                                   ;numeric range?
+                        jbe     .40                                             ;yes, skip ahead
+                        add     al,7                                            ;adjust ascii for 'A'-'F'
+.40                     stosb                                                   ;store ascii hexadecimal of high-order
+                        mov     al,ah                                           ;low-order in bits 3-0
+                        and     al,0fh                                          ;mask out high-order bits
+                        or      al,EASCIIZERO                                   ;apply ascii numeric zone
+                        cmp     al,EASCIININE                                   ;numeric range?
+                        jbe     .50                                             ;yes, skip ahead
+                        add     al,7                                            ;adjust ascii for 'A'-'F'
+.50                     stosb                                                   ;store ascii hexadecimal of low-order
+                        mov     al,EASCIISPACE                                  ;ascii space
+                        stosb                                                   ;store ascii space delimiter
+                        pop     ecx                                             ;byte count
+                        loop    .30                                             ;next byte of set
+                        stosb                                                   ;store ascii space delimiter
+                        pop             ecx                                     ;remaining sets
+                        loop    .25                                             ;next set
+;
+;       Output printable ASCII character section for the row.
+;
+                        sub     esi,16                                          ;reset source pointer
+                        mov     cl,16                                           ;loop count
+.60                     lodsb                                                   ;source byte
+                        cmp     al,32                                           ;printable? (low-range test)
+                        jb      .70                                             ;no, skip ahead
+                        cmp     al,128                                          ;printable? (high-range test)
+                        jb      .80                                             ;yes, skip ahead
+.70                     mov     al,EASCIISPACE                                  ;display space instead of printable
+.80                     stosb                                                   ;store printable ascii byte
+                        loop    .60                                             ;next source byte
+                        xor     al,al                                           ;nul-terminator
+                        stosb                                                   ;terminate output line
+;
+;       Display constructed output buffer and newline.
+;
+                        mov     edx,czNewLine                                   ;new-line
+                        putConsoleString                                        ;display new-line
+                        mov     edx,wzConsoleOutBuffer                          ;memory output line
+                        putConsoleString                                        ;display memory output-line
+;
+;       Repeat until all lines displayed and preserve source address.
+;
+                        pop     ecx                                             ;remaining rows
+                        loop    .20                                             ;next row
+                        mov     [wdConsoleMemBase],esi                          ;update console memory address
+                        pop     edi                                             ;restore regs
+                        pop     esi                                             ;
+                        pop     ebx                                             ;
+                        ret                                                     ;return
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;       Constants
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -3941,10 +5290,38 @@ czInputField            dd      wzConsoleInBuffer                               
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                                                                                 ;---------------------------------------
+                                                                                ;  Weekday Name Lookup Table
+                                                                                ;---------------------------------------
+                        align   4
+tDayNames               equ     $                                               ;weekday names table
+                        dd      czSunday
+                        dd      czMonday
+                        dd      czTuesday
+                        dd      czWednesday
+                        dd      czThursday
+                        dd      czFriday
+                        dd      czSaturday
+EDAYNAMESTBLL           equ     ($-tDayNames)                                   ;table length
+EDAYNAMESTBLCNT         equ     EDAYNAMESTBLL/4                                 ;table entries
+                                                                                ;---------------------------------------
+                                                                                ;  Days in Month Table
+                                                                                ;---------------------------------------
+tMonthDaysTbl           equ     $                                               ;days in month table
+                        db      31,29,31,30,31,30,31,31,30,31,30,31             ;maximum days in mont
+                                                                                ;---------------------------------------
+                                                                                ;  Elapsed Days Table
+                                                                                ;---------------------------------------
+                        align   2
+tElapsedDaysTbl         equ     $                                               ;elapsed days table
+                        dw      0,31,60,91,121,152,182,213,244,274,305,335      ;days elapsed at each month
+                                                                                ;---------------------------------------
                                                                                 ;  Command Jump Table
                                                                                 ;---------------------------------------
                         align   4
 tConJmpTbl              equ     $                                               ;command jump table
+                        dd      ConDate     - ConCode                           ;date command
+                        dd      ConMem      - ConCode                           ;mem command
+                        dd      ConTime     - ConCode                           ;time command
                         dd      ConVersion  - ConCode                           ;ver command
                         dd      ConVersion  - ConCode                           ;version command
 ECONJMPTBLL             equ     ($-tConJmpTbl)                                  ;table length
@@ -3953,6 +5330,9 @@ ECONJMPTBLCNT           equ     ECONJMPTBLL/4                                   
                                                                                 ;  Command Name Table
                                                                                 ;---------------------------------------
 tConCmdTbl              equ     $                                               ;command name table
+                        db      5,"DATE",0                                      ;date command
+                        db      4,"MEM",0                                       ;mem command
+                        db      5,"TIME",0                                      ;time command
                         db      4,"VER",0                                       ;ver command
                         db      8,"VERSION",0                                   ;version command
                         db      0                                               ;end of table
@@ -3962,9 +5342,20 @@ tConCmdTbl              equ     $                                               
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 czNewLine               db      13,10,0                                         ;new-line
-czTitle                 db      13,10,"Operating System [1.0.0.0]"              ;title and copyright
-                        db      13,10,"Copyright 2010-2021 David J. Walling. All rights reserved.",0
+czSpace                 db      " ",0                                           ;space delimiter
+czTitle                 db      13,10,"Operating System [Version 1.0.0.0]"      ;title and copyright
+                        db      13,10,"(c) 2010 David J. Walling. All rights reserved.",0
 czUnknownCommand        db      "Unknown command",0                             ;unknown command
+                                                                                ;---------------------------------------
+                                                                                ;       Date and Time
+                                                                                ;---------------------------------------
+czSunday                db      "Sunday",0
+czMonday                db      "Monday",0
+czTuesday               db      "Tuesday",0
+czWednesday             db      "Wednesday",0
+czThursday              db      "Thursday",0
+czFriday                db      "Friday",0
+czSaturday              db      "Saturday",0
                         times   3000h-($-$$) db 0h                              ;zero fill to end of section
 %endif
 %ifdef BUILDDISK
