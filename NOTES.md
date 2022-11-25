@@ -81,7 +81,7 @@ Physical Environment<br><br>
 </td></tr>
 <tr><td>
 Commands<br><br>
-<table width=100%><colgroup><col width=20%><col width=20%><col width=60%></colgroup>
+<table><colgroup><col><col><col></colgroup>
 <tr><td>date</td><td>[mm/dd/yyyy]</td><td>display (or set) the date</td></tr>
 <tr><td>display<br>d</td><td></td><td>show the display menu</td></tr>
 <tr><td>free</td><td>&lt;address&gt;</td><td>free memory at address</td></tr>
