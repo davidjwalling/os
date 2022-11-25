@@ -20,7 +20,9 @@ Output<br><br>
 <tr><td>osprep.com</td><td>A DOS-compatible program that copies the os.dat boot sector image file to the boot sector of a 3.5" 1.44MB floppy disk inserted in logical drive A:.</td></tr></table></td><td>
 <img src="images/14_Ubuntu_22.04_Build.png">
 </td></tr>
+</table>
 
+<table>
 <tr><td>
 Virtualization<br><br>
 - Set the operating system as "Other/Unknown"<br>
