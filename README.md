@@ -1,10 +1,11 @@
-## Operating System
+## os
 
 - Simple, protected-mode operating system for x86-based PC-compatible systems.
 - Memory, keyboard, display, clock, and network adapter I/O.
-- Operates on 32-bit Intel or AMD x86 from the 80386 up through present-day processors. Clear assembly-language, hardware I/O and protocol examples.
+- Operates in protected mode on x86 and x86-64 processors.
+- Clear assembly-language, hardware I/O and protocol examples.
 
-Assembly
+Build
 ```
 nasm os.asm -f bin -o os.dsk -l os.dsk.lst -DBUILDDISK
 nasm os.asm -f bin -o os.dat -l os.dat.lst -DBUILDBOOT
@@ -17,4 +18,6 @@ Network Support
 - Virtual machine installations may select this adapter type in the network configuration of the VM.
 - Configure this VM network adapter using bridged networking to access the host system's network.
 
-Copyright &copy; 2010 David J. Walling. MIT License.
+[Notes](NOTES.md)
+
+Copyright 2010 David J. Walling. [MIT License](LICENSE).
