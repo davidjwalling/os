@@ -80,3 +80,17 @@ Physical Environment<br><br>
 <img src="images/07_Dell_U2412M_Small.jpg">
 </td></tr>
 </table>
+<br>
+Commands<br>
+<br>
+<table><colgroup><col><col><col></colgroup>
+<tr><td>date</td><td>[mm/dd/yyyy]</td><td>display (or set) the date</td></tr>
+<tr><td>display<br>d</td><td></td><td>show the display menu</td></tr>
+<tr><td>free</td><td>&lt;address&gt;</td><td>free memory at address</td></tr>
+<tr><td>lspci<br>p<br>d p</td><td></td><td>display PCI table</td></tr>
+<tr><td>m<br>mem<br>d m</td><td>[&lt;address&gt;]</td><td>display memory (at address)</td></tr>
+<tr><td>malloc</td><td>&lt;bytes&gt;</td><td>allocate memory</td></tr>
+<tr><td>net<br>d n</td><td></td><td>display network information</td></tr>
+<tr><td>time</td><td>[hh:mm:ss]</td><td>display (or set) the time</td></tr>
+<tr><td>v<br>ver<br>version<br>d v</td><td><td>display program version</td></tr>
+</table>

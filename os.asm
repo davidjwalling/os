@@ -15,7 +15,7 @@
 ;
 ;       Assembler:      Netwide Assembler (NASM) 2.15.05, 28 Aug 2020
 ;
-;       Notice:         Copyright (c) 2010 David J. Walling. MIT License.
+;       Notice:         Copyright 2010 David J. Walling. MIT License.
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -1346,7 +1346,7 @@ Prep                    mov     si,czPrepMsg10                                  
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 czPrepMsg10             db      13,10,"OS Boot-Diskette Preparation Program"
-                        db      13,10,"(c) 2010 David J. Walling. All rights reserved."
+                        db      13,10,"Copyright 2010 David J. Walling. MIT License."
                         db      13,10
                         db      13,10,"This program overwrites the boot sector of a diskette with startup code that"
                         db      13,10,"will load the operating system into memory when the computer is restarted."
@@ -3748,7 +3748,6 @@ AllocateMemory          push    ebx                                             
                         jbe     .30                                             ;yes, branch
                         mov     eax,[eax+MEMBLOCK.nextblock]                    ;next free block addr
                         jmp     .20                                             ;continue
-;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Address the previous and next free memory blocks.
 ;
@@ -3770,7 +3769,6 @@ AllocateMemory          push    ebx                                             
                         mov     [edx+MEMBLOCK.previousblock],ebx                ;remove free block from reverse chain
                         jmp     .70                                             ;continue
 .60                     mov     [esi+MEMROOT.lastfree],ebx                      ;previous free is now also the last free
-;-----------------------------------------------------------------------------------------------------------------------
 ;
 ;       Determine if the free memory block can be split.
 ;
@@ -7299,7 +7297,7 @@ EDAYNAMESTBLCNT         equ     EDAYNAMESTBLL/4                                 
                                                                                 ;  Days in Month Table
                                                                                 ;---------------------------------------
 tMonthDaysTbl           equ     $                                               ;days in month table
-                        db      31,29,31,30,31,30,31,31,30,31,30,31             ;maximum days in mont
+                        db      31,29,31,30,31,30,31,31,30,31,30,31             ;maximum days in month
                                                                                 ;---------------------------------------
                                                                                 ;  Elapsed Days Table
                                                                                 ;---------------------------------------
