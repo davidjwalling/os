@@ -80,7 +80,7 @@ Physical Environment<br><br>
 <img src="images/07_Dell_U2412M_Small.jpg">
 </td></tr>
 <tr><td>
-Commands<br>
+Commands<br><br>
 <table width=100%><colgroup><col width=20%><col width=20%><col width=60%></colgroup>
 <tr><td>date</td><td>[mm/dd/yyyy]</td><td>display (or set) the date</td></tr>
 <tr><td>display<br>d</td><td></td><td>show the display menu</td></tr>
@@ -92,4 +92,4 @@ Commands<br>
 <tr><td>time</td><td>[hh:mm:ss]</td><td>display (or set) the time</td></tr>
 <tr><td>v<br>ver<br>version<br>d v</td><td><td>display program version</td></tr>
 </table>
-</td><td></td></tr></table>
+</td><td colspan=2></td></tr></table>
