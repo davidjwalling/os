@@ -1,5 +1,7 @@
 ## OS Notes
-<table><tr><td>
+<table>
+<colgroup><col><col><col</colgroup>
+<tr><td>
 Intro<br><br>
 - OS uses the Netwide Assembler (NASM) variant of the Intel Syntax x86 Assembly Language.<br>
 - Examples demonstrate both virtual and physical operating environments.<br>
@@ -10,19 +12,18 @@ Build<br><br>
 nasm os.asm -f bin -o os.dsk -l os.dsk.lst -DBUILDDISK<br>
 nasm os.asm -f bin -o os.dat -l os.dat.lst -DBUILDBOOT<br>
 nasm os.asm -f bin -o os.com -l os.com.lst -DBUILDCOM<br>
-nasm os.asm -f bin -o osprep.com -l osprep.com.lst -DBUILDPREP</td><td>
-<img src="images/13_Physical_Operation.jpg"></td></tr><tr><td>
+nasm os.asm -f bin -o osprep.com -l osprep.com.lst -DBUILDPREP</td><td colspan=2>
+<img src="images/13_Physical_Operation.jpg"></td></tr>
+
+<tr><td>
 Output<br><br>
-<table>
-<tr><td>os.dat</td><td>A 512-byte boot sector image that may be written to a physical floppy disk for physical implementations.</td></tr>
-<tr><td>os.dsk</td><td>Emulated 3.5" 1.44MB floppy-disk image for use as a boot disk for either physical or virtual implementations. This disk image contains a boot sector that searches for and loads the os.com kernel image file into memory. Code in os.com places the CPU into protected mode and starts the initial 32-bit console task.</td><tr>
-<tr><td>os.com</td><td>The operating system kernel.</td></tr>
-<tr><td>osprep.com</td><td>A DOS-compatible program that copies the os.dat boot sector image file to the boot sector of a 3.5" 1.44MB floppy disk inserted in logical drive A:.</td></tr></table></td><td>
+os.dat: A 512-byte boot sector image that may be written to a physical floppy disk for physical implementations.<br>
+os.dsk: An Emulated 3.5" 1.44MB floppy-disk image for use as a boot disk for either physical or virtual implementations. This disk image contains a boot sector that searches for and loads the os.com kernel image file into memory. Code in os.com places the CPU into protected mode and starts the initial 32-bit console task.<br>
+os.com: The operating system kernel.<br>
+osprep.com: A DOS-compatible program that copies the os.dat boot sector image file to the boot sector of a 3.5" 1.44MB floppy disk inserted in logical drive A:.</td><td colspan=2>
 <img src="images/14_Ubuntu_22.04_Build.png">
 </td></tr>
-</table>
 
-<table>
 <tr><td>
 Virtualization<br><br>
 - Set the operating system as "Other/Unknown"<br>
