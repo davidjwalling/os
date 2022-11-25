@@ -1,14 +1,14 @@
 ## OS Notes
 
 <table><tr><td>
-<img src="images/13_Physical_Operation.jpg">
-</td><td>
 Intro<br><br>
 - OS uses the Netwide Assembler (NASM) variant of the Intel Syntax x86 Assembly Language.<br>
 - Examples demonstrate both virtual and physical operating environments.<br>
 - Virtualization uses Oracle &reg; VirtualBox 6.1.<br>
 - Physical operation is demonstrated on an Intel Pentium MMX 233MHz.<br>
 - Networking uses (or emulates) the Am79C971 PCnet &trade;-FAST controller.<br>
+</td><td>
+<img src="images/13_Physical_Operation.jpg">
 </td></tr></table>
 
 <table>
