@@ -1,22 +1,21 @@
 ## OS Notes
-These notes may be better viewed in github with an extension that provides a wide presentation.<br>
-I use https://github.com/xthexder/wide-github<br>
+These notes may be better viewed in github with an extension that provides a wider presentation.  
+I use https://github.com/xthexder/wide-github
 <table>
 <colgroup><col><col><col</colgroup>
 <tr><td>
 Intro<br><br>
-- OS uses the Netwide Assembler (NASM) variant of the Intel Syntax x86 Assembly Language.<br>
-- Examples demonstrate both virtual and physical operating environments.<br>
+- OS is written in the Netwide Assembler (NASM) variant of the Intel Syntax x86 Assembly Language.<br>
+- Examples here demonstrate both virtual and physical operating environments.<br>
 - Virtualization uses Oracle &reg; VirtualBox 6.1.<br>
-- Physical operation is demonstrated on an Intel Pentium MMX 233MHz.<br>
-- Networking uses (or emulates) the Am79C971 PCnet &trade;-FAST controller.<br><br>
+- Physical operation is demonstrated on an Intel Pentium MMX 233MHz processor.<br>
+- Networking uses (or emulates) the PCnet-II FAST Am79C971 &trade; controller.<br><br>
 Build<br><br>
 nasm os.asm -f bin -o os.dsk -l os.dsk.lst -DBUILDDISK<br>
 nasm os.asm -f bin -o os.dat -l os.dat.lst -DBUILDBOOT<br>
 nasm os.asm -f bin -o os.com -l os.com.lst -DBUILDCOM<br>
 nasm os.asm -f bin -o osprep.com -l osprep.com.lst -DBUILDPREP</td><td colspan=2>
 <img src="images/13_Physical_Operation.jpg"></td></tr>
-
 <tr><td>
 Output<br><br>
 os.dat: A 512-byte boot sector image that may be written to a physical floppy disk for physical implementations.<br>
@@ -25,7 +24,6 @@ os.com: The operating system kernel.<br>
 osprep.com: A DOS-compatible program that copies the os.dat boot sector image file to the boot sector of a 3.5" 1.44MB floppy disk inserted in logical drive A:.</td><td colspan=2>
 <img src="images/14_Ubuntu_22.04_Build.png">
 </td></tr>
-
 <tr><td>
 Virtualization<br><br>
 - Set the operating system as "Other/Unknown"<br>
@@ -37,7 +35,6 @@ Virtualization<br><br>
 </td><td colspan=2>
 <img src="images/15_VirtualBox_Settings.png">
 </td></tr>
-
 <tr><td>
 Virtualized Operation<br><br>
 - Start the VM in VirtualBox.<br>
@@ -46,7 +43,6 @@ Virtualized Operation<br><br>
 </td><td colspan=2>
 <img src="images/16_VirtualBox_Operation.png">
 </td></tr>
-
 <tr><td>
 Physical Environment<br><br>
 - The processor is a 233MHz Intel Pentium MMX CPU.<br>
@@ -57,7 +53,6 @@ Physical Environment<br><br>
 </td><td>
 <img src="images/02_Intel_555A_Small.jpg">
 </td></tr>
-
 <tr><td>
 - The memory is 64MB of EDO DRAM.<br>
 - The display adapter is a Number Nine 9FX Motion 771 VGA.
@@ -66,7 +61,6 @@ Physical Environment<br><br>
 </td><td>
 <img src="images/04_NumberNine_9FX_Motion771_Small.jpg">
 </td></tr>
-
 <tr><td>
 - The diskette drive is a Mitsumi D359 M3.<br>
 - The development environment external diskette drive is a Sabrent N533.<br>
@@ -76,9 +70,8 @@ Physical Environment<br><br>
 </td><td>
 <img src="images/08_Sabrent_N533_Small.jpg">
 </td></tr>
-
 <tr><td>
-- The network adapter is an Advanced Micro Devices PCInet PCI Fast AM79C971.<br>
+- The network adapter is an Advanced Micro Devices PCInet PCI Fast AM79C971KC.<br>
 - The display monitor is a Dell U2412M.<br>
 - The keyboard is a Dell RT7D20.
 </td><td>
@@ -86,5 +79,4 @@ Physical Environment<br><br>
 </td><td>
 <img src="images/07_Dell_U2412M_Small.jpg">
 </td></tr>
-
 </table>
