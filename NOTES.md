@@ -1,4 +1,6 @@
 ## OS Notes
+These notes may be better viewed in github with an extension that provides a wide presentation.<br>
+I use https://github.com/xthexder/wide-github<br>
 <table>
 <colgroup><col><col><col</colgroup>
 <tr><td>
@@ -84,4 +86,5 @@ Physical Environment<br><br>
 </td><td>
 <img src="images/07_Dell_U2412M_Small.jpg">
 </td></tr>
+
 </table>
