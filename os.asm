@@ -5453,7 +5453,7 @@ ConCode                 mov     edi,ECONDATA                                    
                         mov     edi,eax                                         ;receive descriptor ring addr
                         xor     ecx,ecx                                         ;zero reg
                         mov     cl,64                                           ;descriptor count
-.0900                   mov     edx,1024                                        ;buffer size
+.0900                   mov     edx,1536                                        ;buffer size
                         allocateMemory                                          ;allocate buffer
                         test    eax,eax                                         ;memory allocated?
                         jz      .1400                                           ;no, branch
@@ -5479,7 +5479,7 @@ ConCode                 mov     edi,ECONDATA                                    
                         mov     edi,eax                                         ;transmit descriptor ring addr
                         xor     ecx,ecx                                         ;zero reg
                         mov     cl,64                                           ;descriptor count
-.1000                   mov     edx,1024                                        ;buffer size
+.1000                   mov     edx,1536                                        ;buffer size
                         allocateMemory                                          ;allocate buffer
                         test    eax,eax                                         ;memory allocated?
                         jz      .1400                                           ;no, branch

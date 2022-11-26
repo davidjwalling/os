@@ -1,8 +1,8 @@
 ## OS Notes
 These notes may be better viewed in github with an extension that provides a wider presentation.  
-I use https://github.com/xthexder/wide-github
+I use https://github.com/xthexder/wide-github.
 <table>
-<colgroup><col><col><col</colgroup>
+<colgroup><col><col><col></colgroup>
 <tr><td>
 Intro<br><br>
 - OS is written in the Netwide Assembler (NASM) variant of the Intel Syntax x86 Assembly Language.<br>
@@ -92,23 +92,41 @@ Commands<br><br>
 <tr><td>time</td><td>[hh:mm:ss]</td><td>display (or set) the time</td></tr>
 <tr><td>v<br>ver<br>version<br>d v</td><td><td>display program version</td></tr>
 </table>
-</td><td colspan=2></td></tr>
+</td><td colspan=2>
+<img src="images/17_VirtualBox_Commands.png">
+</td></tr>
 <tr><td>
 Key Memory Addresses<br><br>
-<table><colgroup><col><col></colgroup>
-<tr><td>00000000</td><td>Real mode interrupt table</td></tr>
-<tr><td>00000400</td><td>BIOS variables</td></tr>
-<tr><td>00000800</td><td>OS variables</td><tr>
-<tr><td>00001000</td><td>Global Descriptor Table</td></tr>
-<tr><td>00001800</td><td>Interrupt Descriptor Table</td></tr>
-<tr><td>00002000</td><td>Interrupt Handlers and Kernel Library</td></tr>
-<tr><td>00004000</td><td>Console Stack</td></tr>
-<tr><td>00004700</td><td>Console Local Descriptor Table</td></tr>
-<tr><td>00004780</td><td>Console Task State Segment</td></tr>
-<tr><td>00004800</td><td>Console Message Queue</td></tr>
-<tr><td>00005000</td><td>Console Code Segment</td></tr>
-<tr><td>000A0000</td><td>Read Only Memory</td></tr>
-<tr><td>00100000</td><td>OS Heap</td></tr>
+<table><colgroup><col><col><col><col><col></colgroup>
+<tr><td>00000000</td><td colspan=4>Real mode interrupt table</td></tr>
+<tr><td>00000400</td><td colspan=4>BIOS variables</td></tr>
+<tr><td>00000800</td><td colspan=4>OS variables</td><tr>
+<tr><td>00000800</td><td></td><td>Console Heap Memory Address</td></tr>
+<tr><td>00000804</td><td></td><td>Console Heap Memory Size</td></tr>
+<tr><td>00000808</td><td></td><td>Console Input Buffer</td></tr>
+<tr><td>00000859</td><td></td><td>Console Token Buffer</td></tr>
+<tr><td>000008AA</td><td></td><td>Console Output Buffer</td></tr>
+<tr><td>000008FB</td><td></td><td>Console Column</td></tr>
+<tr><td>000008FC</td><td></td><td>Console Row</td></tr>
+<tr><td>000008FD</td><td></td><td>Console Keyboard Data</td></tr>
+<tr><td>00000907</td><td></td><td>Console Memory Root</td></tr>
+<tr><td>0000091F</td><td></td><td>Console Date Time Buffer</td></tr>
+<tr><td>00000929</td><td></td><td>Console PCI Context</td></tr>
+<tr><td>0000093D</td><td></td><td>Console Ethernet Context</td></tr>
+<tr><td>0000097C</td><td></td><td>Console AM79C970 Init Block</td></tr>
+<tr><td>00000994</td><td></td><td>ATA Data</td></tr>
+<tr><td>00000B94</td><td></td><td>Disk Sector</td></tr>
+<tr><td>00000D94</td><td></td><td>Unused</td></tr>
+<tr><td>00001000</td><td colspan=4>Global Descriptor Table</td></tr>
+<tr><td>00001800</td><td colspan=4>Interrupt Descriptor Table</td></tr>
+<tr><td>00002000</td><td colspan=4>Interrupt Handlers and Kernel Library</td></tr>
+<tr><td>00004000</td><td colspan=4>Console Stack</td></tr>
+<tr><td>00004700</td><td colspan=4>Console Local Descriptor Table</td></tr>
+<tr><td>00004780</td><td colspan=4>Console Task State Segment</td></tr>
+<tr><td>00004800</td><td colspan=4>Console Message Queue</td></tr>
+<tr><td>00005000</td><td colspan=4>Console Code Segment</td></tr>
+<tr><td>000A0000</td><td colspan=4>Read Only Memory</td></tr>
+<tr><td>00100000</td><td colspan=4>OS Heap</td></tr>
 </table>
 </td><td colspan=2></td></tr>
 </table>
