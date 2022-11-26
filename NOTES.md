@@ -92,4 +92,23 @@ Commands<br><br>
 <tr><td>time</td><td>[hh:mm:ss]</td><td>display (or set) the time</td></tr>
 <tr><td>v<br>ver<br>version<br>d v</td><td><td>display program version</td></tr>
 </table>
-</td><td colspan=2></td></tr></table>
+</td><td colspan=2></td></tr>
+<tr><td>
+Key Memory Addresses<br><br>
+<table><colgroup><col><col></colgroup>
+<tr><td>00000000</td><td>Real mode interrupt table</td></tr>
+<tr><td>00000400</td><td>BIOS variables</td></tr>
+<tr><td>00000800</td><td>OS variables</td><tr>
+<tr><td>00001000</td><td>Global Descriptor Table</td></tr>
+<tr><td>00001800</td><td>Interrupt Descriptor Table</td></tr>
+<tr><td>00002000</td><td>Interrupt Handlers and Kernel Library</td></tr>
+<tr><td>00004000</td><td>Console Stack</td></tr>
+<tr><td>00004700</td><td>Console Local Descriptor Table</td></tr>
+<tr><td>00004780</td><td>Console Task State Segment</td></tr>
+<tr><td>00004800</td><td>Console Message Queue</td></tr>
+<tr><td>00005000</td><td>Console Code Segment</td></tr>
+<tr><td>000A0000</td><td>Read Only Memory</td></tr>
+<tr><td>00100000</td><td>OS Heap</td></tr>
+</table>
+</td><td colspan=2></td></tr>
+</table>
