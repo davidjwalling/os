@@ -2,7 +2,7 @@
 These notes may be better viewed in github with an extension that provides a wider presentation.  
 I use https://github.com/xthexder/wide-github.
 <table>
-<colgroup><col><col><col></colgroup>
+<colgroup><col><col width=15%><col width=15%></colgroup>
 <tr><td>
 Intro<br><br>
 - OS is written in the Netwide Assembler (NASM) variant of the Intel Syntax x86 Assembly Language.<br>
