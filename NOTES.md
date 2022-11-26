@@ -71,7 +71,7 @@ Physical Environment<br><br>
 <img src="images/08_Sabrent_N533_Small.jpg">
 </td></tr>
 <tr><td>
-- The network adapter is an Advanced Micro Devices PCInet PCI Fast AM79C971KC.<br>
+- The network adapter is an Advanced Micro Devices PCInet PCI Fast AM79C971.<br>
 - The display monitor is a Dell U2412M.<br>
 - The keyboard is a Dell RT7D20.
 </td><td>
