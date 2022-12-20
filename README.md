@@ -14,7 +14,7 @@ nasm os.asm -f bin -o osprep.com -l osprep.com.lst -DBUILDPREP
 ```
 Network Support
 
-- Includes native support for the AMD PCInet-PCI FAST AM79C971KC network adapter.
+- Includes native support for the AMD PCInet-PCI FAST AM79C971 network adapter.
 - Virtual machine installations may select this adapter type in the network configuration of the VM.
 - Configure this VM network adapter using bridged networking to access the host system's network.
 
