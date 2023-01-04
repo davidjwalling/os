@@ -1659,7 +1659,7 @@ LoaderExit              push    si                                              
 ;       Out:            AX      0 = 808x, v20, etc.
 ;                               1 = 80186
 ;                               2 = 80286
-;                               3 = 80386
+;                               3 = 80386+
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
 GetCPUType              mov     al,1                                            ;AL = 1
@@ -1712,8 +1712,8 @@ PutTTYString            cld                                                     
 ;
 ;       Loader Data
 ;
-;       The loader data is updated to include constants defining the initial (Loader) TSS and LDT selectors in the
-;       GDT, a work area to build the GDTR, and additional text messages.
+;       The loader data includes constants defining the initial (Loader) TSS and LDT selectors in the GDT, a work area
+;       used to build the GDTR, and additional text messages.
 ;
 ;-----------------------------------------------------------------------------------------------------------------------
                         align   2
@@ -2570,9 +2570,10 @@ DrawTextDialogBox       push    ecx                                             
 ;
 ;       Hardware Device Interupts
 ;
-;       The next 16 interrupts are defined as the hardware interrupts. These interrupts vectors (20h-2Fh) are mapped to
-;       the hardware interrupts IRQ0-IRQF by the BIOS when the call to the BIOS is made invoking BIOS function 89h
-;       (BX=2028h).
+;       The next 16 interrupts are defined as the hardware interrupts. These interrupt vectors (20h-2Fh) were mapped to
+;       the hardware interrupts IRQ0-IRQF by the BIOS when protected mode was entered. That BIOS function, 89h, accepts
+;       the IRQ base interrupt numbers in register BH (IRQ0 int) and BL (IRQ8 int). For example BX=2028h maps IRQ0-7
+;       starting at int 20h and IRQ8-F starting at int 28h.
 ;
 ;=======================================================================================================================
 ;-----------------------------------------------------------------------------------------------------------------------
@@ -3268,6 +3269,10 @@ tscan2shift             db      000h,01Bh,021h,040h,023h,024h,025h,05Eh         
 ;
 ;       IRQ9    CGA Vertical Retrace Hardware Interrupt
 ;
+;       The CGA Verticcal Retrace interrupt is commonly repurposed for use by network adapters. Here, we end the IRQ
+;       as usual and then then check to see if we are configured to receive network adapter interrupts on IRQ9. If we
+;       are, we invoke the handler address configured in wsConsoleEther. Otherwise, we simply end the interrupt.
+;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  retrace                                         ;CGA vertical retrace interrupt
                         push    eax                                             ;save non-volatile regs
@@ -3321,6 +3326,9 @@ irq9.10                 in      al,0A1h                                         
 ;
 ;       IRQ11   Reserved Hardware Interrupt
 ;
+;       The Reserved Hardware interrupt IRQ11 is the second IRQ that may be used to receive network adapter interrupts.
+;       Similar, to IRQ9 above, we check if IRQ11 is configured as our adapter interrupt. If so, we invoke the handler.
+;
 ;-----------------------------------------------------------------------------------------------------------------------
                         menter  irq11                                           ;reserved
                         push    eax                                             ;save modified regs
@@ -3366,7 +3374,9 @@ irq11.10                in      al,0A1h                                         
 ;
 ;       Routine:        AM79IntHandler
 ;
-;       Description:    This routine handles AMD 79C970 controller interrupts.
+;       Description:    This routine handles AMD 79C970 controller interrupts. The address of this handler should be
+;                       configured in the wsConsoleEther struct in ETHER.handler so that our network adapter interrupt
+;                       handler (IRQ9 or IRQ11) can invoke the correct adapter handler.
 ;
 ;       In:             DS      OS data segment address
 ;
@@ -7222,6 +7232,15 @@ ConDisplay              push    ebx                                             
                         ret                                                     ;return
 ;-----------------------------------------------------------------------------------------------------------------------
 ;
+;       Routine:        ConInt6
+;
+;       Description:    This routine handles the int6 command. This command is used to demonstrate a hardware interrupt
+;                       that displays register contents at the time of the interrupt.
+;
+;-----------------------------------------------------------------------------------------------------------------------
+ConInt6                 int     6
+;-----------------------------------------------------------------------------------------------------------------------
+;
 ;       Routine:        ConRead
 ;
 ;       Description:    This routine handles the R command.
@@ -7313,6 +7332,7 @@ tConJmpTbl              equ     $                                               
                         dd      ConDate     - ConCode                           ;date command
                         dd      ConDisplay  - ConCode                           ;display command
                         dd      ConFree     - ConCode                           ;free command
+                        dd      ConInt6     - ConCode                           ;int6 command
                         dd      ConPCIProbe - ConCode                           ;lspci command
                         dd      ConMem      - ConCode                           ;m command (mem alias)
                         dd      ConMalloc   - ConCode                           ;malloc command
@@ -7334,6 +7354,7 @@ tConCmdTbl              equ     $                                               
                         db      5,"DATE",0                                      ;date command
                         db      8,"DISPLAY",0                                   ;display command
                         db      5,"FREE",0                                      ;free command
+                        db      5,"INT6",0                                      ;int6 command
                         db      6,"LSPCI",0                                     ;lspci command
                         db      2,"M",0                                         ;m command (mem alias)
                         db      7,"MALLOC",0                                    ;malloc command
