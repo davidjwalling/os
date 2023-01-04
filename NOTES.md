@@ -18,10 +18,10 @@ nasm os.asm -f bin -o osprep.com -l osprep.com.lst -DBUILDPREP</td><td colspan=2
 <img src="images/13_Physical_Operation.jpg"></td></tr>
 <tr><td>
 Output<br><br>
-os.dat: A 512-byte boot sector image that may be written to a physical floppy disk for physical implementations.<br>
-os.dsk: An Emulated 3.5" 1.44MB floppy-disk image for use as a boot disk for either physical or virtual implementations. This disk image contains a boot sector that searches for and loads the os.com kernel image file into memory. Code in os.com places the CPU into protected mode and starts the initial 32-bit console task.<br>
-os.com: The operating system kernel.<br>
-osprep.com: A DOS-compatible program that copies the os.dat boot sector image file to the boot sector of a 3.5" 1.44MB floppy disk inserted in logical drive A:.</td><td colspan=2>
+- os.dat: A 512-byte boot sector image that may be written to a physical floppy disk for physical implementations.<br>
+- os.dsk: An Emulated 3.5" 1.44MB floppy-disk image for use as a boot disk for either physical or virtual implementations. This disk image contains a boot sector that searches for and loads the os.com kernel image file into memory. Code in os.com places the CPU into protected mode and starts the initial 32-bit console task.<br>
+- os.com: The operating system kernel.<br>
+- osprep.com: A DOS-compatible program that copies the os.dat boot sector image file to the boot sector of a 3.5" 1.44MB floppy disk inserted in logical drive A:.</td><td colspan=2>
 <img src="images/14_Ubuntu_22.04_Build.png">
 </td></tr>
 <tr><td>
