@@ -1689,9 +1689,9 @@ GetCPUType              mov     al,1                                            
 ;                       and the BIOS teletype function code in AH. After a return from the BIOS interrupt, we repeat
 ;                       for the next string character until a NUL is found. Note that we clear the direction flag (DF)
 ;                       with CLD before the first LODSB. The direction flag is not guaranteed to be preserved between
-;                       calls within the OS. However, the "int" instruction does store the EFLAGS register on the
-;                       stack and restores it on return. Therefore, clearing the direction flag before subsequent calls
-;                       to LODSB is not needed.
+;                       calls within the OS. However, the "int" instruction does store the EFLAGS register on the stack
+;                       and restores it on return. Therefore, clearing the direction flag before subsequent calls to
+;                       LODSB is not needed.
 ;
 ;       In:             DS:SI   address of string
 ;
@@ -7108,7 +7108,7 @@ ConDiskInfo             push    ebx                                             
                         mov     edx,czReadyTimeout
                         jecxz   .50
 
-                        lea     edi,wsATAData
+                        lea     edi,[wsATAData]
                         cld
                         mov     ecx,256
 .25                     mov     edx,01F0h                                       ;data port
@@ -7276,7 +7276,7 @@ ConRead                 push    ebx                                             
                         mov     edx,czBusyTimeout
                         jz      .50
 
-                        lea     edi,wsDiskSector
+                        lea     edi,[wsDiskSector]
                         mov     ecx,256
                         mov     edx,01F0h
                         rep     insw
